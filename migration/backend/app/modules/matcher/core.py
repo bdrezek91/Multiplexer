@@ -33,7 +33,7 @@ COUNTRY_TO_JSON = {"PL": "PL", "DE": "DE", "FR": "FR", "EN": "UK"}
 
 __all__ = [
     "MatchResult", "QUALITY_OK", "QUALITY_WARN", "QUALITY_BAD", "QUALITY_EXCLUDED",
-    "match_against_catalog", "resolve_by_kod", "apply_warehouse_variant",
+    "match_against_catalog", "resolve_by_kod", "apply_warehouse_variant", "magazyn_key",
 ]
 
 
@@ -41,7 +41,7 @@ def _eff_color_json(cand: Product) -> str:
     return cand.atrybuty.get("kolor") or "BIALY"
 
 
-def _magazyn_key(magazyn: Optional[str]) -> Optional[str]:
+def magazyn_key(magazyn: Optional[str]) -> Optional[str]:
     """R5: normalizacja nazwy magazynu do klucza uzywanego w warianty_magazynowe (case-insensitive)."""
     if not magazyn:
         return None
@@ -56,7 +56,7 @@ def apply_warehouse_variant(catalog: Catalog, cand: Product, magazyn: Optional[s
     """R5: ten sam towar, inny kod w Optimie w zaleznosci od wybranego magazynu."""
     if not cand or not cand.warianty_magazynowe:
         return cand
-    key = _magazyn_key(magazyn)
+    key = magazyn_key(magazyn)
     if not key:
         return cand
     substitute_kod = cand.warianty_magazynowe.get(key)

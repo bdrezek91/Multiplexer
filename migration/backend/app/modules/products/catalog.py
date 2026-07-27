@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from sqlalchemy.orm import Session, selectinload
+
 from app.modules.parser import core_and_attrs, bigrams
 
 
@@ -108,4 +110,28 @@ class Catalog:
                     warianty_magazynowe=rec.get("warianty_magazynowe"),
                     status=status,
                 ))
+        return cls(products)
+
+    @classmethod
+    def from_db(cls, session: Session) -> "Catalog":
+        from .models import ProductModel
+
+        rows = session.query(ProductModel).options(
+            selectinload(ProductModel.aliasy),
+            selectinload(ProductModel.warianty_magazynowe),
+        ).all()
+        products = [
+            Product(
+                kod=row.kod,
+                nazwa=row.nazwa,
+                jm=row.jm,
+                grupa=row.grupa,
+                atrybuty=row.atrybuty or {},
+                kolor_domniemany=row.kolor_domniemany,
+                aliasy=[Alias.from_text(a.alias_text) for a in row.aliasy],
+                warianty_magazynowe={w.magazyn: w.kod_docelowy for w in row.warianty_magazynowe} or None,
+                status=row.status,
+            )
+            for row in rows
+        ]
         return cls(products)

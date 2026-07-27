@@ -1,27 +1,28 @@
 """
-Etap 1: minimalny FastAPI wystawiajacy modul Matcher jako endpoint.
-Katalog wczytywany z pliku JSON (tymczasowo) - w Etapie 2 zastapione zapytaniem do PostgreSQL.
+Etap 2: FastAPI wystawiajacy modul Matcher jako endpoint.
+Katalog wczytywany z PostgreSQL (Catalog.from_db) i trzymany w pamieci procesu -
+odswiezany dopiero po restarcie (importu dokonuje osobny skrypt scripts/import_catalog.py).
 """
-import json
-from pathlib import Path
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from app.core.db import SessionLocal
 from app.modules.matcher import match_against_catalog
 from app.modules.products import Catalog
 
-app = FastAPI(title="Multiplekser Elektryka API", version="0.1.0-etap1")
+app = FastAPI(title="Multiplekser Elektryka API", version="0.2.0-etap2")
 
-_CATALOG_PATH = Path(__file__).parent.parent / "tests" / "fixtures" / "baza_elektryka.json"
 _catalog: Catalog | None = None
 
 
 def get_catalog() -> Catalog:
     global _catalog
     if _catalog is None:
-        db = json.loads(_CATALOG_PATH.read_text(encoding="utf-8"))
-        _catalog = Catalog.from_json_dict(db)
+        session = SessionLocal()
+        try:
+            _catalog = Catalog.from_db(session)
+        finally:
+            session.close()
     return _catalog
 
 
@@ -40,7 +41,7 @@ class MatchResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "stage": 1}
+    return {"status": "ok", "stage": 2}
 
 
 @app.post("/match", response_model=MatchResponse)

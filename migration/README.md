@@ -16,8 +16,11 @@ uvicorn app.main:app --reload
 ```
 
 API: `/auth/token` (logowanie, od Etapu 5), `/match` (dopasowanie, wymaga zalogowania), pelny CRUD
-`/products` (od Etapu 4, zapis tylko rola admin), dokumentacja interaktywna z przyciskiem
-"Authorize" na `/docs`.
+`/products` (od Etapu 4, zapis tylko rola admin), `/ocr/recognize` (odczyt skanu przez Gemini, od
+Etapu 6, synchroniczny), dokumentacja interaktywna z przyciskiem "Authorize" na `/docs`.
 
 **Produkcja**: ustaw zmienna srodowiskowa `JWT_SECRET_KEY` na losowy, dlugi sekret - wartosc
 domyslna w kodzie jest tylko do dewelopmentu lokalnego (patrz `docs/RAPORT_ETAP_5.md`, ryzyka).
+Ustaw tez `GEMINI_API_KEY_FREE`/`GEMINI_API_KEY_PAID` (Google AI Studio) - bez nich `/ocr/recognize`
+zwraca 502. **Nigdy nie wpisuj tych kluczy do kodu/repo** - patrz `docs/RAPORT_ETAP_6.md`,
+zastrzezenie bezpieczenstwa (klucze zaszyte w starym `index.html`).

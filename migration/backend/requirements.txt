@@ -13,4 +13,6 @@ cffi==1.17.1
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 pytest==8.3.3
+pytest-asyncio==0.24.0
 httpx==0.27.2
+Pillow==10.4.0

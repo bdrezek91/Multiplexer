@@ -32,6 +32,13 @@ def _build_atrybuty(rec: dict) -> dict:
         "kod_producenta": rec.get("kod_producenta"),
         "zrodlo_stanu": rec.get("zrodlo_stanu"),
         "stan": rec.get("stan"),
+        "uwaga": rec.get("uwaga"),
+        "regula_dopasowania": rec.get("regula_dopasowania"),
+        "regula_domyslna": rec.get("regula_domyslna"),
+        "regula_przelicznika": rec.get("regula_przelicznika"),
+        "przelicznik": rec.get("przelicznik"),
+        "przelicznik_opak": rec.get("przelicznik_opak"),
+        "wariant_wg_dominujacego_standardu": rec.get("wariant_wg_dominujacego_standardu"),
     }
     if any(v is not None for v in meta.values()):
         atrybuty["_meta"] = meta

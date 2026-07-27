@@ -16,6 +16,7 @@ from app.modules.products.models import (  # noqa: E402,F401
     ProductAliasModel,
     WarehouseVariantModel,
 )
+from app.modules.matcher.models import SpecialRuleModel  # noqa: E402,F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -1,4 +1,5 @@
-"""Konfiguracja aplikacji (Etap 2: adres bazy danych; Etap 5: JWT; Etap 6: klucze OCR)."""
+"""Konfiguracja aplikacji (Etap 2: adres bazy danych; Etap 5: JWT; Etap 6: klucze OCR;
+Etap 7: Redis/Celery + MinIO/S3)."""
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -6,6 +7,15 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str = "postgresql://multiplekser:multiplekser_dev@localhost:5432/multiplekser"
+
+    redis_url: str = "redis://localhost:6379/0"
+
+    # MinIO domyslnie (docker-compose.yml) - S3-kompatybilne, wiec ten sam klient (boto3) dziala
+    # bez zmian tez z prawdziwym AWS S3 czy Azure Blob (S3 gateway) - wystarczy zmienic endpoint.
+    minio_endpoint_url: str = "http://localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_bucket: str = "multiplekser-dokumenty"
 
     # UWAGA: wartosc domyslna jest TYLKO do dewelopmentu lokalnego - w produkcji MUSI byc
     # nadpisana zmienna srodowiskowa JWT_SECRET_KEY (losowy, dlugi sekret).

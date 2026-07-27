@@ -14,7 +14,7 @@ _FENCE_RE = re.compile(r"```json|```")
 _PARSE_FLOAT_RE = re.compile(r"^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?")
 
 
-def _parse_float_loose(value: Any) -> Optional[float]:
+def parse_float_loose(value: Any) -> Optional[float]:
     match = _PARSE_FLOAT_RE.match(str(value))
     if not match:
         return None
@@ -55,6 +55,6 @@ def validate_item(item: Any) -> bool:
         return False
     for field in ("ilosc_wydana", "ilosc_zuzyta", "ilosc"):
         value = item.get(field)
-        if value is not None and value != "" and _parse_float_loose(value) is None:
+        if value is not None and value != "" and parse_float_loose(value) is None:
             return False
     return True

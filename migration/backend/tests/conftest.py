@@ -7,9 +7,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
 from fastapi.testclient import TestClient
+from moto import mock_aws
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.config import settings
 from app.core.db import Base, get_db
 
 # Import jawny (nie poleganie na przypadkowym imporcie z innego pliku testowego) - rejestruje
@@ -18,6 +20,7 @@ from app.core.db import Base, get_db
 from app.modules.matcher import models as _matcher_models  # noqa: F401
 from app.modules.products import models as _products_models  # noqa: F401
 from app.modules.users import models as _users_models  # noqa: F401
+from app.modules.documents import models as _documents_models  # noqa: F401
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
@@ -103,3 +106,22 @@ def admin_headers(client, admin_user):
 @pytest.fixture()
 def elektryk_headers(client, elektryk_user):
     return _login_headers(client, elektryk_user.email, ELEKTRYK_PASSWORD)
+
+
+@pytest.fixture()
+def gemini_key_configured():
+    original = settings.gemini_api_key_free
+    settings.gemini_api_key_free = "test-key"
+    yield
+    settings.gemini_api_key_free = original
+
+
+@pytest.fixture()
+def mocked_storage():
+    """S3/MinIO zamockowane przez moto - endpoint_url musi byc None (moto przechwytuje tylko
+    ruch do rozpoznawanych endpointow AWS, nie do dowolnego custom URL jak prawdziwy MinIO)."""
+    original_endpoint = settings.minio_endpoint_url
+    settings.minio_endpoint_url = None
+    with mock_aws():
+        yield
+    settings.minio_endpoint_url = original_endpoint

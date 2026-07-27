@@ -1,16 +1,18 @@
 """
-Etap 6: dolaczony router OCR. /match i /ocr/recognize wymagaja zalogowanego uzytkownika; parametr
-`magazyn` ograniczony do `magazyny_dostepne` przypisanych uzytkownikowi (patrz
-app/modules/users/deps.py:check_magazyn_access - admin bez ograniczen). CRUD /products chroniony w
-app/modules/products/router.py (odczyt kazdy zalogowany, zapis tylko admin).
+Etap 7: OCR przeniesiony na potok asynchroniczny (POST /documents + Celery), stary synchroniczny
+/ocr/recognize z Etapu 6 usuniety (byl swiadomym, tymczasowym ryzykiem - blokowal request HTTP).
+/match wymaga zalogowanego uzytkownika; parametr `magazyn` (tu i w /documents) ograniczony do
+`magazyny_dostepne` przypisanych uzytkownikowi (patrz app/modules/users/deps.py:check_magazyn_access
+- admin bez ograniczen). CRUD /products chroniony w app/modules/products/router.py (odczyt kazdy
+zalogowany, zapis tylko admin).
 """
 from fastapi import Depends, FastAPI
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.modules.documents.router import router as documents_router
 from app.modules.matcher import match_against_catalog, rules_from_db
-from app.modules.ocr.router import router as ocr_router
 from app.modules.products import Catalog
 from app.modules.products.router import router as products_router
 from app.modules.users import get_current_user
@@ -18,10 +20,10 @@ from app.modules.users.deps import check_magazyn_access
 from app.modules.users.models import UserModel
 from app.modules.users.router import router as auth_router
 
-app = FastAPI(title="Multiplekser Elektryka API", version="0.6.0-etap6")
+app = FastAPI(title="Multiplekser Elektryka API", version="0.7.0-etap7")
 app.include_router(auth_router)
 app.include_router(products_router)
-app.include_router(ocr_router)
+app.include_router(documents_router)
 
 
 class MatchRequest(BaseModel):
@@ -40,7 +42,7 @@ class MatchResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "stage": 6}
+    return {"status": "ok", "stage": 7}
 
 
 @app.post("/match", response_model=MatchResponse)

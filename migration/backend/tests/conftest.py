@@ -6,10 +6,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.core.db import Base
+from app.core.db import Base, get_db
 
 TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL",
@@ -44,3 +45,16 @@ def db_session(db_engine):
 @pytest.fixture()
 def baza_elektryka_json() -> dict:
     return json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
+
+
+@pytest.fixture()
+def client(db_session):
+    """TestClient z Depends(get_db) podmienionym na sesje testowa (rollback po tescie)."""
+    from app.main import app
+
+    def _override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    yield TestClient(app)
+    app.dependency_overrides.pop(get_db, None)

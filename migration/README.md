@@ -13,3 +13,5 @@ python -m scripts.import_special_rules  # zaimportuj reguly specjalne (R3/R6/OCR
 pytest tests/ -v                        # wymaga tez bazy testowej, patrz TEST_DATABASE_URL w tests/conftest.py
 uvicorn app.main:app --reload
 ```
+
+API: `/match` (dopasowanie), pelny CRUD `/products` (od Etapu 4), dokumentacja interaktywna na `/docs`.

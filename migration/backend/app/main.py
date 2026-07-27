@@ -1,42 +1,19 @@
 """
-Etap 3: FastAPI wystawiajacy modul Matcher jako endpoint.
-Katalog i reguly specjalne wczytywane z PostgreSQL i trzymane w pamieci procesu - odswiezane
-dopiero po restarcie (importu dokonuja osobne skrypty scripts/import_catalog.py i
-scripts/import_special_rules.py).
+Etap 4: FastAPI z pelnym CRUD produktow (app/modules/products/router.py) i /match jako
+pelnoprawny serwis - katalog i reguly specjalne czytane z sesji DB PER REQUEST (Depends(get_db)),
+bez globalnego cache w pamieci procesu (byl w Etapach 2-3) - zeby CRUD od razu widzial swiezy stan.
 """
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-from app.core.db import SessionLocal
-from app.modules.matcher import SpecialRule, match_against_catalog, rules_from_db
+from app.core.db import get_db
+from app.modules.matcher import match_against_catalog, rules_from_db
 from app.modules.products import Catalog
+from app.modules.products.router import router as products_router
 
-app = FastAPI(title="Multiplekser Elektryka API", version="0.3.0-etap3")
-
-_catalog: Catalog | None = None
-_special_rules: list[SpecialRule] | None = None
-
-
-def get_catalog() -> Catalog:
-    global _catalog
-    if _catalog is None:
-        session = SessionLocal()
-        try:
-            _catalog = Catalog.from_db(session)
-        finally:
-            session.close()
-    return _catalog
-
-
-def get_special_rules() -> list[SpecialRule]:
-    global _special_rules
-    if _special_rules is None:
-        session = SessionLocal()
-        try:
-            _special_rules = rules_from_db(session)
-        finally:
-            session.close()
-    return _special_rules
+app = FastAPI(title="Multiplekser Elektryka API", version="0.4.0-etap4")
+app.include_router(products_router)
 
 
 class MatchRequest(BaseModel):
@@ -55,13 +32,13 @@ class MatchResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "stage": 3}
+    return {"status": "ok", "stage": 4}
 
 
 @app.post("/match", response_model=MatchResponse)
-def match(req: MatchRequest):
-    catalog = get_catalog()
-    special_rules = get_special_rules()
+def match(req: MatchRequest, session: Session = Depends(get_db)):
+    catalog = Catalog.from_db(session)
+    special_rules = rules_from_db(session)
     result = match_against_catalog(
         req.query, catalog,
         dominant_country=req.dominant_country,

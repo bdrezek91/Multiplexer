@@ -52,6 +52,8 @@ export function LoginPage() {
         <TextField
           label="Email"
           type="email"
+          name="email"
+          autoComplete="username"
           fullWidth
           margin="normal"
           value={email}
@@ -62,6 +64,8 @@ export function LoginPage() {
         <TextField
           label="Hasło"
           type="password"
+          name="password"
+          autoComplete="current-password"
           fullWidth
           margin="normal"
           value={password}

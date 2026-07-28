@@ -39,7 +39,7 @@ export function LoginPage() {
           <DampolLogo height={48} />
         </Box>
         <Typography variant="h5" gutterBottom>
-          Multiplekser Elektryka
+          Multiplekser Elektryka v1
         </Typography>
         <Typography variant="body2" color="text.secondary" gutterBottom>
           Zaloguj się, aby kontynuować

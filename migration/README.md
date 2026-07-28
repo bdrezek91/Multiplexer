@@ -1,4 +1,4 @@
-# Multiplekser Elektryka — migracja do architektury Enterprise SaaS
+# Multiplekser Elektryka v1 — migracja do architektury Enterprise SaaS
 
 Zobacz `docs/ETAP_0_analiza_architektury.md` (analiza + plan + diagramy Mermaid) i najnowszy
 `docs/RAPORT_ETAP_11.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego etapu).

@@ -21,7 +21,7 @@ from app.modules.users.models import UserModel
 from app.modules.users.router import router as auth_router
 from app.modules.users.router import users_router
 
-app = FastAPI(title="Multiplekser Elektryka API", version="0.7.0-etap7")
+app = FastAPI(title="Multiplekser Elektryka v1 API", version="0.7.0-etap7")
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(products_router)

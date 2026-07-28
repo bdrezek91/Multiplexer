@@ -1,7 +1,7 @@
 # Multiplekser Elektryka — migracja do architektury Enterprise SaaS
 
 Zobacz `docs/ETAP_0_analiza_architektury.md` (analiza + plan + diagramy Mermaid) i najnowszy
-`docs/RAPORT_ETAP_10.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego etapu).
+`docs/RAPORT_ETAP_11.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego etapu).
 
 Szybki start (przez Docker - pelny stos, wymaga Dockera):
 ```bash
@@ -39,7 +39,8 @@ API: `/auth/token` (logowanie, od Etapu 5), `/match` (dopasowanie, wymaga zalogo
 Celery, od Etapu 7 - `POST` zwraca 202 natychmiast, `GET /documents/{id}` do odpytania statusu i
 wyniku), `PATCH /documents/{id}/items/{item_id}` (weryfikacja ilosci/kodu przed generowaniem, od
 Etapu 9), `POST /documents/{id}/generate` (eksport do formatu Optima, TXT/CP1250, od Etapu 9),
-dokumentacja interaktywna z przyciskiem "Authorize" na `/docs`.
+`/users` (CRUD uzytkownikow + reset hasla, admin-only, od Etapu 11), dokumentacja interaktywna z
+przyciskiem "Authorize" na `/docs`.
 
 **Produkcja** (od Etapu 10) — osobny stos `docker-compose.prod.yml` (bez `--reload`/bind-mountu,
 bez wystawionych na zewnatrz portow baz danych, jeden publiczny port - Nginx serwujacy frontend

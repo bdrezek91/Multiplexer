@@ -1,10 +1,11 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { RequireAuth } from './auth/RequireAuth'
+import { RequireAdmin, RequireAuth } from './auth/RequireAuth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { ProductsPage } from './pages/ProductsPage'
 import { DocumentsPage } from './pages/DocumentsPage'
 import { DocumentDetailPage } from './pages/DocumentDetailPage'
+import { UsersPage } from './pages/UsersPage'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
                 <Route path="/documents" element={<DocumentsPage />} />
                 <Route path="/documents/:id" element={<DocumentDetailPage />} />
                 <Route path="/products" element={<ProductsPage />} />
+                <Route path="/users" element={<RequireAdmin><UsersPage /></RequireAdmin>} />
                 <Route path="*" element={<Navigate to="/documents" replace />} />
               </Routes>
             </Layout>

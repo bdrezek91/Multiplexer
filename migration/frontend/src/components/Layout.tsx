@@ -25,6 +25,11 @@ export function Layout({ children }: { children: ReactNode }) {
           <Button color="inherit" component={RouterLink} to="/products">
             Katalog produktow
           </Button>
+          {user?.rola === 'admin' && (
+            <Button color="inherit" component={RouterLink} to="/users">
+              Uzytkownicy
+            </Button>
+          )}
           <Box flexGrow={1} />
           {user && (
             <>

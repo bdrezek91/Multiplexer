@@ -19,9 +19,11 @@ from app.modules.users import get_current_user
 from app.modules.users.deps import check_magazyn_access
 from app.modules.users.models import UserModel
 from app.modules.users.router import router as auth_router
+from app.modules.users.router import users_router
 
 app = FastAPI(title="Multiplekser Elektryka API", version="0.7.0-etap7")
 app.include_router(auth_router)
+app.include_router(users_router)
 app.include_router(products_router)
 app.include_router(documents_router)
 

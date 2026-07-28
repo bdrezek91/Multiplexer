@@ -70,6 +70,15 @@ export interface DocumentItemUpdate {
   match_kod?: string | null
 }
 
+export interface UserInput {
+  email: string
+  rola: Rola
+  magazyny_dostepne: string[]
+  active: boolean
+}
+
+export type UserCreateInput = Omit<UserInput, 'active'> & { password: string }
+
 export type QtyMode = 'real' | 'ones'
 
 export interface GenerateRequest {

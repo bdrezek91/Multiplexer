@@ -78,6 +78,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile.prod
     command: celery -A app.core.celery_app worker --loglevel=info
+    # Wylacza HEALTHCHECK odziedziczony z obrazu backendu (Dockerfile.prod) - ten HTTP check
+    # (curl na :8000/health) jest dla uvicorn, ktorego worker (proces Celery) w ogole nie
+    # uruchamia, wiec zawsze zglaszalby "unhealthy" mimo poprawnie dzialajacego workera.
+    healthcheck:
+      disable: true
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-multiplekser}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-multiplekser}
       REDIS_URL: redis://redis:6379/0

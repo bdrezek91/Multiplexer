@@ -1,31 +1,44 @@
-import { Box, Typography } from '@mui/material'
+import { Box } from '@mui/material'
 import { DAMPOL_GOLD } from '../theme'
 
-// Odtworzone tekstowo ze zrzutu ekranu strony dampol-investment.com (brak dostepu sieciowego z tej
-// sesji do pobrania oryginalnego pliku logo - patrz rozmowa) - "DAMPOL" pogrubione, pod spodem
-// "INVESTMENT" mniejsze, jasniejsze, z szerokimi odstepami miedzy literami, jak w oryginale.
-export function DampolLogo({ fontSize = 22 }: { fontSize?: number }) {
+// Odtworzone jako SVG na podstawie zrzutu ekranu logo przeslanego przez uzytkownika (brak dostepu
+// sieciowego z tej sesji do pobrania oryginalnego pliku - patrz rozmowa): "DAMPOL" konturowe
+// (puste w srodku, tylko obrys), pod spodem pelne "INVESTMENT" z szerokimi odstepami miedzy
+// literami - tak jak w oryginale. SVG (nie zwykly tekst z -webkit-text-stroke) dla identycznego,
+// ostrego wygladu na kazdej przegladarce niezaleznie od wsparcia dla obrysu tekstu w CSS.
+export function DampolLogo({ height = 34 }: { height?: number }) {
   return (
-    <Box lineHeight={1}>
-      <Typography
-        component="span"
-        sx={{ fontSize, fontWeight: 800, letterSpacing: '0.04em', color: DAMPOL_GOLD, display: 'block' }}
+    <Box
+      component="svg"
+      viewBox="0 0 620 172"
+      role="img"
+      aria-label="Dampol Investment"
+      sx={{ height, width: 'auto', display: 'block' }}
+    >
+      <text
+        x="2"
+        y="118"
+        fontFamily="Arial, Helvetica, sans-serif"
+        fontWeight={700}
+        fontSize={122}
+        letterSpacing={1}
+        fill="none"
+        stroke={DAMPOL_GOLD}
+        strokeWidth={3.5}
       >
         DAMPOL
-      </Typography>
-      <Typography
-        component="span"
-        sx={{
-          fontSize: fontSize * 0.32,
-          fontWeight: 500,
-          letterSpacing: '0.35em',
-          color: DAMPOL_GOLD,
-          opacity: 0.85,
-          display: 'block',
-        }}
+      </text>
+      <text
+        x="4"
+        y="160"
+        fontFamily="Arial, Helvetica, sans-serif"
+        fontWeight={500}
+        fontSize={25}
+        letterSpacing={14}
+        fill={DAMPOL_GOLD}
       >
         INVESTMENT
-      </Typography>
+      </text>
     </Box>
   )
 }

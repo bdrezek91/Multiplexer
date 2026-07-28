@@ -36,7 +36,7 @@ export function LoginPage() {
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" bgcolor="background.default">
       <Paper sx={{ p: 4, width: 360, border: 1, borderColor: 'divider' }} component="form" onSubmit={handleSubmit}>
         <Box display="flex" justifyContent="center" mb={2}>
-          <DampolLogo fontSize={28} />
+          <DampolLogo height={48} />
         </Box>
         <Typography variant="h5" gutterBottom>
           Multiplekser Elektryka

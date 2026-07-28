@@ -1,0 +1,109 @@
+# Stos produkcyjny (Etap 10) - odrebny od docker-compose.yml (dev: --reload, bind-mount kodu,
+# porty baz danych wystawione na hosta dla wygody lokalnej pracy). Tutaj: obrazy budowane raz
+# (bez bind-mountu), postgres/redis/minio NIE sa wystawione na zewnatrz (tylko siec wewnetrzna
+# compose) - jedynym publicznie dostepnym portem jest `web` (Nginx, statyczny frontend +
+# reverse-proxy /api/ do backendu pod tym samym originem, patrz frontend/nginx.conf).
+#
+# Uzycie:
+#   cp .env.prod.example .env
+#   # ... uzupelnij sekrety w .env (patrz komentarze w .env.prod.example) ...
+#   docker compose -f docker-compose.prod.yml up -d --build
+#   docker compose -f docker-compose.prod.yml exec backend python -m scripts.import_catalog
+#   docker compose -f docker-compose.prod.yml exec backend python -m scripts.import_special_rules
+#   docker compose -f docker-compose.prod.yml exec backend python -m scripts.create_admin --email ... --password ...
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-multiplekser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ustaw POSTGRES_PASSWORD w .env}
+      POSTGRES_DB: ${POSTGRES_DB:-multiplekser}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-multiplekser}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?ustaw MINIO_ROOT_USER w .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?ustaw MINIO_ROOT_PASSWORD w .env}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-multiplekser}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-multiplekser}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?ustaw JWT_SECRET_KEY w .env - patrz RAPORT_ETAP_5.md}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    command: celery -A app.core.celery_app worker --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-multiplekser}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-multiplekser}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      GEMINI_API_KEY_FREE: ${GEMINI_API_KEY_FREE:-}
+      GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    ports:
+      - "${WEB_PORT:-80}:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  minio_data:

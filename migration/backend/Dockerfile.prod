@@ -1,0 +1,23 @@
+# Build produkcyjny (Etap 10) - bez --reload i bez bind-mountu kodu (patrz Dockerfile dla dev,
+# uzywanego przez docker-compose.yml). Dziala jako user nie-root; liczba workerow uvicorn
+# konfigurowalna zmienna WEB_CONCURRENCY (domyslnie 2 - wystarczajace na start, DB/S3/OCR i tak
+# sa poza procesem HTTP dzieki Celery, patrz RAPORT_ETAP_7.md).
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN groupadd --system app && useradd --system --gid app --home-dir /app app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+RUN chown -R app:app /app
+USER app
+
+ENV WEB_CONCURRENCY=2
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=5 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)" || exit 1
+
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${WEB_CONCURRENCY}"]

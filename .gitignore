@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+
+# Sekrety lokalne/produkcyjne (JWT_SECRET_KEY, hasla DB, klucze Gemini...) - patrz
+# migration/.env.prod.example i migration/frontend/.env.example, ktore SA sledzone (to tylko
+# szablony bez prawdziwych wartosci).
+.env

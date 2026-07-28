@@ -1,7 +1,7 @@
 # Multiplekser Elektryka — migracja do architektury Enterprise SaaS
 
 Zobacz `docs/ETAP_0_analiza_architektury.md` (analiza + plan + diagramy Mermaid) i najnowszy
-`docs/RAPORT_ETAP_9.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego etapu).
+`docs/RAPORT_ETAP_10.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego etapu).
 
 Szybki start (przez Docker - pelny stos, wymaga Dockera):
 ```bash
@@ -41,10 +41,21 @@ wyniku), `PATCH /documents/{id}/items/{item_id}` (weryfikacja ilosci/kodu przed 
 Etapu 9), `POST /documents/{id}/generate` (eksport do formatu Optima, TXT/CP1250, od Etapu 9),
 dokumentacja interaktywna z przyciskiem "Authorize" na `/docs`.
 
-**Produkcja**: ustaw zmienna srodowiskowa `JWT_SECRET_KEY` na losowy, dlugi sekret - wartosc
-domyslna w kodzie jest tylko do dewelopmentu lokalnego (patrz `docs/RAPORT_ETAP_5.md`, ryzyka).
-Ustaw tez `GEMINI_API_KEY_FREE`/`GEMINI_API_KEY_PAID` (Google AI Studio) - bez nich dokumenty
-koncza sie statusem `error`. **Nigdy nie wpisuj tych kluczy do kodu/repo** - patrz
+**Produkcja** (od Etapu 10) — osobny stos `docker-compose.prod.yml` (bez `--reload`/bind-mountu,
+bez wystawionych na zewnatrz portow baz danych, jeden publiczny port - Nginx serwujacy frontend
+i reverse-proxujacy `/api/` do backendu pod tym samym originem, patrz `docs/RAPORT_ETAP_10.md`):
+
+```bash
+cd migration
+cp .env.prod.example .env   # uzupelnij sekrety - patrz komentarze w pliku (WYMAGANE: haslo
+                             # Postgresa, dane MinIO, JWT_SECRET_KEY - `openssl rand -hex 32`)
+docker compose -f docker-compose.prod.yml up -d --build
+docker compose -f docker-compose.prod.yml exec backend python -m scripts.import_catalog
+docker compose -f docker-compose.prod.yml exec backend python -m scripts.import_special_rules
+docker compose -f docker-compose.prod.yml exec backend python -m scripts.create_admin --email admin@przyklad.pl --password wybierz-mocne-haslo
+```
+
+Ustaw tez `GEMINI_API_KEY_FREE`/`GEMINI_API_KEY_PAID` (Google AI Studio) w `.env` - bez nich
+dokumenty koncza sie statusem `error`. **Nigdy nie wpisuj tych kluczy do kodu/repo** - patrz
 `docs/RAPORT_ETAP_6.md`, zastrzezenie bezpieczenstwa (klucze zaszyte w starym `index.html`).
-Ustaw `MINIO_ENDPOINT_URL`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` dla storage plikow (domyslne
-wartosci pasuja do `docker-compose.yml`).
+Plik `.env` jest w `.gitignore` (sekrety) - `.env.prod.example` to tylko szablon bez wartosci.

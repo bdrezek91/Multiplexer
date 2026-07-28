@@ -3,6 +3,7 @@ import { Alert, Box, Button, Paper, TextField, Typography } from '@mui/material'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
+import { DampolLogo } from '../components/DampolLogo'
 
 export function LoginPage() {
   const { login } = useAuth()
@@ -32,8 +33,11 @@ export function LoginPage() {
   }
 
   return (
-    <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" bgcolor="grey.100">
-      <Paper sx={{ p: 4, width: 360 }} component="form" onSubmit={handleSubmit}>
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" bgcolor="background.default">
+      <Paper sx={{ p: 4, width: 360, border: 1, borderColor: 'divider' }} component="form" onSubmit={handleSubmit}>
+        <Box display="flex" justifyContent="center" mb={2}>
+          <DampolLogo fontSize={28} />
+        </Box>
         <Typography variant="h5" gutterBottom>
           Multiplekser Elektryka
         </Typography>

@@ -166,6 +166,7 @@ def test_first_wydawka_nie_dodaje_usunietych_przewodow(catalog):
         assert "PRZEWÓD 5X16 CZARNY" not in by_kod
         assert "PRZEWÓD 3X16 CZARNY" not in by_kod
         assert "PRZEWÓD INSTALACYJNY 1X10 KOLOR" not in by_kod
+        assert "KORYTKO 90X60" not in by_kod
 
 
 def test_first_wydawka_nie_dubluje_juz_obecnej_pozycji(catalog):

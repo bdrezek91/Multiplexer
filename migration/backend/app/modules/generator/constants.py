@@ -27,7 +27,6 @@ CABLE_TRAYS_WHITE: list[dict] = [
     {"kod": "KORYTKO 32X15", "jm": "M"},
     {"kod": "KORYTKO 40X25", "jm": "M"},
     {"kod": "KORYTKO 60X40", "jm": "M"},
-    {"kod": "KORYTKO 90X60", "jm": "M"},
 ]
 
 # R2: KORYTKO CZARNE 40X20 (90 STOPNI) to NOWY, ODREBNY asortyment - NIE jest czarnym odpowiednikiem

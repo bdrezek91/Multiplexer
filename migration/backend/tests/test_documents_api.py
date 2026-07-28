@@ -2,9 +2,15 @@
 (no-op) - logika przetwarzania jest juz w pelni pokryta w test_documents_task.py; tu testujemy
 kontrakt API (upload do storage, zapis wiersza, RBAC wlasciciela/magazynu, statusy HTTP)."""
 from io import BytesIO
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from PIL import Image
+
+from app.modules.documents import repository as doc_repo
+from app.modules.documents.tasks import run_ocr_task
+from app.modules.matcher.special_rules import DEFAULT_SPECIAL_RULES
+from scripts.import_catalog import import_catalog
+from scripts.import_special_rules import import_special_rules
 
 
 def _fake_jpeg() -> bytes:
@@ -98,3 +104,36 @@ def test_create_document_elektryk_ograniczony_do_przypisanych_magazynow(client, 
     with _no_delay():
         r = client.post("/documents", files=files, data={"magazyn": "Czekanów"}, headers=elektryk_headers)
     assert r.status_code == 403
+
+
+def test_get_document_zwraca_pozycje_w_fizycznej_kolejnosci_formularza(
+    client, admin_headers, db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Regresja (2026-07-28, zgloszone przez Bartka): tabela weryfikacji na ekranie pokazywala
+    pozycje w losowej kolejnosci (sortowanie relacji Document.items po UUID), rozjezdzajac sie z
+    ukladem kartki - mimo ze finalny plik TXT (generate_output(), Etap 9) juz sortowal poprawnie.
+    AI celowo zwraca pozycje w kolejnosci ODWROTNEJ do fizycznego ukladu formularza."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+
+    # Na kartce "Wkręt ocynk 4,2x16" jest fizycznie DUZO PONIZEJ "Wtyczka odbiornikowa 32A" -
+    # AI tutaj zwraca je w odwrotnej kolejnosci, zeby test cokolwiek realnie sprawdzal.
+    ai_response = (
+        '{"pozycje": ['
+        '{"nazwa": "Wkręt ocynk 4,2x16", "ilosc_wydana": "10", "confidence": 95},'
+        '{"nazwa": "Wtyczka odbiornikowa 32A (niebieska) 1F", "ilosc_wydana": "1", "confidence": 98}'
+        "]}"
+    )
+    key = f"documents/order-test/{admin_user.id}.jpg"
+    from app.modules.documents.storage import get_storage
+    get_storage().upload(key, _fake_jpeg(), "image/jpeg")
+    document = doc_repo.create_document(
+        db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
+    )
+    with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(return_value=ai_response)):
+        run_ocr_task(str(document.id), db_session)
+
+    r = client.get(f"/documents/{document.id}", headers=admin_headers)
+    assert r.status_code == 200
+    nazwy = [it["rozpoznana_nazwa"] for it in r.json()["items"]]
+    assert nazwy == ["Wtyczka odbiornikowa 32A (niebieska) 1F", "Wkręt ocynk 4,2x16"]

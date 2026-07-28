@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.modules.generator import GeneratorItem, encode_cp1250, generate_output, get_filename
+from app.modules.generator import GeneratorItem, encode_cp1250, generate_output, get_filename, physical_order_for
 from app.modules.matcher import rules_from_db
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
@@ -53,6 +53,17 @@ def _item_to_schema(it: DocumentItemModel) -> DocumentItemOut:
     )
 
 
+def _items_in_physical_order(document: DocumentModel) -> list[DocumentItemModel]:
+    """Kolejnosc pozycji w tabeli weryfikacji = fizyczny uklad kartki (ta sama funkcja co przy
+    generowaniu TXT, patrz generator/core.py) - zeby ekran podgladu dalo sie porownac ze skanem
+    "linia po linii", zamiast pokazywac przypadkowa kolejnosc zapisu w bazie (domyslne sortowanie
+    relacji Document.items to `order_by=DocumentItemModel.id`, ktory jest losowym UUID)."""
+    return sorted(
+        document.items,
+        key=lambda it: physical_order_for(it.rozpoznana_nazwa, 10000),
+    )
+
+
 def _to_schema(document: DocumentModel) -> DocumentOut:
     return DocumentOut(
         id=str(document.id),
@@ -65,7 +76,7 @@ def _to_schema(document: DocumentModel) -> DocumentOut:
         rejected_count=document.rejected_count,
         error_message=document.error_message,
         created_at=document.created_at,
-        items=[_item_to_schema(it) for it in document.items],
+        items=[_item_to_schema(it) for it in _items_in_physical_order(document)],
     )
 
 

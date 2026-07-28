@@ -1,4 +1,4 @@
-# Multiplekser Elektryka v1 — migracja do architektury Enterprise SaaS
+# Multiplekser v1.0.0
 
 Zobacz `docs/ETAP_0_analiza_architektury.md` (analiza + plan + diagramy Mermaid) i najnowszy
 `docs/RAPORT_ETAP_11.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego etapu).
@@ -49,7 +49,7 @@ automatycznie wystawia darmowy certyfikat HTTPS gdy podasz domene, i reverse-pro
 `docs/RAPORT_ETAP_10.md`):
 
 ```bash
-cd migration
+cd multiplekser
 cp .env.prod.example .env   # uzupelnij sekrety - patrz komentarze w pliku (WYMAGANE: haslo
                              # Postgresa, dane MinIO, JWT_SECRET_KEY - `openssl rand -hex 32`)
 docker compose -f docker-compose.prod.yml up -d --build
@@ -75,7 +75,7 @@ Plik `.env` jest w `.gitignore` (sekrety) - `.env.prod.example` to tylko szablon
 4. Sklonuj repozytorium (potrzebny dostep do repo - np. `git clone` z tokenem albo przez SSH):
    ```bash
    git clone <url-repo>
-   cd <repo>/migration
+   cd <repo>/multiplekser
    ```
 5. Dalej dokladnie jak wyzej (`cp .env.prod.example .env`, uzupelnij sekrety - **w `DOMAIN` wpisz
    swoja domene z kroku 2, jesli ja masz**, `docker compose -f docker-compose.prod.yml up -d

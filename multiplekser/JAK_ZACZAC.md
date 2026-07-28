@@ -5,7 +5,7 @@
 Jeśli jeszcze nie masz tego w Gicie:
 
 ```bash
-cd migration          # ten folder
+cd multiplekser        # ten folder
 git init
 git add .
 git commit -m "Etap 0-1: analiza + szkielet + Matcher/Parser w Pythonie"

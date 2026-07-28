@@ -35,15 +35,15 @@ export function LoginPage() {
   return (
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" bgcolor="background.default">
       <Paper sx={{ p: 4, width: 360, border: 1, borderColor: 'divider' }} component="form" onSubmit={handleSubmit}>
-        <Box display="flex" justifyContent="center" mb={2}>
+        <Box display="flex" flexDirection="column" alignItems="center" mb={2} textAlign="center">
           <DampolLogo height={48} />
+          <Typography variant="h5" sx={{ mt: 2 }}>
+            Multiplekser v1.0.0
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Zaloguj się, aby kontynuować
+          </Typography>
         </Box>
-        <Typography variant="h5" gutterBottom>
-          Multiplekser Elektryka v1
-        </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-          Zaloguj się, aby kontynuować
-        </Typography>
         {error && (
           <Alert severity="error" sx={{ my: 2 }}>
             {error}

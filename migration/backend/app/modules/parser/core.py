@@ -17,10 +17,17 @@ from typing import Optional
 # ---- Wzorce atrybutow (odpowiednik COUNTRY_PATTERNS / COLOR_PATTERNS / MULT_PATTERNS w JS) ----
 
 COUNTRY_PATTERNS: list[tuple[re.Pattern, str]] = [
-    (re.compile(r"\bniemiec\w*\b", re.I), "DE"),
-    (re.compile(r"\bpolsk\w*\b", re.I), "PL"),
-    (re.compile(r"\bfrancus\w*\b", re.I), "FR"),
-    (re.compile(r"\bangiels\w*\b", re.I), "EN"),
+    (re.compile(r"\b(polski[ea]?|polska)\b", re.I), "PL"),
+    # DE: obok "niemiecki(e)/niemiecka" takze warianty tolerancyjne na literowki OCR
+    # ("niemicki/niemicka" - brak 'e', "niemieki/niemieka" - brak 'c') - port 1:1 z monolitu.
+    (re.compile(r"\b(niemiecki[ea]?|niemiecka|niemicki[ea]?|niemicka|niemieki[ea]?|niemieka)\b", re.I), "DE"),
+    (re.compile(r"\b(francuski[ea]?|francuska)\b", re.I), "FR"),
+    (re.compile(r"\b(angielski[ea]?|angielska)\b", re.I), "EN"),
+    # Same skroty (np. z Excela/OCR skrotowego zapisu) - brakowaly w tym porcie.
+    (re.compile(r"\bPL\b", re.I), "PL"),
+    (re.compile(r"\bDE\b", re.I), "DE"),
+    (re.compile(r"\bFR\b", re.I), "FR"),
+    (re.compile(r"\bEN\b", re.I), "EN"),
 ]
 
 # NAPRAWA (bug wykryty 2026-07-27): brakowalo 5 z 10 kolorow realnie obecnych w katalogu -
@@ -97,15 +104,53 @@ def dice_coeff(a: str, b: str, b_bigrams: Optional[list[str]] = None) -> float:
     return (2 * matches) / (len(ga) + len(b_bigrams if b_bigrams is not None else bigrams(b)))
 
 
-PHASE_1F_RE = re.compile(r"\b1\s*f(az\w*)?\b|\bjednofazow\w*\b", re.I)
-PHASE_3F_RE = re.compile(r"\b3\s*f(az\w*)?\b|\btr[oó]jfazow\w*\b|\b3p\s*\+?\s*n?\s*\+?\s*pe\b", re.I)
+# Pelna detekcja fazy (port 1:1 z detectPhase() w monolicie - wersja Excel): napiecia
+# (230V=1F, 400V=3F), zapisy biegunow (2P+PE=1F, 3P+N+PE/5P=3F), slownie (jednofazowe/
+# trojfazowe), skroty (1F/3F) oraz heurystyka kolorow CEE dla osprzetu silowego:
+# niebieskie=1F, czerwone=3F (tylko w kontekscie gniazd/wtyczek - patrz _CEE_CONTEXT_RE).
+_PHASE_1F_PATTERNS = [
+    re.compile(r"\b1f\b"),
+    re.compile(r"\b1\s*f\b"),
+    re.compile(r"\b1-fazowe?\b"),
+    re.compile(r"\b1\s*-\s*fazowe?\b"),
+    re.compile(r"\bjednofazow[aei]\b"),
+    re.compile(r"\b230v\b"),
+    re.compile(r"\b230\s*v\b"),
+    re.compile(r"\b2p\s*\+\s*pe\b"),
+    re.compile(r"\b2p\+pe\b"),
+]
+_PHASE_3F_PATTERNS = [
+    re.compile(r"\b3f\b"),
+    re.compile(r"\b3\s*f\b"),
+    re.compile(r"\b3-fazowe?\b"),
+    re.compile(r"\b3\s*-\s*fazowe?\b"),
+    re.compile(r"\btr[oó]jfazow[aei]\b"),
+    re.compile(r"\b400v\b"),
+    re.compile(r"\b400\s*v\b"),
+    re.compile(r"\b3p\s*\+\s*n\s*\+\s*pe\b"),
+    re.compile(r"\b3p\+n\+pe\b"),
+    re.compile(r"\b5p\b"),
+]
+_CEE_CONTEXT_RE = re.compile(r"\b(gniazdo|wtyczka|wtyk|odbiornik|przenośn[ay]|stał[ay]|cee|złączka|gniazdko)\b", re.I)
 
 
 def detect_phase(original_text: str) -> Optional[str]:
-    if PHASE_3F_RE.search(original_text):
-        return "3F"
-    if PHASE_1F_RE.search(original_text):
-        return "1F"
+    s = original_text.lower()
+    for pattern in _PHASE_1F_PATTERNS:
+        if pattern.search(s):
+            return "1F"
+    for pattern in _PHASE_3F_PATTERNS:
+        if pattern.search(s):
+            return "3F"
+    if _CEE_CONTEXT_RE.search(s):
+        if re.search(r"\bniebiesk[ai]\b", s):
+            return "1F"
+        if re.search(r"\bblue\b", s):
+            return "1F"
+        if re.search(r"\bczerwon[ae]\b", s):
+            return "3F"
+        if re.search(r"\bred\b", s):
+            return "3F"
     return None
 
 

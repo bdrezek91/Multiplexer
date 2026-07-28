@@ -5,7 +5,6 @@ import {
   Checkbox,
   Chip,
   FormControlLabel,
-  MenuItem,
   Paper,
   Stack,
   Table,
@@ -26,7 +25,7 @@ import { generateDocument, getDocument, updateDocumentItem } from '../api/docume
 import { StatusChip } from '../components/StatusChip'
 import { MatchQualityChip } from '../components/MatchQualityChip'
 import { ApiError } from '../api/client'
-import type { DocumentItem, QtyMode } from '../types'
+import type { DocumentItem } from '../types'
 
 function QtyFinalnaCell({ documentId, item }: { documentId: string; item: DocumentItem }) {
   const queryClient = useQueryClient()
@@ -62,7 +61,6 @@ export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const documentId = id as string
-  const [qtyMode, setQtyMode] = useState<QtyMode>('real')
   const [firstWydawka, setFirstWydawka] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
 
@@ -79,7 +77,7 @@ export function DocumentDetailPage() {
   })
 
   const generateMutation = useMutation({
-    mutationFn: () => generateDocument(documentId, { qty_mode: qtyMode, first_wydawka: firstWydawka }),
+    mutationFn: () => generateDocument(documentId, { first_wydawka: firstWydawka }),
     onSuccess: ({ blob, filename }) => {
       // Pobranie pliku w przegladarce - odpowiednik downloadOutput() z monolitu (tam CP1250
       // kodowany po stronie klienta, tutaj gotowe bajty przychodza juz zakodowane z backendu).
@@ -205,17 +203,6 @@ export function DocumentDetailPage() {
                   Generowanie do Optima
                 </Typography>
                 <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
-                  <TextField
-                    select
-                    size="small"
-                    label="Ilości"
-                    value={qtyMode}
-                    onChange={(e) => setQtyMode(e.target.value as QtyMode)}
-                    sx={{ width: 220 }}
-                  >
-                    <MenuItem value="real">Rzeczywiste ilości</MenuItem>
-                    <MenuItem value="ones">Wszystko po 1 szt</MenuItem>
-                  </TextField>
                   <FormControlLabel
                     control={
                       <Checkbox checked={firstWydawka} onChange={(e) => setFirstWydawka(e.target.checked)} />

@@ -79,9 +79,6 @@ export interface UserInput {
 
 export type UserCreateInput = Omit<UserInput, 'active'> & { password: string }
 
-export type QtyMode = 'real' | 'ones'
-
 export interface GenerateRequest {
-  qty_mode: QtyMode
   first_wydawka: boolean
 }

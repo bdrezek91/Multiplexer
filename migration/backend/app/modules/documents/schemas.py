@@ -41,3 +41,17 @@ class DocumentOut(BaseModel):
 class DocumentCreatedOut(BaseModel):
     id: str
     status: str
+
+
+class DocumentItemUpdateIn(BaseModel):
+    """Recznie zweryfikowana ilosc (i opcjonalnie poprawiony kod) przed generowaniem - patrz
+    docs/RAPORT_ETAP_9.md, "Ilosc finalna". Pola nieustawione (None w requescie) NIE sa
+    nadpisywane innymi polami - ilosc_finalna=null jawnie kasuje ilosc (wyklucza pozycje z
+    generowania), ale brak pola w JSON w ogole zostawia je bez zmian (patrz `exclude_unset`)."""
+    ilosc_finalna: float | None = None
+    match_kod: str | None = None
+
+
+class GenerateRequest(BaseModel):
+    qty_mode: str = "real"  # "real" | "ones"
+    first_wydawka: bool = False

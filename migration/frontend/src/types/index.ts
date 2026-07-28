@@ -64,3 +64,15 @@ export interface DocumentCreated {
   id: string
   status: DocumentStatus
 }
+
+export interface DocumentItemUpdate {
+  ilosc_finalna?: number | null
+  match_kod?: string | null
+}
+
+export type QtyMode = 'real' | 'ones'
+
+export interface GenerateRequest {
+  qty_mode: QtyMode
+  first_wydawka: boolean
+}

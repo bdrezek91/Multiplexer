@@ -1,7 +1,7 @@
 # Multiplekser Elektryka — migracja do architektury Enterprise SaaS
 
 Zobacz `docs/ETAP_0_analiza_architektury.md` (analiza + plan + diagramy Mermaid) i najnowszy
-`docs/RAPORT_ETAP_N.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego etapu).
+`docs/RAPORT_ETAP_9.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego etapu).
 
 Szybki start (przez Docker - pelny stos, wymaga Dockera):
 ```bash
@@ -37,7 +37,9 @@ npm run test  # Vitest
 API: `/auth/token` (logowanie, od Etapu 5), `/match` (dopasowanie, wymaga zalogowania), pelny CRUD
 `/products` (od Etapu 4, zapis tylko rola admin), `/documents` (upload skanu + async OCR przez
 Celery, od Etapu 7 - `POST` zwraca 202 natychmiast, `GET /documents/{id}` do odpytania statusu i
-wyniku), dokumentacja interaktywna z przyciskiem "Authorize" na `/docs`.
+wyniku), `PATCH /documents/{id}/items/{item_id}` (weryfikacja ilosci/kodu przed generowaniem, od
+Etapu 9), `POST /documents/{id}/generate` (eksport do formatu Optima, TXT/CP1250, od Etapu 9),
+dokumentacja interaktywna z przyciskiem "Authorize" na `/docs`.
 
 **Produkcja**: ustaw zmienna srodowiskowa `JWT_SECRET_KEY` na losowy, dlugi sekret - wartosc
 domyslna w kodzie jest tylko do dewelopmentu lokalnego (patrz `docs/RAPORT_ETAP_5.md`, ryzyka).

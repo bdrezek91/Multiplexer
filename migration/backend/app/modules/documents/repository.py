@@ -91,3 +91,41 @@ def mark_error(session: Session, document: DocumentModel, error_message: str) ->
     document.status = "error"
     document.error_message = error_message[:2000]
     session.commit()
+
+
+def get_item(session: Session, document_id, item_id) -> Optional[DocumentItemModel]:
+    doc_uid, item_uid = _to_uuid(document_id), _to_uuid(item_id)
+    if doc_uid is None or item_uid is None:
+        return None
+    return (
+        session.query(DocumentItemModel)
+        .filter(DocumentItemModel.id == item_uid, DocumentItemModel.document_id == doc_uid)
+        .first()
+    )
+
+
+def update_item(
+    session: Session,
+    item: DocumentItemModel,
+    *,
+    ilosc_finalna: Optional[float] = ...,
+    match_kod: Optional[str] = ...,
+    match_nazwa: Optional[str] = ...,
+    match_jm: Optional[str] = ...,
+    matched_product_id=...,
+) -> DocumentItemModel:
+    """Ellipsis jako "nie zmieniaj tego pola" - odroznia "brak zmiany" od "ustaw na None"
+    (np. usuniecie recznej korekty kodu)."""
+    if ilosc_finalna is not ...:
+        item.ilosc_finalna = ilosc_finalna
+    if match_kod is not ...:
+        item.match_kod = match_kod
+    if match_nazwa is not ...:
+        item.match_nazwa = match_nazwa
+    if match_jm is not ...:
+        item.match_jm = match_jm
+    if matched_product_id is not ...:
+        item.matched_product_id = matched_product_id
+    session.commit()
+    session.refresh(item)
+    return item

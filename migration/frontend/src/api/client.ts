@@ -98,3 +98,41 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
 }
+
+function filenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null
+  // Preferuj filename* (RFC 5987, UTF-8) - backend go zawsze dolacza obok ASCII fallbacku
+  // filename= (patrz app/modules/documents/router.py, generate_document_output).
+  const star = header.match(/filename\*=UTF-8''([^;]+)/i)
+  if (star) return decodeURIComponent(star[1])
+  const plain = header.match(/filename="?([^";]+)"?/i)
+  return plain ? plain[1] : null
+}
+
+export async function apiRequestBlob(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ blob: Blob; filename: string | null }> {
+  let response = await rawRequest(path, options)
+
+  if (response.status === 401 && !options.skipAuth && tokenStorage.getRefreshToken()) {
+    const refreshed = await refreshAccessToken()
+    if (refreshed) {
+      response = await rawRequest(path, options)
+    }
+  }
+
+  if (!response.ok) {
+    let detail = response.statusText
+    try {
+      const data = (await response.json()) as { detail?: string }
+      if (data.detail) detail = data.detail
+    } catch {
+      // odpowiedz bez cialka JSON - zostaje statusText
+    }
+    if (response.status === 401) tokenStorage.clear()
+    throw new ApiError(response.status, detail)
+  }
+
+  return { blob: await response.blob(), filename: filenameFromContentDisposition(response.headers.get('Content-Disposition')) }
+}

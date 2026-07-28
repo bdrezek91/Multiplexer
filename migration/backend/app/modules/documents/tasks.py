@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.celery_app import celery_app
 from app.core.db import SessionLocal
+from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
 from app.modules.ocr.chain import AllProvidersFailedError
 from app.modules.ocr.image import downscale_image
@@ -61,11 +62,18 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             recognize_document(file_bytes, mime, catalog, special_rules, magazyn=document.magazyn)
         )
 
-        items = [
-            {
+        items = []
+        for it in result.pozycje:
+            wydana = parse_float_loose(it.ilosc_wydana) if it.ilosc_wydana is not None else None
+            zuzyta = parse_float_loose(it.ilosc_zuzyta) if it.ilosc_zuzyta is not None else None
+            items.append({
                 "rozpoznana_nazwa": it.rozpoznana_nazwa,
-                "ilosc_wydana": parse_float_loose(it.ilosc_wydana) if it.ilosc_wydana is not None else None,
-                "ilosc_zuzyta": parse_float_loose(it.ilosc_zuzyta) if it.ilosc_zuzyta is not None else None,
+                "ilosc_wydana": wydana,
+                "ilosc_zuzyta": zuzyta,
+                # Domyslna ilosc do weryfikacji/generowania - pickQty('razem') z monolitu (zuzyta
+                # jesli podana, inaczej wydana). Uzytkownik moze nadpisac przez PATCH przed
+                # wygenerowaniem (patrz RAPORT_ETAP_9.md).
+                "ilosc_finalna": pick_qty_razem(wydana, zuzyta),
                 "match_quality": it.match.quality,
                 "match_score": it.match.ratio,
                 "off_form": it.off_form,
@@ -77,9 +85,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "match_kod": it.match.kod,
                 "match_nazwa": it.match.nazwa,
                 "match_jm": it.match.jm_override,
-            }
-            for it in result.pozycje
-        ]
+            })
 
         repository.mark_done(
             session, document,

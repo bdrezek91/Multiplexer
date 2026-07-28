@@ -16,9 +16,6 @@ ALWAYS_INCLUDE_BASE: list[dict] = [
     {"kod": "PRZEWÓD 3X2,5", "jm": "M"},
     {"kod": "PRZEWÓD 3X4 ", "jm": "M"},
     {"kod": "PRZEWÓD 5X4", "jm": "M"},
-    {"kod": "PRZEWÓD 5X16 CZARNY", "jm": "M"},
-    {"kod": "PRZEWÓD 3X16 CZARNY", "jm": "M"},
-    {"kod": "PRZEWÓD INSTALACYJNY 1X10 KOLOR", "jm": "M"},
     {"kod": "PRZEWÓD OLFLEX 4X1,5 (DO KLIMATYZACJI)", "jm": "M"},
 ]
 

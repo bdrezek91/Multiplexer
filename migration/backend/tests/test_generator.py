@@ -156,6 +156,18 @@ def test_first_wydawka_dodaje_baze_i_korytka_w_kolorze_projektu(catalog):
     assert "WKRĘT 4,2X16 (OCYNK) (50 SZT);1;;OPAK;" == by_kod["WKRĘT 4,2X16 (OCYNK) (50 SZT)"]
 
 
+def test_first_wydawka_nie_dodaje_usunietych_przewodow(catalog):
+    # Na prosbe uzytkownika (2026-07-28) usuniete z ALWAYS_INCLUDE_BASE niezaleznie od magazynu -
+    # przewody ktore nie powinny juz trafiac do pierwszej wydawki.
+    items = [GeneratorItem(name="Wtyczka odbiornikowa 32A (niebieska) 1F", qty=1)]
+    for magazyn in (None, "Mag m-y Zabrze", "MAGAZYN Czekanów"):
+        result = generate_output(items, catalog, magazyn=magazyn, first_wydawka=True)
+        by_kod = _lines_by_kod(result.lines)
+        assert "PRZEWÓD 5X16 CZARNY" not in by_kod
+        assert "PRZEWÓD 3X16 CZARNY" not in by_kod
+        assert "PRZEWÓD INSTALACYJNY 1X10 KOLOR" not in by_kod
+
+
 def test_first_wydawka_nie_dubluje_juz_obecnej_pozycji(catalog):
     items = [
         GeneratorItem(name="Wtyczka odbiornikowa 32A (niebieska) 1F", qty=1),

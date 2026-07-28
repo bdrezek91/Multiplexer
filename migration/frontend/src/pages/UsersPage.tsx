@@ -21,6 +21,7 @@ import KeyIcon from '@mui/icons-material/VpnKey'
 import { useQuery } from '@tanstack/react-query'
 import { listUsers } from '../api/users'
 import { ApiError } from '../api/client'
+import { magazynLabel } from '../constants'
 import { useAuth } from '../auth/AuthContext'
 import { UserFormDialog } from './UserFormDialog'
 import { ResetPasswordDialog } from './ResetPasswordDialog'
@@ -94,7 +95,9 @@ export function UsersPage() {
                 <TableCell>
                   <Chip size="small" label={u.rola} color={u.rola === 'admin' ? 'primary' : 'default'} />
                 </TableCell>
-                <TableCell>{u.rola === 'admin' ? 'wszystkie' : u.magazyny_dostepne.join(', ') || '-'}</TableCell>
+                <TableCell>
+                  {u.rola === 'admin' ? 'wszystkie' : u.magazyny_dostepne.map(magazynLabel).join(', ') || '-'}
+                </TableCell>
                 <TableCell>
                   <Chip size="small" label={u.active ? 'aktywny' : 'nieaktywny'} color={u.active ? 'success' : 'default'} />
                 </TableCell>

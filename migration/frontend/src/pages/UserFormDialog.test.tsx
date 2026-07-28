@@ -34,8 +34,8 @@ describe('UserFormDialog', () => {
 
     await user.type(screen.getByLabelText(/email/i), 'nowy@test.local')
     await user.type(screen.getByLabelText(/hasło/i), 'haslo12345')
-    await user.click(screen.getByRole('button', { name: 'Zabrze' }))
-    await user.click(screen.getByRole('button', { name: 'Czekanów' }))
+    await user.click(screen.getByRole('button', { name: 'Magazyn Zabrze' }))
+    await user.click(screen.getByRole('button', { name: 'Magazyn Czekanów' }))
     await user.click(screen.getByRole('button', { name: /zapisz/i }))
 
     await waitFor(() => expect(usersApi.createUser).toHaveBeenCalledTimes(1))
@@ -43,7 +43,7 @@ describe('UserFormDialog', () => {
       email: 'nowy@test.local',
       password: 'haslo12345',
       rola: 'elektryk',
-      magazyny_dostepne: ['Zabrze', 'Czekanów'],
+      magazyny_dostepne: ['Mag m-y Zabrze', 'MAGAZYN Czekanów'],
     })
   })
 
@@ -52,14 +52,15 @@ describe('UserFormDialog', () => {
     vi.mocked(usersApi.updateUser).mockResolvedValue({} as CurrentUser)
     const existing: CurrentUser = {
       id: 'u1', email: 'istniejacy@test.local', rola: 'elektryk',
-      magazyny_dostepne: ['Zabrze'], active: true,
+      magazyny_dostepne: ['Mag m-y Zabrze'], active: true,
     }
 
     renderDialog(existing)
 
     expect(screen.queryByLabelText(/^hasło$/i)).not.toBeInTheDocument()
-    // Magazyn "Zabrze" powinien byc juz zaznaczony (przyszedl z danych uzytkownika).
-    expect(screen.getByRole('button', { name: 'Zabrze' })).toHaveAttribute('aria-pressed', 'true')
+    // Magazyn "Mag m-y Zabrze" (Optima) powinien byc juz zaznaczony na przycisku "Magazyn Zabrze"
+    // (przyszedl z danych uzytkownika).
+    expect(screen.getByRole('button', { name: 'Magazyn Zabrze' })).toHaveAttribute('aria-pressed', 'true')
 
     await user.click(screen.getByRole('button', { name: /zapisz/i }))
 
@@ -67,7 +68,7 @@ describe('UserFormDialog', () => {
     expect(usersApi.updateUser).toHaveBeenCalledWith('u1', {
       email: 'istniejacy@test.local',
       rola: 'elektryk',
-      magazyny_dostepne: ['Zabrze'],
+      magazyny_dostepne: ['Mag m-y Zabrze'],
       active: true,
     })
   })

@@ -24,7 +24,7 @@ import { useNavigate } from 'react-router-dom'
 import { listDocuments, uploadDocument } from '../api/documents'
 import { ApiError } from '../api/client'
 import { StatusChip } from '../components/StatusChip'
-import { KNOWN_MAGAZYNY } from '../constants'
+import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
 import { useAuth } from '../auth/AuthContext'
 
 export function DocumentsPage() {
@@ -104,8 +104,8 @@ export function DocumentsPage() {
                 size="small"
               >
                 {KNOWN_MAGAZYNY.map((m) => (
-                  <ToggleButton key={m} value={m}>
-                    {m}
+                  <ToggleButton key={m.value} value={m.value}>
+                    {m.label}
                   </ToggleButton>
                 ))}
               </ToggleButtonGroup>
@@ -124,7 +124,7 @@ export function DocumentsPage() {
               <MenuItem value="">Bez magazynu</MenuItem>
               {magazynyDostepne.map((m) => (
                 <MenuItem key={m} value={m}>
-                  {m}
+                  {magazynLabel(m)}
                 </MenuItem>
               ))}
             </TextField>
@@ -165,7 +165,7 @@ export function DocumentsPage() {
               <TableRow key={doc.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/documents/${doc.id}`)}>
                 <TableCell>{doc.original_filename}</TableCell>
                 <TableCell>{doc.numer_projektu ?? '-'}</TableCell>
-                <TableCell>{doc.magazyn ?? '-'}</TableCell>
+                <TableCell>{doc.magazyn ? magazynLabel(doc.magazyn) : '-'}</TableCell>
                 <TableCell>
                   <StatusChip status={doc.status} />
                 </TableCell>

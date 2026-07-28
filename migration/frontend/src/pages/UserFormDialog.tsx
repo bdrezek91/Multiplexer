@@ -108,8 +108,8 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
                 sx={{ mt: 0.5 }}
               >
                 {KNOWN_MAGAZYNY.map((m) => (
-                  <ToggleButton key={m} value={m}>
-                    {m}
+                  <ToggleButton key={m.value} value={m.value}>
+                    {m.label}
                   </ToggleButton>
                 ))}
               </ToggleButtonGroup>

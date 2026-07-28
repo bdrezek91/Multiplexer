@@ -43,8 +43,10 @@ Etapu 9), `POST /documents/{id}/generate` (eksport do formatu Optima, TXT/CP1250
 przyciskiem "Authorize" na `/docs`.
 
 **Produkcja** (od Etapu 10) — osobny stos `docker-compose.prod.yml` (bez `--reload`/bind-mountu,
-bez wystawionych na zewnatrz portow baz danych, jeden publiczny port - Nginx serwujacy frontend
-i reverse-proxujacy `/api/` do backendu pod tym samym originem, patrz `docs/RAPORT_ETAP_10.md`):
+bez wystawionych na zewnatrz portow baz danych, jeden publiczny wpis - `caddy`, ktory
+automatycznie wystawia darmowy certyfikat HTTPS gdy podasz domene, i reverse-proxuje do `web`
+(Nginx: statyczny frontend + `/api/` do backendu pod tym samym originem), patrz
+`docs/RAPORT_ETAP_10.md`):
 
 ```bash
 cd migration
@@ -60,3 +62,29 @@ Ustaw tez `GEMINI_API_KEY_FREE`/`GEMINI_API_KEY_PAID` (Google AI Studio) w `.env
 dokumenty koncza sie statusem `error`. **Nigdy nie wpisuj tych kluczy do kodu/repo** - patrz
 `docs/RAPORT_ETAP_6.md`, zastrzezenie bezpieczenstwa (klucze zaszyte w starym `index.html`).
 Plik `.env` jest w `.gitignore` (sekrety) - `.env.prod.example` to tylko szablon bez wartosci.
+
+**Wlasny VPS (serwer w chmurze)** — skrocona sciezka od zera do dzialajacej, publicznej strony:
+
+1. Zaloz serwer (Ubuntu 22.04/24.04) u dowolnego dostawcy (np. Hetzner CX22, DigitalOcean) - zapisz
+   jego publiczny adres IP.
+2. (Opcjonalnie, ale zalecane) kup domene i dodaj rekord DNS `A` wskazujacy na ten adres IP.
+3. Zaloguj sie po SSH na serwer i zainstaluj Dockera:
+   ```bash
+   curl -fsSL https://get.docker.com | sh
+   ```
+4. Sklonuj repozytorium (potrzebny dostep do repo - np. `git clone` z tokenem albo przez SSH):
+   ```bash
+   git clone <url-repo>
+   cd <repo>/migration
+   ```
+5. Dalej dokladnie jak wyzej (`cp .env.prod.example .env`, uzupelnij sekrety - **w `DOMAIN` wpisz
+   swoja domene z kroku 2, jesli ja masz**, `docker compose -f docker-compose.prod.yml up -d
+   --build`, import katalogu/regul, `create_admin`).
+6. Otworz `http://<adres-IP>/` (albo `https://twojadomena.pl/` jesli ustawiles `DOMAIN` - Caddy
+   samo zalatwia certyfikat, moze to potrwac do minuty przy pierwszym starcie).
+
+Kolejne zmiany w kodzie (po `git push` na branch) wdraza sie na serwerze przez:
+```bash
+git pull
+docker compose -f docker-compose.prod.yml up -d --build   # przebudowuje tylko zmienione uslugi
+```

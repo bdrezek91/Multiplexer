@@ -1,0 +1,7 @@
+# Konfiguracja Caddy (patrz docker-compose.prod.yml, usluga `caddy`). DOMAIN pochodzi ze
+# zmiennej srodowiskowej (.env) - ustaw prawdziwa domene z rekordem A na IP serwera, zeby Caddy
+# automatycznie wystawil zaufany certyfikat HTTPS (Let's Encrypt), bez zadnej dodatkowej
+# konfiguracji. Wartosc domyslna ":80" dziala od razu po samym IP serwera, ale bez szyfrowania.
+{$DOMAIN} {
+	reverse_proxy web:80
+}

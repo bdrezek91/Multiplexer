@@ -1,12 +1,14 @@
 # Stos produkcyjny (Etap 10) - odrebny od docker-compose.yml (dev: --reload, bind-mount kodu,
 # porty baz danych wystawione na hosta dla wygody lokalnej pracy). Tutaj: obrazy budowane raz
 # (bez bind-mountu), postgres/redis/minio NIE sa wystawione na zewnatrz (tylko siec wewnetrzna
-# compose) - jedynym publicznie dostepnym portem jest `web` (Nginx, statyczny frontend +
-# reverse-proxy /api/ do backendu pod tym samym originem, patrz frontend/nginx.conf).
+# compose). Publicznie dostepny jest tylko `caddy` (80/443) - automatyczne, darmowe HTTPS
+# (Let's Encrypt) gdy ustawiona jest prawdziwa domena w DOMAIN (patrz .env.prod.example) -
+# reverse-proxuje do `web` (Nginx, statyczny frontend + /api/ do backendu, patrz frontend/nginx.conf).
 #
-# Uzycie:
+# Uzycie (wlasny VPS z publicznym IP):
 #   cp .env.prod.example .env
 #   # ... uzupelnij sekrety w .env (patrz komentarze w .env.prod.example) ...
+#   # ... jesli masz juz domene wskazujaca (rekord A) na IP serwera, ustaw DOMAIN=twojadomena.pl ...
 #   docker compose -f docker-compose.prod.yml up -d --build
 #   docker compose -f docker-compose.prod.yml exec backend python -m scripts.import_catalog
 #   docker compose -f docker-compose.prod.yml exec backend python -m scripts.import_special_rules
@@ -103,12 +105,35 @@ services:
 
   web:
     build: ./frontend
-    ports:
-      - "${WEB_PORT:-80}:80"
+    # Bez publikacji portu na hosta - jedynym wejsciem z zewnatrz jest teraz `caddy` (80/443),
+    # ktory reverse-proxuje tutaj wewnatrz sieci compose.
+    expose:
+      - "80"
     depends_on:
       - backend
+    restart: unless-stopped
+
+  # Odwrotne proxy terminujace TLS - automatyczne, darmowe certyfikaty Let's Encrypt (zero
+  # dodatkowej konfiguracji certbota) gdy DOMAIN w .env wskazuje prawdziwa domene z rekordem A
+  # na IP tego serwera. Bez ustawionej domeny (DOMAIN=:80, wartosc domyslna) dziala jako zwykle
+  # proxy HTTP bez szyfrowania - wygodne zanim kupisz/podepniesz domene.
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
     restart: unless-stopped
 
 volumes:
   postgres_data:
   minio_data:
+  caddy_data:
+  caddy_config:

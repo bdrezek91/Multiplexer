@@ -16,8 +16,9 @@ export function DampolLogo({ height = 34 }: { height?: number }) {
       sx={{ height, width: 'auto', display: 'block' }}
     >
       <text
-        x="2"
+        x="310"
         y="118"
+        textAnchor="middle"
         fontFamily="Arial, Helvetica, sans-serif"
         fontWeight={700}
         fontSize={122}
@@ -29,8 +30,9 @@ export function DampolLogo({ height = 34 }: { height?: number }) {
         DAMPOL
       </text>
       <text
-        x="4"
+        x="317"
         y="160"
+        textAnchor="middle"
         fontFamily="Arial, Helvetica, sans-serif"
         fontWeight={500}
         fontSize={25}

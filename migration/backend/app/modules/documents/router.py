@@ -82,7 +82,7 @@ def _to_schema(document: DocumentModel) -> DocumentOut:
 
 def _check_owner_or_admin(document: DocumentModel, user: UserModel) -> None:
     if user.rola != "admin" and document.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Brak dostepu do tego dokumentu")
+        raise HTTPException(status_code=403, detail="Brak dostępu do tego dokumentu")
 
 
 @router.post("", response_model=DocumentCreatedOut, status_code=202)

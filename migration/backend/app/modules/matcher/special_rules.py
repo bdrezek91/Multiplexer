@@ -145,7 +145,7 @@ def evaluate_special_rules(
             kod = rule.kod_template.format(value=int(snapped))
             return resolve_by_kod(kod)
 
-        raise ValueError(f"Nieznany rule_type reguly specjalnej: {rule.rule_type!r}")
+        raise ValueError(f"Nieznany rule_type reguły specjalnej: {rule.rule_type!r}")
     return None
 
 

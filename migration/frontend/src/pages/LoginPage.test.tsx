@@ -50,7 +50,7 @@ describe('LoginPage', () => {
     renderLoginPage()
 
     await user.type(screen.getByLabelText(/email/i), 'admin@test.local')
-    await user.type(screen.getByLabelText(/haslo/i), 'tajne-haslo')
+    await user.type(screen.getByLabelText(/hasło/i), 'tajne-haslo')
     await user.click(screen.getByRole('button', { name: /zaloguj/i }))
 
     await waitFor(() => expect(screen.getByText('Strona dokumentow')).toBeInTheDocument())
@@ -59,15 +59,15 @@ describe('LoginPage', () => {
 
   it('przy blednych danych pokazuje komunikat bledu i nie przekierowuje', async () => {
     const user = userEvent.setup()
-    vi.mocked(authApi.login).mockRejectedValue(new ApiError(401, 'Nieprawidlowy email lub haslo'))
+    vi.mocked(authApi.login).mockRejectedValue(new ApiError(401, 'Nieprawidłowy email lub hasło'))
 
     renderLoginPage()
 
     await user.type(screen.getByLabelText(/email/i), 'admin@test.local')
-    await user.type(screen.getByLabelText(/haslo/i), 'zle-haslo')
+    await user.type(screen.getByLabelText(/hasło/i), 'zle-haslo')
     await user.click(screen.getByRole('button', { name: /zaloguj/i }))
 
-    expect(await screen.findByText('Nieprawidlowy email lub haslo')).toBeInTheDocument()
+    expect(await screen.findByText('Nieprawidłowy email lub hasło')).toBeInTheDocument()
     expect(screen.queryByText('Strona dokumentow')).not.toBeInTheDocument()
   })
 })

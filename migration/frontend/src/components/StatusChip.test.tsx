@@ -7,7 +7,7 @@ describe('StatusChip', () => {
     ['queued', 'W kolejce'],
     ['processing', 'Przetwarzanie'],
     ['done', 'Gotowe'],
-    ['error', 'Blad'],
+    ['error', 'Błąd'],
   ] as const)('renderuje poprawna etykiete dla statusu %s', (status, label) => {
     render(<StatusChip status={status} />)
     expect(screen.getByText(label)).toBeInTheDocument()

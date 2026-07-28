@@ -35,10 +35,10 @@ describe('ResetPasswordDialog', () => {
 
     renderDialog()
 
-    await user.type(screen.getByLabelText(/nowe haslo/i), 'nowe-haslo-123')
-    await user.click(screen.getByRole('button', { name: /resetuj haslo/i }))
+    await user.type(screen.getByLabelText(/nowe hasło/i), 'nowe-haslo-123')
+    await user.click(screen.getByRole('button', { name: /resetuj hasło/i }))
 
     await waitFor(() => expect(usersApi.resetPassword).toHaveBeenCalledWith('u1', 'nowe-haslo-123'))
-    expect(await screen.findByText(/haslo zostalo zmienione/i)).toBeInTheDocument()
+    expect(await screen.findByText(/hasło zostało zmienione/i)).toBeInTheDocument()
   })
 })

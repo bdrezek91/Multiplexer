@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  FormHelperText,
   MenuItem,
   Paper,
   Stack,
@@ -13,6 +14,8 @@ import {
   TableHead,
   TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
@@ -21,6 +24,7 @@ import { useNavigate } from 'react-router-dom'
 import { listDocuments, uploadDocument } from '../api/documents'
 import { ApiError } from '../api/client'
 import { StatusChip } from '../components/StatusChip'
+import { KNOWN_MAGAZYNY } from '../constants'
 import { useAuth } from '../auth/AuthContext'
 
 export function DocumentsPage() {
@@ -53,7 +57,7 @@ export function DocumentsPage() {
       navigate(`/documents/${created.id}`)
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.detail : 'Nie udalo sie wyslac dokumentu')
+      setError(err instanceof ApiError ? err.detail : 'Nie udało się wysłać dokumentu')
     },
   })
 
@@ -73,7 +77,7 @@ export function DocumentsPage() {
 
       <Paper sx={{ p: 2, mb: 3 }}>
         <Typography variant="subtitle1" gutterBottom>
-          Wyslij nowy skan
+          Wyślij nowy skan
         </Typography>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -92,12 +96,21 @@ export function DocumentsPage() {
             />
           </Button>
           {isAdmin ? (
-            <TextField
-              label="Magazyn (opcjonalnie)"
-              value={magazyn}
-              onChange={(e) => setMagazyn(e.target.value)}
-              sx={{ minWidth: 220 }}
-            />
+            <Box>
+              <ToggleButtonGroup
+                exclusive
+                value={magazyn || null}
+                onChange={(_, next: string | null) => setMagazyn(next ?? '')}
+                size="small"
+              >
+                {KNOWN_MAGAZYNY.map((m) => (
+                  <ToggleButton key={m} value={m}>
+                    {m}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+              <FormHelperText>Magazyn (opcjonalnie) - kliknij ponownie, żeby odznaczyć</FormHelperText>
+            </Box>
           ) : (
             <TextField
               select
@@ -106,7 +119,7 @@ export function DocumentsPage() {
               onChange={(e) => setMagazyn(e.target.value)}
               sx={{ minWidth: 220 }}
               disabled={magazynyDostepne.length === 0}
-              helperText={magazynyDostepne.length === 0 ? 'Brak przypisanych magazynow' : undefined}
+              helperText={magazynyDostepne.length === 0 ? 'Brak przypisanych magazynów' : undefined}
             >
               <MenuItem value="">Bez magazynu</MenuItem>
               {magazynyDostepne.map((m) => (
@@ -121,7 +134,7 @@ export function DocumentsPage() {
             onClick={handleUpload}
             disabled={!file || uploadMutation.isPending}
           >
-            {uploadMutation.isPending ? 'Wysylanie...' : 'Wyslij i rozpoznaj'}
+            {uploadMutation.isPending ? 'Wysyłanie...' : 'Wyślij i rozpoznaj'}
           </Button>
         </Stack>
       </Paper>
@@ -140,12 +153,12 @@ export function DocumentsPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5}>Ladowanie...</TableCell>
+                <TableCell colSpan={5}>Ładowanie...</TableCell>
               </TableRow>
             )}
             {!isLoading && (documents ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={5}>Brak dokumentow - wyslij pierwszy skan powyzej</TableCell>
+                <TableCell colSpan={5}>Brak dokumentów - wyślij pierwszy skan powyżej</TableCell>
               </TableRow>
             )}
             {(documents ?? []).map((doc) => (

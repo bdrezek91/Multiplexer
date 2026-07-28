@@ -25,7 +25,7 @@ export function LoginPage() {
       // cudzy, niedostepny dla niego dokument. Prostota > ta konkretna wygoda UX.
       navigate('/documents', { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Nie udalo sie zalogowac')
+      setError(err instanceof ApiError ? err.detail : 'Nie udało się zalogować')
     } finally {
       setSubmitting(false)
     }
@@ -38,7 +38,7 @@ export function LoginPage() {
           Multiplekser Elektryka
         </Typography>
         <Typography variant="body2" color="text.secondary" gutterBottom>
-          Zaloguj sie, aby kontynuowac
+          Zaloguj się, aby kontynuować
         </Typography>
         {error && (
           <Alert severity="error" sx={{ my: 2 }}>
@@ -56,7 +56,7 @@ export function LoginPage() {
           autoFocus
         />
         <TextField
-          label="Haslo"
+          label="Hasło"
           type="password"
           fullWidth
           margin="normal"

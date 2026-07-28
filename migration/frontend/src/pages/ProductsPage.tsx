@@ -67,7 +67,7 @@ export function ProductsPage() {
   }
 
   const handleDelete = (kod: string) => {
-    if (window.confirm(`Usunac produkt "${kod}"? Tej operacji nie mozna cofnac.`)) {
+    if (window.confirm(`Usunąć produkt "${kod}"? Tej operacji nie można cofnąć.`)) {
       deleteMutation.mutate(kod)
     }
   }
@@ -80,7 +80,7 @@ export function ProductsPage() {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h5">Katalog produktow</Typography>
+        <Typography variant="h5">Katalog produktów</Typography>
         {isAdmin && (
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
             Nowy produkt
@@ -116,7 +116,7 @@ export function ProductsPage() {
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {error instanceof ApiError ? error.detail : 'Nie udalo sie pobrac katalogu produktow'}
+          {error instanceof ApiError ? error.detail : 'Nie udało się pobrać katalogu produktów'}
         </Alert>
       )}
 
@@ -135,12 +135,12 @@ export function ProductsPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={isAdmin ? 6 : 5}>Ladowanie...</TableCell>
+                <TableCell colSpan={isAdmin ? 6 : 5}>Ładowanie...</TableCell>
               </TableRow>
             )}
             {!isLoading && pageItems.length === 0 && (
               <TableRow>
-                <TableCell colSpan={isAdmin ? 6 : 5}>Brak wynikow</TableCell>
+                <TableCell colSpan={isAdmin ? 6 : 5}>Brak wyników</TableCell>
               </TableRow>
             )}
             {pageItems.map((product) => (
@@ -157,7 +157,7 @@ export function ProductsPage() {
                     <IconButton size="small" onClick={() => openEditDialog(product)} aria-label={`Edytuj ${product.kod}`}>
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => handleDelete(product.kod)} aria-label={`Usun ${product.kod}`}>
+                    <IconButton size="small" onClick={() => handleDelete(product.kod)} aria-label={`Usuń ${product.kod}`}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </TableCell>

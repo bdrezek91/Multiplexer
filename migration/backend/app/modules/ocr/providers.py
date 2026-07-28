@@ -44,7 +44,7 @@ class GeminiProvider(OCRProvider):
         except httpx.TimeoutException as exc:
             raise OCRProviderError(f"Timeout po {settings.ocr_timeout_seconds} s bez odpowiedzi") from exc
         except httpx.HTTPError as exc:
-            raise OCRProviderError(f"Blad polaczenia: {exc}") from exc
+            raise OCRProviderError(f"Błąd połączenia: {exc}") from exc
 
         if resp.status_code >= 400:
             raise OCRProviderError(f"API {resp.status_code}: {resp.text[:300]}")

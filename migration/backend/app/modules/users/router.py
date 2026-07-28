@@ -24,7 +24,7 @@ users_router = APIRouter(prefix="/users", tags=["users"])
 def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_db)):
     user = repository.get_user_by_email(session, form_data.username)
     if user is None or not user.active or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nieprawidlowy email lub haslo")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nieprawidłowy email lub hasło")
     uid = str(user.id)
     return Token(access_token=create_access_token(uid), refresh_token=create_refresh_token(uid))
 
@@ -34,10 +34,10 @@ def refresh(data: RefreshRequest, session: Session = Depends(get_db)):
     try:
         user_id = decode_token(data.refresh_token, expected_type="refresh")
     except InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nieprawidlowy lub wygasly refresh token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nieprawidłowy lub wygasły refresh token")
     user = repository.get_user_by_id(session, user_id)
     if user is None or not user.active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Uzytkownik nie istnieje lub jest nieaktywny")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Użytkownik nie istnieje lub jest nieaktywny")
     return AccessToken(access_token=create_access_token(str(user.id)))
 
 
@@ -55,7 +55,7 @@ def _to_user_out(user: UserModel) -> UserOut:
 
 def _validate_rola(rola: str) -> None:
     if rola not in repository.ROLES:
-        raise HTTPException(status_code=400, detail=f"Nieprawidlowa rola: {rola!r} (dozwolone: {repository.ROLES})")
+        raise HTTPException(status_code=400, detail=f"Nieprawidłowa rola: {rola!r} (dozwolone: {repository.ROLES})")
 
 
 @users_router.get("", response_model=list[UserOut], dependencies=[Depends(require_admin)])
@@ -90,7 +90,7 @@ def update_user(
     if str(admin.id) == user_id and (not data.active or data.rola != "admin"):
         raise HTTPException(
             status_code=400,
-            detail="Nie mozna zdezaktywowac ani zdegradowac wlasnego konta administratora",
+            detail="Nie można zdezaktywować ani zdegradować własnego konta administratora",
         )
     try:
         user = repository.update_user(

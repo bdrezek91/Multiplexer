@@ -65,7 +65,7 @@ export function ProductFormDialog({ open, onClose, product }: Props) {
       onClose()
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.detail : 'Nie udalo sie zapisac produktu')
+      setError(err instanceof ApiError ? err.detail : 'Nie udało się zapisać produktu')
     },
   })
 
@@ -88,7 +88,7 @@ export function ProductFormDialog({ open, onClose, product }: Props) {
               onChange={(e) => setKod(e.target.value)}
               required
               disabled={isEditing}
-              helperText={isEditing ? 'Kodu nie mozna zmienic po utworzeniu' : undefined}
+              helperText={isEditing ? 'Kodu nie można zmienić po utworzeniu' : undefined}
             />
             <TextField label="Nazwa" value={nazwa} onChange={(e) => setNazwa(e.target.value)} required />
             <Stack direction="row" spacing={2}>
@@ -116,7 +116,7 @@ export function ProductFormDialog({ open, onClose, product }: Props) {
               control={
                 <Checkbox checked={kolorDomniemany} onChange={(e) => setKolorDomniemany(e.target.checked)} />
               }
-              label="Kolor domniemany (bialy, gdy nie podano)"
+              label="Kolor domniemany (biały, gdy nie podano)"
             />
           </Stack>
         </DialogContent>

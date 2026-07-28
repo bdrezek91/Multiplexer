@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import {
   Alert,
+  Box,
   Button,
   Checkbox,
   Dialog,
@@ -8,13 +9,18 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
+  FormHelperText,
   MenuItem,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
 } from '@mui/material'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createUser, updateUser } from '../api/users'
 import { ApiError } from '../api/client'
+import { KNOWN_MAGAZYNY } from '../constants'
 import type { CurrentUser, Rola } from '../types'
 
 interface Props {
@@ -31,27 +37,23 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
   const [email, setEmail] = useState(user?.email ?? '')
   const [password, setPassword] = useState('')
   const [rola, setRola] = useState<Rola>(user?.rola ?? 'elektryk')
-  const [magazynyText, setMagazynyText] = useState(user?.magazyny_dostepne.join(', ') ?? '')
+  const [magazynyDostepne, setMagazynyDostepne] = useState<string[]>(user?.magazyny_dostepne ?? [])
   const [active, setActive] = useState(user?.active ?? true)
   const [error, setError] = useState<string | null>(null)
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const magazyny_dostepne = magazynyText
-        .split(',')
-        .map((m) => m.trim())
-        .filter(Boolean)
       if (isEditing) {
-        return updateUser(user.id, { email, rola, magazyny_dostepne, active })
+        return updateUser(user.id, { email, rola, magazyny_dostepne: magazynyDostepne, active })
       }
-      return createUser({ email, password, rola, magazyny_dostepne })
+      return createUser({ email, password, rola, magazyny_dostepne: magazynyDostepne })
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['users'] })
       onClose()
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? err.detail : 'Nie udalo sie zapisac uzytkownika')
+      setError(err instanceof ApiError ? err.detail : 'Nie udało się zapisać użytkownika')
     },
   })
 
@@ -64,24 +66,24 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <form onSubmit={handleSubmit}>
-        <DialogTitle>{isEditing ? `Edytuj uzytkownika: ${user.email}` : 'Nowy uzytkownik'}</DialogTitle>
+        <DialogTitle>{isEditing ? `Edytuj użytkownika: ${user.email}` : 'Nowy użytkownik'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}
             {isSelf && (
               <Alert severity="info">
-                To Twoje wlasne konto - nie mozesz go tu zdezaktywowac ani zdegradowac z roli admin.
+                To Twoje własne konto - nie możesz go tu zdezaktywować ani zdegradować z roli admin.
               </Alert>
             )}
             <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             {!isEditing && (
               <TextField
-                label="Haslo"
+                label="Hasło"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                helperText="Minimum 8 znakow"
+                helperText="Minimum 8 znaków"
               />
             )}
             <TextField
@@ -94,12 +96,25 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
               <MenuItem value="elektryk">elektryk</MenuItem>
               <MenuItem value="admin">admin</MenuItem>
             </TextField>
-            <TextField
-              label="Magazyny dostepne (oddzielone przecinkami)"
-              value={magazynyText}
-              onChange={(e) => setMagazynyText(e.target.value)}
-              helperText="Ignorowane dla roli admin - admin ma dostep do kazdego magazynu"
-            />
+            <Box>
+              <Typography variant="body2" color={rola === 'admin' ? 'text.disabled' : 'text.secondary'}>
+                Magazyny dostępne
+              </Typography>
+              <ToggleButtonGroup
+                value={magazynyDostepne}
+                onChange={(_, next: string[]) => setMagazynyDostepne(next)}
+                disabled={rola === 'admin'}
+                size="small"
+                sx={{ mt: 0.5 }}
+              >
+                {KNOWN_MAGAZYNY.map((m) => (
+                  <ToggleButton key={m} value={m}>
+                    {m}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+              <FormHelperText>Ignorowane dla roli admin - admin ma dostęp do każdego magazynu</FormHelperText>
+            </Box>
             {isEditing && (
               <FormControlLabel
                 control={

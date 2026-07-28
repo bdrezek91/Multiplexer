@@ -16,7 +16,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 _UNAUTHORIZED = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,
-    detail="Nieprawidlowy lub wygasly token",
+    detail="Nieprawidłowy lub wygasły token",
     headers={"WWW-Authenticate": "Bearer"},
 )
 
@@ -45,4 +45,4 @@ def check_magazyn_access(user: UserModel, magazyn: str | None) -> None:
         return
     allowed = {magazyn_key(m) for m in (user.magazyny_dostepne or [])}
     if magazyn_key(magazyn) not in allowed:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Brak dostepu do magazynu {magazyn!r}")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Brak dostępu do magazynu {magazyn!r}")

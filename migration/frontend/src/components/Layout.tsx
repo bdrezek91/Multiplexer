@@ -23,11 +23,11 @@ export function Layout({ children }: { children: ReactNode }) {
             Dokumenty
           </Button>
           <Button color="inherit" component={RouterLink} to="/products">
-            Katalog produktow
+            Katalog produktów
           </Button>
           {user?.rola === 'admin' && (
             <Button color="inherit" component={RouterLink} to="/users">
-              Uzytkownicy
+              Użytkownicy
             </Button>
           )}
           <Box flexGrow={1} />

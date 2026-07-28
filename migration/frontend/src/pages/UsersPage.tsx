@@ -51,15 +51,15 @@ export function UsersPage() {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h5">Uzytkownicy</Typography>
+        <Typography variant="h5">Użytkownicy</Typography>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
-          Nowy uzytkownik
+          Nowy użytkownik
         </Button>
       </Stack>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
-          {error instanceof ApiError ? error.detail : 'Nie udalo sie pobrac listy uzytkownikow'}
+          {error instanceof ApiError ? error.detail : 'Nie udało się pobrać listy użytkowników'}
         </Alert>
       )}
 
@@ -69,7 +69,7 @@ export function UsersPage() {
             <TableRow>
               <TableCell>Email</TableCell>
               <TableCell>Rola</TableCell>
-              <TableCell>Magazyny dostepne</TableCell>
+              <TableCell>Magazyny dostępne</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="right">Akcje</TableCell>
             </TableRow>
@@ -77,12 +77,12 @@ export function UsersPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5}>Ladowanie...</TableCell>
+                <TableCell colSpan={5}>Ładowanie...</TableCell>
               </TableRow>
             )}
             {!isLoading && (users ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={5}>Brak uzytkownikow</TableCell>
+                <TableCell colSpan={5}>Brak użytkowników</TableCell>
               </TableRow>
             )}
             {(users ?? []).map((u) => (
@@ -102,7 +102,7 @@ export function UsersPage() {
                   <IconButton size="small" onClick={() => openEditDialog(u)} aria-label={`Edytuj ${u.email}`}>
                     <EditIcon fontSize="small" />
                   </IconButton>
-                  <IconButton size="small" onClick={() => setResetTarget(u)} aria-label={`Resetuj haslo ${u.email}`}>
+                  <IconButton size="small" onClick={() => setResetTarget(u)} aria-label={`Resetuj hasło ${u.email}`}>
                     <KeyIcon fontSize="small" />
                   </IconButton>
                 </TableCell>

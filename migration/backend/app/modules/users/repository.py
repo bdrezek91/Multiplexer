@@ -14,13 +14,13 @@ ROLES = ("admin", "elektryk")
 class DuplicateEmailError(Exception):
     def __init__(self, email: str):
         self.email = email
-        super().__init__(f"Uzytkownik o adresie {email!r} juz istnieje")
+        super().__init__(f"Użytkownik o adresie {email!r} już istnieje")
 
 
 class UserNotFoundError(Exception):
     def __init__(self, user_id):
         self.user_id = user_id
-        super().__init__(f"Uzytkownik {user_id!r} nie istnieje")
+        super().__init__(f"Użytkownik {user_id!r} nie istnieje")
 
 
 def get_user_by_email(session: Session, email: str) -> UserModel | None:

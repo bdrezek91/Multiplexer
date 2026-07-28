@@ -5,7 +5,7 @@ const LABELS: Record<DocumentStatus, string> = {
   queued: 'W kolejce',
   processing: 'Przetwarzanie',
   done: 'Gotowe',
-  error: 'Blad',
+  error: 'Błąd',
 }
 
 const COLORS: Record<DocumentStatus, 'default' | 'info' | 'success' | 'error'> = {

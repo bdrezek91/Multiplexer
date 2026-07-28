@@ -20,7 +20,7 @@ class ProductNotFoundError(Exception):
 class DuplicateKodError(Exception):
     def __init__(self, kod: str):
         self.kod = kod
-        super().__init__(f"Produkt o kodzie {kod!r} juz istnieje")
+        super().__init__(f"Produkt o kodzie {kod!r} już istnieje")
 
 
 def _query(session: Session):

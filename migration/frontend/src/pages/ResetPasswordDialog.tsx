@@ -19,7 +19,7 @@ export function ResetPasswordDialog({ open, onClose, user }: Props) {
   const mutation = useMutation({
     mutationFn: () => resetPassword(user.id, password),
     onSuccess: () => setDone(true),
-    onError: (err) => setError(err instanceof ApiError ? err.detail : 'Nie udalo sie zresetowac hasla'),
+    onError: (err) => setError(err instanceof ApiError ? err.detail : 'Nie udało się zresetować hasła'),
   })
 
   const handleSubmit = (event: FormEvent) => {
@@ -38,21 +38,21 @@ export function ResetPasswordDialog({ open, onClose, user }: Props) {
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <form onSubmit={handleSubmit}>
-        <DialogTitle>Resetuj haslo: {user.email}</DialogTitle>
+        <DialogTitle>Resetuj hasło: {user.email}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}
             {done ? (
-              <Alert severity="success">Haslo zostalo zmienione.</Alert>
+              <Alert severity="success">Hasło zostało zmienione.</Alert>
             ) : (
               <TextField
-                label="Nowe haslo"
+                label="Nowe hasło"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 autoFocus
-                helperText="Minimum 8 znakow - przekaz je uzytkownikowi bezpiecznym kanalem"
+                helperText="Minimum 8 znaków - przekaż je użytkownikowi bezpiecznym kanałem"
               />
             )}
           </Stack>
@@ -61,7 +61,7 @@ export function ResetPasswordDialog({ open, onClose, user }: Props) {
           <Button onClick={handleClose}>{done ? 'Zamknij' : 'Anuluj'}</Button>
           {!done && (
             <Button type="submit" variant="contained" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Resetowanie...' : 'Resetuj haslo'}
+              {mutation.isPending ? 'Resetowanie...' : 'Resetuj hasło'}
             </Button>
           )}
         </DialogActions>

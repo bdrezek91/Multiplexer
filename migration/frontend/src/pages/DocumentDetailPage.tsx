@@ -90,20 +90,20 @@ export function DocumentDetailPage() {
       a.click()
       URL.revokeObjectURL(url)
     },
-    onError: (err) => setGenerateError(err instanceof ApiError ? err.detail : 'Nie udalo sie wygenerowac pliku'),
+    onError: (err) => setGenerateError(err instanceof ApiError ? err.detail : 'Nie udało się wygenerować pliku'),
   })
 
   return (
     <Box>
       <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/documents')} sx={{ mb: 2 }}>
-        Powrot do listy
+        Powrót do listy
       </Button>
 
-      {isLoading && <Typography>Ladowanie...</Typography>}
+      {isLoading && <Typography>Ładowanie...</Typography>}
 
       {error && (
         <Alert severity="error">
-          {error instanceof ApiError ? error.detail : 'Nie udalo sie pobrac dokumentu'}
+          {error instanceof ApiError ? error.detail : 'Nie udało się pobrać dokumentu'}
         </Alert>
       )}
 
@@ -127,13 +127,13 @@ export function DocumentDetailPage() {
 
             {document.status === 'processing' || document.status === 'queued' ? (
               <Alert severity="info" sx={{ mt: 2 }}>
-                Dokument jest przetwarzany w tle - strona odswiezy sie automatycznie.
+                Dokument jest przetwarzany w tle - strona odświeży się automatycznie.
               </Alert>
             ) : null}
 
             {document.status === 'error' && (
               <Alert severity="error" sx={{ mt: 2 }}>
-                {document.error_message ?? 'Wystapil nieznany blad podczas przetwarzania'}
+                {document.error_message ?? 'Wystąpił nieznany błąd podczas przetwarzania'}
               </Alert>
             )}
 
@@ -145,7 +145,7 @@ export function DocumentDetailPage() {
 
             {!document.magazyn && document.status === 'done' && (
               <Alert severity="warning" sx={{ mt: 2 }}>
-                Nie wybrano magazynu przy uploadzie - ostatnia kolumna w wygenerowanym pliku bedzie pusta.
+                Nie wybrano magazynu przy uploadzie - ostatnia kolumna w wygenerowanym pliku będzie pusta.
               </Alert>
             )}
           </Paper>
@@ -157,18 +157,18 @@ export function DocumentDetailPage() {
                   <TableHead>
                     <TableRow>
                       <TableCell>Rozpoznana nazwa</TableCell>
-                      <TableCell>Ilosc wydana</TableCell>
-                      <TableCell>Ilosc zuzyta</TableCell>
-                      <TableCell>Ilosc finalna (do generowania)</TableCell>
+                      <TableCell>Ilość wydana</TableCell>
+                      <TableCell>Ilość zużyta</TableCell>
+                      <TableCell>Ilość finalna (do generowania)</TableCell>
                       <TableCell>Dopasowany kod</TableCell>
-                      <TableCell>Jakosc dopasowania</TableCell>
+                      <TableCell>Jakość dopasowania</TableCell>
                       <TableCell>Uwagi</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {document.items.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7}>AI nie wykrylo zadnych pozycji na skanie</TableCell>
+                        <TableCell colSpan={7}>AI nie wykryło żadnych pozycji na skanie</TableCell>
                       </TableRow>
                     )}
                     {document.items.map((item) => (
@@ -208,19 +208,19 @@ export function DocumentDetailPage() {
                   <TextField
                     select
                     size="small"
-                    label="Ilosci"
+                    label="Ilości"
                     value={qtyMode}
                     onChange={(e) => setQtyMode(e.target.value as QtyMode)}
                     sx={{ width: 220 }}
                   >
-                    <MenuItem value="real">Rzeczywiste ilosci</MenuItem>
+                    <MenuItem value="real">Rzeczywiste ilości</MenuItem>
                     <MenuItem value="ones">Wszystko po 1 szt</MenuItem>
                   </TextField>
                   <FormControlLabel
                     control={
                       <Checkbox checked={firstWydawka} onChange={(e) => setFirstWydawka(e.target.checked)} />
                     }
-                    label="Pierwsza wydawka (dolacz baze materialow)"
+                    label="Pierwsza wydawka (dołącz bazę materiałów)"
                   />
                   <Button
                     variant="contained"

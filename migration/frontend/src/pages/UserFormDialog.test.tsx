@@ -26,15 +26,16 @@ describe('UserFormDialog', () => {
     vi.mocked(usersApi.updateUser).mockReset()
   })
 
-  it('przy tworzeniu rozbija magazyny po przecinku i wysyla haslo', async () => {
+  it('przy tworzeniu pozwala wybrac magazyny przyciskami i wysyla haslo', async () => {
     const user = userEvent.setup()
     vi.mocked(usersApi.createUser).mockResolvedValue({} as CurrentUser)
 
     renderDialog(null)
 
     await user.type(screen.getByLabelText(/email/i), 'nowy@test.local')
-    await user.type(screen.getByLabelText(/haslo/i), 'haslo12345')
-    await user.type(screen.getByLabelText(/magazyny/i), 'Zabrze,  Czekanów ')
+    await user.type(screen.getByLabelText(/hasło/i), 'haslo12345')
+    await user.click(screen.getByRole('button', { name: 'Zabrze' }))
+    await user.click(screen.getByRole('button', { name: 'Czekanów' }))
     await user.click(screen.getByRole('button', { name: /zapisz/i }))
 
     await waitFor(() => expect(usersApi.createUser).toHaveBeenCalledTimes(1))
@@ -56,7 +57,9 @@ describe('UserFormDialog', () => {
 
     renderDialog(existing)
 
-    expect(screen.queryByLabelText(/^haslo$/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/^hasło$/i)).not.toBeInTheDocument()
+    // Magazyn "Zabrze" powinien byc juz zaznaczony (przyszedl z danych uzytkownika).
+    expect(screen.getByRole('button', { name: 'Zabrze' })).toHaveAttribute('aria-pressed', 'true')
 
     await user.click(screen.getByRole('button', { name: /zapisz/i }))
 
@@ -77,6 +80,6 @@ describe('UserFormDialog', () => {
 
     expect(screen.getByLabelText(/rola/i)).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByLabelText(/aktywny/i)).toBeDisabled()
-    expect(screen.getByText(/nie mozesz go tu zdezaktywowac/i)).toBeInTheDocument()
+    expect(screen.getByText(/nie możesz go tu zdezaktywować/i)).toBeInTheDocument()
   })
 })

@@ -26,6 +26,14 @@ celery -A app.core.celery_app worker --loglevel=info &
 uvicorn app.main:app --reload
 ```
 
+Frontend (od Etapu 8, wymaga dzialajacego backendu na :8000):
+```bash
+cd frontend
+npm install
+npm run dev   # http://localhost:5173
+npm run test  # Vitest
+```
+
 API: `/auth/token` (logowanie, od Etapu 5), `/match` (dopasowanie, wymaga zalogowania), pelny CRUD
 `/products` (od Etapu 4, zapis tylko rola admin), `/documents` (upload skanu + async OCR przez
 Celery, od Etapu 7 - `POST` zwraca 202 natychmiast, `GET /documents/{id}` do odpytania statusu i

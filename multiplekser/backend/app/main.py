@@ -6,9 +6,11 @@ Etap 7: OCR przeniesiony na potok asynchroniczny (POST /documents + Celery), sta
 - admin bez ograniczen). CRUD /products chroniony w app/modules/products/router.py (odczyt kazdy
 zalogowany, zapis tylko admin).
 """
+import logging
 from typing import Literal
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -23,11 +25,25 @@ from app.modules.users.models import UserModel
 from app.modules.users.router import router as auth_router
 from app.modules.users.router import users_router
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Multiplekser v1.0.0 API", version="0.7.0-etap7")
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(products_router)
 app.include_router(documents_router)
+
+
+# Etap "quick winy" (2026-07-30): bez tego kazdy nieprzewidziany wyjatek (blad w kodzie, nie
+# swiadome HTTPException z routera) leciał do klienta jako surowa odpowiedz ASGI ze
+# stack trace'em w logach serwera, ale bez spojnego ksztaltu JSON dla frontend (ApiError w
+# client.ts zawsze oczekuje {"detail": "..."}). HTTPException NIE przechodzi przez ten handler
+# (FastAPI obsluguje je wczesniej, wlasnym mechanizmem) - to lapie tylko to, co i tak byloby
+# nieobsluzonym bledem 500.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("Nieobsluzony wyjatek na %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Wystąpił nieoczekiwany błąd serwera"})
 
 
 class MatchRequest(BaseModel):
@@ -56,7 +72,7 @@ def match(req: MatchRequest, session: Session = Depends(get_db), user: UserModel
 
     catalog = Catalog.from_db(session, dzial=req.dzial)
     if req.dzial == "hydraulika":
-        # Reguly specjalne Hydrauliki celowo puste w V1 (patrz matcher/core.py,
+        # Reguly specjalne Hydrauliki celowo puste w V1 (patrz matcher/core_hydraulika.py,
         # DEFAULT_SPECIAL_RULES_HYDRAULIKA) - jeszcze nie ma tabeli special_rule per dzial.
         result = match_against_catalog_hydraulika(req.query, catalog, magazyn=req.magazyn)
     else:

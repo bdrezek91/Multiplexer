@@ -68,13 +68,40 @@ Konkretne różnice względem Elektryki, wszystkie zweryfikowane bezpośrednio w
   (bez checkboxa "Pierwsza wydawka"), kliknięcie pobiera plik z poprawną treścią
   (`ZAWÓR KĄTOWY 1/2X3/4;2;;SZT;`), zero błędów konsoli.
 
+## Dodatek — pełna weryfikacja E2E przez prawdziwy stos (bez Dockera)
+
+Na wyraźną prośbę: skoro w tym sandboksie nie da się uruchomić dockerd (`ulimit`/uprawnienia
+zablokowane nawet przy próbie `service docker start`), złożono **równoważny prawdziwy stos
+ręcznie**, zamiast poprzestać na wcześniejszych testach jednostkowych/integracyjnych:
+PostgreSQL + Redis + serwer S3-kompatybilny (`moto.server`, HTTP, współdzielony między
+procesami - dokładnie ta sama rola co MinIO) + osobny proces **backendu (uvicorn)** + osobny
+proces **workera Celery** + `vite` dev server. Jedyny zamockowany element to samo wywołanie
+sieciowe do Gemini (brak realnego klucza API w tym środowisku) - wszystko inne jest prawdziwe:
+upload przez prawdziwy multipart HTTP, zapis do S3-kompatybilnego storage, kolejkowanie przez
+Redis, odbiór zadania przez osobny proces workera, dwuetapowa klasyfikacja, dopasowanie,
+zapis do Postgresa, polling statusu, generowanie i pobranie pliku - w przeglądarce (Playwright),
+nie przez wywołania API bezpośrednio.
+
+**Wynik**: dwa kolejne, niezależne uploady tego samego pliku - jeden zaklasyfikowany
+automatycznie jako `hydraulika` (93% pewności), drugi jako `elektryka` (96%) - oba przeszły
+cały potok bez błędu, obie pozycje Hydrauliki trafiły do wyniku w kolejności zgodnej z
+odczytem OCR (potwierdza to, że naprawa `DocumentItemModel.sequence` z tego kroku faktycznie
+działa międzyprocesowo, nie tylko w testach jednostkowych z jedną sesją DB), oba dokumenty
+wygenerowały poprawne pliki CP1250 do pobrania, zero błędów w konsoli przeglądarki na żadnym
+etapie. Zrzuty ekranu i logi z tej sesji nie są częścią repozytorium (efemeryczna weryfikacja
+manualna, jak w `RAPORT_ETAP_9.md`/`RAPORT_ETAP_11.md`).
+
+**Wciąż nieprzetestowane realnie** (niezależnie od Dockera): prawdziwe wywołanie Gemini z
+prawdziwym kluczem API na prawdziwym skanie/zdjęciu - to jedyna granica tej weryfikacji,
+niemożliwa do przekroczenia bez klucza.
+
 ## Co zostało świadomie odłożone
 
 | Nieprzeniesione jeszcze | Uwaga | Plan |
 |---|---|---|
 | Reguły specjalne Hydrauliki w generowaniu | `MANUAL_OVERRIDES`/`WAREHOUSE_OVERRIDES` w monolicie Hydrauliki są celowo puste (V1) - matcher już to odzwierciedla (`DEFAULT_SPECIAL_RULES_HYDRAULIKA = []`), generator nic dodatkowego nie potrzebuje | Gdy pojawi się pierwszy realny wyjątek |
 | `NEEDS_REVIEW`/quality `"review"` (kilka możliwych wariantów kodu) | Puste w źródle (`NEEDS_REVIEW = {}`), matcher Python nie implementuje tej ścieżki (tak jak monolit - nieużywana) | Gdy w bazie pojawią się kolizje bez jednoznacznego kodu |
-| Pełna weryfikacja E2E przez `docker compose up` | Brak Dockera w tym sandboxie (jak w Kroku 4) | Przed wdrożeniem produkcyjnym |
+| Weryfikacja E2E z realnym `docker compose up` i realnym kluczem Gemini | Brak Dockera w tym sandboxie; równoważny stos (Postgres+Redis+S3-kompatybilny serwer+osobne procesy backend/worker) zweryfikowany ręcznie w przeglądarce (patrz dodatek wyżej) - jedyna pozostała luka to realne wywołanie Gemini z prawdziwym kluczem | Przed wdrożeniem produkcyjnym |
 
 ## Ryzyka
 

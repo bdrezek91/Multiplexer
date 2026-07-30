@@ -112,7 +112,7 @@ function MatchKodCell({ documentId, item, dzial }: { documentId: string; item: D
   return (
     <Autocomplete
       size="small"
-      sx={{ minWidth: 240 }}
+      sx={{ minWidth: 340 }}
       options={options}
       loading={loading}
       value={currentValue}

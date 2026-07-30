@@ -12,10 +12,12 @@ logike importu od swojego cienkiego CLI.
 from __future__ import annotations
 
 import asyncio
+import threading
 
 from sqlalchemy.orm import Session
 
 from app.core.celery_app import celery_app
+from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
@@ -118,3 +120,23 @@ def process_ocr_document(document_id: str) -> None:
         run_ocr_task(document_id, session)
     finally:
         session.close()
+
+
+def dispatch_ocr_task(document_id: str) -> None:
+    """Uruchamia przetwarzanie dokumentu - Celery/Redis normalnie (produkcja/Docker), albo
+    watek w tym samym procesie w trybie Multiplekser Portable (`settings.desktop_mode`,
+    patrz docs/RAPORT_PORTABLE_1.md) - dla jednego uzytkownika na wlasnym komputerze osobny
+    broker/worker to zbedny narzut, ktory wymagalby doinstalowania Redis. Router wywoluje
+    WYLACZNIE ta funkcje, nigdy `process_ocr_document` bezposrednio - dzieki temu przelaczenie
+    trybu nie wymaga zmian poza konfiguracja."""
+    if settings.desktop_mode:
+        def _run() -> None:
+            session = SessionLocal()
+            try:
+                run_ocr_task(document_id, session)
+            finally:
+                session.close()
+
+        threading.Thread(target=_run, daemon=True).start()
+    else:
+        process_ocr_document.delay(document_id)

@@ -11,8 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -24,7 +23,7 @@ DOCUMENT_STATUSES = ("queued", "processing", "done", "error")
 class DocumentModel(Base):
     __tablename__ = "document"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("app_user.id"), nullable=False, index=True)
 
     numer_projektu: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -54,7 +53,7 @@ class DocumentModel(Base):
 class DocumentItemModel(Base):
     __tablename__ = "document_item"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document.id"), nullable=False, index=True)
     # Kolejnosc odczytu OCR (Krok Hydraulika-5) - `id` (UUID losowy) nigdy nie byl uzytecznym
     # kluczem sortowania; Elektryka i tak zawsze przesortowuje wynik przez `physical_order_for`

@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "multiplekser-dokumenty"
 
+    # Tryb Multiplekser Portable (.exe na Windows, bez Dockera/Postgresa/Redis/MinIO) - patrz
+    # docs/RAPORT_PORTABLE_1.md. Przelacza: storage na lokalny folder (local_storage_path) i
+    # wykonanie OCR na watek w tym samym procesie zamiast Celery/Redis. `database_url` w tym
+    # trybie ustawia desktop_main.py na plik SQLite w katalogu danych uzytkownika - nie tutaj,
+    # bo domyslna wartosc wyzej musi zostac Postgresem dla istniejacego wdrozenia Docker.
+    desktop_mode: bool = False
+    local_storage_path: str = "./dokumenty"
+
     # UWAGA: wartosc domyslna jest TYLKO do dewelopmentu lokalnego - w produkcji MUSI byc
     # nadpisana zmienna srodowiskowa JWT_SECRET_KEY (losowy, dlugi sekret).
     jwt_secret_key: str = "dev-insecure-secret-change-me-in-production"

@@ -8,19 +8,19 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Boolean, String
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
+from app.core.db_types import PortableJSON
 
 
 class UserModel(Base):
     __tablename__ = "app_user"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
     rola: Mapped[str] = mapped_column(String, nullable=False, default="elektryk")
-    magazyny_dostepne: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    magazyny_dostepne: Mapped[list] = mapped_column(PortableJSON, nullable=False, default=list)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

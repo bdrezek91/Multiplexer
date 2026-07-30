@@ -40,7 +40,7 @@ from .schemas import (
     MagazynUpdateIn,
 )
 from .storage import get_storage
-from .tasks import process_ocr_document
+from .tasks import dispatch_ocr_task
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -130,7 +130,7 @@ async def create_document(
         original_filename=plik.filename or "plik", magazyn=magazyn,
     )
 
-    process_ocr_document.delay(str(document.id))
+    dispatch_ocr_task(str(document.id))
 
     return DocumentCreatedOut(id=str(document.id), status=document.status)
 

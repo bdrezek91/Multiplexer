@@ -1,4 +1,4 @@
-"""Testy integracyjne Etapu 7: POST/GET /documents. process_ocr_document.delay() jest zamockowane
+"""Testy integracyjne Etapu 7: POST/GET /documents. dispatch_ocr_task() jest zamockowane
 (no-op) - logika przetwarzania jest juz w pelni pokryta w test_documents_task.py; tu testujemy
 kontrakt API (upload do storage, zapis wiersza, RBAC wlasciciela/magazynu, statusy HTTP)."""
 from io import BytesIO
@@ -20,7 +20,7 @@ def _fake_jpeg() -> bytes:
 
 
 def _no_delay():
-    return patch("app.modules.documents.router.process_ocr_document.delay")
+    return patch("app.modules.documents.router.dispatch_ocr_task")
 
 
 def test_create_document_bez_tokenu_zwraca_401(client, mocked_storage):
@@ -38,14 +38,14 @@ def test_create_document_pusty_plik_zwraca_400(client, admin_headers, mocked_sto
 
 def test_create_document_sukces_zwraca_202_i_zleca_zadanie(client, admin_headers, mocked_storage):
     files = {"plik": ("skan.jpg", _fake_jpeg(), "image/jpeg")}
-    with _no_delay() as mock_delay:
+    with _no_delay() as mock_dispatch:
         r = client.post("/documents", files=files, headers=admin_headers)
 
     assert r.status_code == 202
     body = r.json()
     assert body["status"] == "queued"
     assert body["id"]
-    mock_delay.assert_called_once_with(body["id"])
+    mock_dispatch.assert_called_once_with(body["id"])
 
 
 def test_get_document_zwraca_status_i_wlasciciela_widzi_swoj_dokument(client, admin_headers, mocked_storage):

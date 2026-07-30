@@ -1,5 +1,6 @@
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Checkbox,
@@ -23,16 +24,17 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DownloadIcon from '@mui/icons-material/Download'
 import { alpha } from '@mui/material/styles'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, type FocusEvent } from 'react'
+import { useEffect, useState, type FocusEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { generateDocument, getDocument, updateDocumentItem, updateDocumentMagazyn } from '../api/documents'
+import { listProducts } from '../api/products'
 import { StatusChip } from '../components/StatusChip'
 import { DzialChip } from '../components/DzialChip'
 import { MatchQualityChip } from '../components/MatchQualityChip'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
-import type { DocumentItem } from '../types'
+import type { Dzial, DocumentItem, Product } from '../types'
 
 function QtyFinalnaCell({ documentId, item }: { documentId: string; item: DocumentItem }) {
   const queryClient = useQueryClient()
@@ -63,6 +65,71 @@ function QtyFinalnaCell({ documentId, item }: { documentId: string; item: Docume
       disabled={mutation.isPending}
       sx={{ width: 90 }}
       placeholder="-"
+    />
+  )
+}
+
+// Wyszukiwanie i reczna zmiana dopasowanego kodu wprost z katalogu Optima - dotad "Dopasowany
+// kod" byl tylko tekstem (automatyczne dopasowanie AI), bez mozliwosci poprawy gdy dopasowanie
+// bylo bledne (patrz historia czatu: "rura 32 100 cm" zmapowana na najblizszy znany wariant "50
+// cm", bo dokladna dlugosc nie byla jeszcze w katalogu). Backend juz wspieral PATCH match_kod
+// (walidacja wzgledem katalogu) - brakowalo tylko pola w UI.
+function MatchKodCell({ documentId, item, dzial }: { documentId: string; item: DocumentItem; dzial: Dzial }) {
+  const queryClient = useQueryClient()
+  const [inputValue, setInputValue] = useState(item.match_kod ?? '')
+  const [options, setOptions] = useState<Product[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: (match_kod: string | null) => updateDocumentItem(documentId, item.id, { match_kod }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', documentId] }),
+  })
+
+  // Wyszukiwanie po stronie serwera (ten sam endpoint co katalog produktow), z debounce -
+  // katalogi maja setki pozycji, wiec pobieranie calosci na kazde wpisane litery byloby zbedne.
+  useEffect(() => {
+    if (inputValue.trim().length < 2) {
+      setOptions([])
+      return
+    }
+    let active = true
+    setLoading(true)
+    const timeout = setTimeout(() => {
+      listProducts({ dzial, search: inputValue, limit: 20 })
+        .then((results) => active && setOptions(results))
+        .finally(() => active && setLoading(false))
+    }, 300)
+    return () => {
+      active = false
+      clearTimeout(timeout)
+    }
+  }, [inputValue, dzial])
+
+  const currentValue: Product | null = item.match_kod
+    ? { kod: item.match_kod, nazwa: item.match_nazwa ?? '', jm: item.match_jm ?? '' } as Product
+    : null
+
+  return (
+    <Autocomplete
+      size="small"
+      sx={{ minWidth: 240 }}
+      options={options}
+      loading={loading}
+      value={currentValue}
+      inputValue={inputValue}
+      isOptionEqualToValue={(option, val) => option.kod === val.kod}
+      getOptionLabel={(option) => option.kod}
+      filterOptions={(opts) => opts}
+      onInputChange={(_, newInput) => setInputValue(newInput)}
+      onChange={(_, newValue) => mutation.mutate(newValue?.kod ?? null)}
+      disabled={mutation.isPending}
+      noOptionsText={inputValue.trim().length < 2 ? 'Wpisz co najmniej 2 znaki' : 'Brak wyników'}
+      renderOption={(props, option) => (
+        <li {...props} key={option.kod}>
+          {option.kod} — {option.nazwa}
+        </li>
+      )}
+      renderInput={(params) => <TextField {...params} placeholder="Brak dopasowania" />}
     />
   )
 }
@@ -310,7 +377,14 @@ export function DocumentDetailPage() {
                             item={item}
                           />
                         </TableCell>
-                        <TableCell>{item.match_kod ?? '-'}</TableCell>
+                        <TableCell>
+                          <MatchKodCell
+                            key={`${item.id}-${item.match_kod ?? 'null'}`}
+                            documentId={documentId}
+                            item={item}
+                            dzial={document.dzial || 'elektryka'}
+                          />
+                        </TableCell>
                         <TableCell>
                           <MatchQualityChip quality={item.match_quality} />
                         </TableCell>

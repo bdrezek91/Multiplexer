@@ -1847,6 +1847,29 @@
    "aliasy": [],
    "status": "generyczny"
   },
+  "RURA FI 32 100 CM": {
+   "kod": "RURA FI 32 100 CM",
+   "nazwa": "Rura fi 32 100 cm",
+   "jm": "SZT",
+   "grupa": "Rury i kształtki",
+   "atrybuty": {
+    "srednica_mm": 32.0,
+    "kat_st": null,
+    "gwint_cal": null,
+    "material": null,
+    "zlacze": null,
+    "dlugosc_cm": 100,
+    "pojemnosc_l": null,
+    "moc_W": null,
+    "wymiar_mm": null,
+    "kolor": null,
+    "dn": null,
+    "pn": null,
+    "gwint_metryczny": null
+   },
+   "aliasy": [],
+   "status": "generyczny"
+  },
   "RURA FI 40 100 CM": {
    "kod": "RURA FI 40 100 CM",
    "nazwa": "Rura fi 40 100 cm",

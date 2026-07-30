@@ -15,15 +15,16 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createProduct, updateProduct } from '../api/products'
 import { ApiError } from '../api/client'
-import type { Product } from '../types'
+import type { Dzial, Product } from '../types'
 
 interface Props {
   open: boolean
   onClose: () => void
   product: Product | null // null = tworzenie nowego produktu
+  dzial: Dzial // dzial aktualnie wybrany na liscie - przy edycji uzywany jest dzial produktu (niezmienny)
 }
 
-export function ProductFormDialog({ open, onClose, product }: Props) {
+export function ProductFormDialog({ open, onClose, product, dzial }: Props) {
   const queryClient = useQueryClient()
   const isEditing = product !== null
 
@@ -56,9 +57,9 @@ export function ProductFormDialog({ open, onClose, product }: Props) {
         warianty_magazynowe: product?.warianty_magazynowe ?? null,
       }
       if (isEditing) {
-        return updateProduct(product.kod, payload)
+        return updateProduct(product.kod, payload, product.dzial)
       }
-      return createProduct({ ...payload, kod })
+      return createProduct({ ...payload, kod }, dzial)
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['products'] })
@@ -78,7 +79,11 @@ export function ProductFormDialog({ open, onClose, product }: Props) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <form onSubmit={handleSubmit}>
-        <DialogTitle>{isEditing ? `Edytuj produkt: ${product.kod}` : 'Nowy produkt'}</DialogTitle>
+        <DialogTitle>
+          {isEditing
+            ? `Edytuj produkt: ${product.kod}`
+            : `Nowy produkt (${dzial === 'hydraulika' ? 'Hydraulika' : 'Elektryka'})`}
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}

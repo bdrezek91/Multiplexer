@@ -15,7 +15,7 @@ function renderDialog(product: Product | null) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
-      <ProductFormDialog open onClose={vi.fn()} product={product} />
+      <ProductFormDialog open onClose={vi.fn()} product={product} dzial="elektryka" />
     </QueryClientProvider>,
   )
 }
@@ -44,6 +44,7 @@ describe('ProductFormDialog', () => {
         nazwa: 'Nowy produkt',
         aliasy: ['alias jeden', 'alias dwa', 'alias trzy'],
       }),
+      'elektryka',
     )
   })
 
@@ -78,6 +79,7 @@ describe('ProductFormDialog', () => {
         nazwa: 'Zmieniona nazwa',
         warianty_magazynowe: { Zabrze: 'ISTNIEJACY ZABRZE' },
       }),
+      'elektryka',
     )
   })
 })

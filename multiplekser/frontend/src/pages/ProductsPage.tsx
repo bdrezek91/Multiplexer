@@ -16,6 +16,8 @@ import {
   TablePagination,
   TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -26,13 +28,19 @@ import { deleteProduct, listProducts } from '../api/products'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { ProductFormDialog } from './ProductFormDialog'
-import type { Product } from '../types'
+import type { Dzial, Product } from '../types'
+
+const DZIALY: { value: Dzial; label: string }[] = [
+  { value: 'elektryka', label: 'Elektryka' },
+  { value: 'hydraulika', label: 'Hydraulika' },
+]
 
 export function ProductsPage() {
   const { user } = useAuth()
   const isAdmin = user?.rola === 'admin'
   const queryClient = useQueryClient()
 
+  const [dzial, setDzial] = useState<Dzial>('elektryka')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [page, setPage] = useState(0)
@@ -41,9 +49,10 @@ export function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
 
   const { data: products, isLoading, error } = useQuery({
-    queryKey: ['products', { search, status, page, rowsPerPage }],
+    queryKey: ['products', { dzial, search, status, page, rowsPerPage }],
     queryFn: () =>
       listProducts({
+        dzial,
         search: search || undefined,
         status: status || undefined,
         limit: rowsPerPage,
@@ -52,7 +61,7 @@ export function ProductsPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: deleteProduct,
+    mutationFn: (kod: string) => deleteProduct(kod, dzial),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['products'] }),
   })
 
@@ -80,7 +89,25 @@ export function ProductsPage() {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h5">Katalog produktów</Typography>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Typography variant="h5">Katalog produktów</Typography>
+          <ToggleButtonGroup
+            exclusive
+            value={dzial}
+            onChange={(_, next: Dzial | null) => {
+              if (!next) return
+              setDzial(next)
+              setPage(0)
+            }}
+            size="small"
+          >
+            {DZIALY.map((d) => (
+              <ToggleButton key={d.value} value={d.value}>
+                {d.label}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        </Stack>
         {isAdmin && (
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateDialog}>
             Nowy produkt
@@ -182,7 +209,7 @@ export function ProductsPage() {
       </TableContainer>
 
       {dialogOpen && (
-        <ProductFormDialog open={dialogOpen} onClose={() => setDialogOpen(false)} product={editingProduct} />
+        <ProductFormDialog open={dialogOpen} onClose={() => setDialogOpen(false)} product={editingProduct} dzial={dzial} />
       )}
     </Box>
   )

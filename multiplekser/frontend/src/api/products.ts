@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { Product, ProductInput } from '../types'
+import type { Dzial, Product, ProductInput } from '../types'
 
 export interface ProductFilters {
   status?: string
@@ -7,6 +7,7 @@ export interface ProductFilters {
   search?: string
   limit?: number
   offset?: number
+  dzial?: Dzial
 }
 
 export function listProducts(filters: ProductFilters = {}): Promise<Product[]> {
@@ -16,22 +17,27 @@ export function listProducts(filters: ProductFilters = {}): Promise<Product[]> {
   if (filters.search) params.set('search', filters.search)
   if (filters.limit !== undefined) params.set('limit', String(filters.limit))
   if (filters.offset !== undefined) params.set('offset', String(filters.offset))
+  if (filters.dzial) params.set('dzial', filters.dzial)
   const query = params.toString()
   return apiRequest<Product[]>(`/products${query ? `?${query}` : ''}`)
 }
 
-export function getProduct(kod: string): Promise<Product> {
-  return apiRequest<Product>(`/products/${encodeURIComponent(kod)}`)
+export function getProduct(kod: string, dzial?: Dzial): Promise<Product> {
+  const query = dzial ? `?dzial=${dzial}` : ''
+  return apiRequest<Product>(`/products/${encodeURIComponent(kod)}${query}`)
 }
 
-export function createProduct(data: ProductInput & { kod: string }): Promise<Product> {
-  return apiRequest<Product>('/products', { method: 'POST', body: data })
+export function createProduct(data: ProductInput & { kod: string }, dzial?: Dzial): Promise<Product> {
+  const query = dzial ? `?dzial=${dzial}` : ''
+  return apiRequest<Product>(`/products${query}`, { method: 'POST', body: data })
 }
 
-export function updateProduct(kod: string, data: ProductInput): Promise<Product> {
-  return apiRequest<Product>(`/products/${encodeURIComponent(kod)}`, { method: 'PUT', body: data })
+export function updateProduct(kod: string, data: ProductInput, dzial?: Dzial): Promise<Product> {
+  const query = dzial ? `?dzial=${dzial}` : ''
+  return apiRequest<Product>(`/products/${encodeURIComponent(kod)}${query}`, { method: 'PUT', body: data })
 }
 
-export function deleteProduct(kod: string): Promise<void> {
-  return apiRequest<void>(`/products/${encodeURIComponent(kod)}`, { method: 'DELETE' })
+export function deleteProduct(kod: string, dzial?: Dzial): Promise<void> {
+  const query = dzial ? `?dzial=${dzial}` : ''
+  return apiRequest<void>(`/products/${encodeURIComponent(kod)}${query}`, { method: 'DELETE' })
 }

@@ -16,6 +16,13 @@ export function uploadDocument(file: File, magazyn?: string): Promise<DocumentCr
   return apiRequest<DocumentCreated>('/documents', { method: 'POST', formData })
 }
 
+export function updateDocumentMagazyn(documentId: string, magazyn: string | null): Promise<DocumentDetail> {
+  return apiRequest<DocumentDetail>(`/documents/${encodeURIComponent(documentId)}/magazyn`, {
+    method: 'PATCH',
+    body: { magazyn },
+  })
+}
+
 export function updateDocumentItem(
   documentId: string,
   itemId: string,

@@ -5,6 +5,7 @@ import {
   Checkbox,
   Chip,
   FormControlLabel,
+  MenuItem,
   Paper,
   Stack,
   Table,
@@ -14,6 +15,8 @@ import {
   TableHead,
   TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
@@ -21,15 +24,20 @@ import DownloadIcon from '@mui/icons-material/Download'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FocusEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { generateDocument, getDocument, updateDocumentItem } from '../api/documents'
+import { generateDocument, getDocument, updateDocumentItem, updateDocumentMagazyn } from '../api/documents'
 import { StatusChip } from '../components/StatusChip'
 import { DzialChip } from '../components/DzialChip'
 import { MatchQualityChip } from '../components/MatchQualityChip'
 import { ApiError } from '../api/client'
+import { useAuth } from '../auth/AuthContext'
+import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
 import type { DocumentItem } from '../types'
 
 function QtyFinalnaCell({ documentId, item }: { documentId: string; item: DocumentItem }) {
   const queryClient = useQueryClient()
+  // `key` w miejscu uzycia (ponizej) wymusza remount przy zmianie ilosc_finalna spoza tego pola
+  // (np. hurtowy przelacznik "Uzyj ilosci wydanej/zuzytej") - inaczej ten lokalny stan
+  // zignorowalby swiezo pobrana wartosc z serwera.
   const [value, setValue] = useState(item.ilosc_finalna ?? '')
 
   const mutation = useMutation({
@@ -61,6 +69,9 @@ function QtyFinalnaCell({ documentId, item }: { documentId: string; item: Docume
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const isAdmin = user?.rola === 'admin'
   const documentId = id as string
   const [firstWydawka, setFirstWydawka] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
@@ -75,6 +86,28 @@ export function DocumentDetailPage() {
       const status = query.state.data?.status
       return status === 'queued' || status === 'processing' ? 2000 : false
     },
+  })
+
+  const magazynMutation = useMutation({
+    mutationFn: (magazyn: string | null) => updateDocumentMagazyn(documentId, magazyn),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', documentId] }),
+  })
+
+  // "Uzyj ilosci wydanej/zuzytej" - hurtowo nadpisuje ilosc_finalna wszystkich pozycji ze
+  // wskazanej kolumny (ten sam UX co selectQtyColumn() w monolicie) - reuzywa istniejacy
+  // PATCH .../items/{id}, bez nowego endpointu.
+  const qtyColumnMutation = useMutation({
+    mutationFn: async (column: 'wydana' | 'zuzyta') => {
+      const items = document?.items ?? []
+      await Promise.all(
+        items.map((item) =>
+          updateDocumentItem(documentId, item.id, {
+            ilosc_finalna: (column === 'zuzyta' ? item.ilosc_zuzyta : item.ilosc_wydana) ?? null,
+          }),
+        ),
+      )
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', documentId] }),
   })
 
   const generateMutation = useMutation({
@@ -113,8 +146,51 @@ export function DocumentDetailPage() {
               <Box>
                 <Typography variant="h6">{document.original_filename}</Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Numer projektu: {document.numer_projektu ?? 'nieznany'} · Magazyn: {document.magazyn ?? '-'}
+                  Numer projektu: {document.numer_projektu ?? 'nieznany'}
                 </Typography>
+                {document.status === 'done' && (
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Magazyn:
+                    </Typography>
+                    {isAdmin ? (
+                      <ToggleButtonGroup
+                        exclusive
+                        value={document.magazyn || null}
+                        onChange={(_, next: string | null) => magazynMutation.mutate(next)}
+                        size="small"
+                        disabled={magazynMutation.isPending}
+                      >
+                        {KNOWN_MAGAZYNY.map((m) => (
+                          <ToggleButton key={m.value} value={m.value}>
+                            {m.label}
+                          </ToggleButton>
+                        ))}
+                      </ToggleButtonGroup>
+                    ) : (
+                      <TextField
+                        select
+                        size="small"
+                        value={document.magazyn ?? ''}
+                        onChange={(e) => magazynMutation.mutate(e.target.value || null)}
+                        disabled={magazynMutation.isPending || (user?.magazyny_dostepne ?? []).length === 0}
+                        sx={{ minWidth: 200 }}
+                      >
+                        <MenuItem value="">Bez magazynu</MenuItem>
+                        {(user?.magazyny_dostepne ?? []).map((m) => (
+                          <MenuItem key={m} value={m}>
+                            {magazynLabel(m)}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    )}
+                  </Stack>
+                )}
+                {document.status !== 'done' && (
+                  <Typography variant="body2" color="text.secondary">
+                    Magazyn: {document.magazyn ? magazynLabel(document.magazyn) : '-'}
+                  </Typography>
+                )}
                 {document.used_provider && (
                   <Typography variant="body2" color="text.secondary">
                     Rozpoznane przez: {document.used_provider}
@@ -147,13 +223,36 @@ export function DocumentDetailPage() {
 
             {!document.magazyn && document.status === 'done' && (
               <Alert severity="warning" sx={{ mt: 2 }}>
-                Nie wybrano magazynu przy uploadzie - ostatnia kolumna w wygenerowanym pliku będzie pusta.
+                Nie wybrano magazynu - ostatnia kolumna w wygenerowanym pliku będzie pusta. Możesz go wybrać powyżej.
               </Alert>
             )}
           </Paper>
 
           {document.status === 'done' && (
             <>
+              {document.items.length > 0 && (
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Ilość finalna z kolumny:
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={qtyColumnMutation.isPending}
+                    onClick={() => qtyColumnMutation.mutate('wydana')}
+                  >
+                    Wydana
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={qtyColumnMutation.isPending}
+                    onClick={() => qtyColumnMutation.mutate('zuzyta')}
+                  >
+                    Zużyta
+                  </Button>
+                </Stack>
+              )}
               <TableContainer component={Paper} sx={{ mb: 2 }}>
                 <Table size="small">
                   <TableHead>
@@ -189,7 +288,11 @@ export function DocumentDetailPage() {
                         <TableCell>{item.ilosc_wydana ?? '-'}</TableCell>
                         <TableCell>{item.ilosc_zuzyta ?? '-'}</TableCell>
                         <TableCell>
-                          <QtyFinalnaCell documentId={documentId} item={item} />
+                          <QtyFinalnaCell
+                            key={`${item.id}-${item.ilosc_finalna ?? 'null'}`}
+                            documentId={documentId}
+                            item={item}
+                          />
                         </TableCell>
                         <TableCell>{item.match_kod ?? '-'}</TableCell>
                         <TableCell>

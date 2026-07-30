@@ -116,10 +116,14 @@ def update_item(
     match_kod: Optional[str] = ...,
     match_nazwa: Optional[str] = ...,
     match_jm: Optional[str] = ...,
+    match_quality: str = ...,
+    match_score: float = ...,
     matched_product_id=...,
+    commit: bool = True,
 ) -> DocumentItemModel:
     """Ellipsis jako "nie zmieniaj tego pola" - odroznia "brak zmiany" od "ustaw na None"
-    (np. usuniecie recznej korekty kodu)."""
+    (np. usuniecie recznej korekty kodu). `commit=False` pozwala wywolujacemu zebrac wiele
+    zmian pozycji jednego dokumentu w jedna transakcje (patrz rematch_items ponizej)."""
     if ilosc_finalna is not ...:
         item.ilosc_finalna = ilosc_finalna
     if match_kod is not ...:
@@ -128,8 +132,18 @@ def update_item(
         item.match_nazwa = match_nazwa
     if match_jm is not ...:
         item.match_jm = match_jm
+    if match_quality is not ...:
+        item.match_quality = match_quality
+    if match_score is not ...:
+        item.match_score = match_score
     if matched_product_id is not ...:
         item.matched_product_id = matched_product_id
-    session.commit()
-    session.refresh(item)
+    if commit:
+        session.commit()
+        session.refresh(item)
     return item
+
+
+def set_magazyn(session: Session, document: DocumentModel, magazyn: Optional[str]) -> None:
+    document.magazyn = magazyn
+    session.commit()

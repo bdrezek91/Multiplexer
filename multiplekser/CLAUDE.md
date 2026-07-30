@@ -111,9 +111,16 @@ Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
   stąd nowa kolumna `DocumentItemModel.sequence`), BEZ "pierwszej wydawki"/always-include —
   te pojęcia po prostu nie istnieją w źródle Hydrauliki, nie są tylko pominięte. Frontend
   (Krok 4/5) pokazuje wykryty dział (`DzialChip`) i normalny przycisk "Generuj" dla obu
-  działów (checkbox "Pierwsza wydawka" ukryty tylko dla Hydrauliki). Katalog administracyjny
-  `/products` w UI wciąż zarządza tylko Elektryką. Hydraulika jest teraz funkcjonalnie
-  kompletna end-to-end. Plan pełny: `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
+  działów (checkbox "Pierwsza wydawka" ukryty tylko dla Hydrauliki). Hydraulika jest
+  funkcjonalnie kompletna end-to-end. **Krok 6** (`docs/RAPORT_ETAP_HYDRAULIKA_6.md`) dodał:
+  edycję magazynu **po** zakończonym OCR (`PATCH /documents/{id}/magazyn`, ponownie dopasowuje
+  wszystkie pozycje z nowym magazynem — świadomie nadpisuje ręczne korekty `match_kod`, patrz
+  raport) z UI na stronie szczegółów dokumentu (admin: wszystkie magazyny, inne role: tylko
+  `magazyny_dostepne`); przyciski "Ilość finalna z kolumny: Wydana/Zużyta" do hurtowego
+  przepisania kolumny źródłowej do `ilosc_finalna`; katalog `/products` w UI zarządza teraz
+  **obydwoma** działami przez przełącznik Elektryka/Hydraulika (wszystkie funkcje CRUD w
+  `api/products.ts` przyjmują `dzial`; dział produktu jest niezmienny przy edycji, tak jak
+  `kod`). Plan pełny: `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
 
 **Decyzja architektoniczna (nie kwestionować bez nowego powodu)**: Matcher NIE używa
 generycznego silnika `AttributeRule` mimo że taki był zaproponowany w

@@ -57,3 +57,9 @@ class DocumentItemUpdateIn(BaseModel):
 class GenerateRequest(BaseModel):
     qty_mode: str = "real"  # "real" | "ones"
     first_wydawka: bool = False
+
+
+class MagazynUpdateIn(BaseModel):
+    """Zmiana magazynu PO zakonczonym OCR (np. gdy nie wybrano go przy uploadzie) - Krok
+    Hydraulika-6. `null` kasuje magazyn (dokument bez magazynu)."""
+    magazyn: str | None = None

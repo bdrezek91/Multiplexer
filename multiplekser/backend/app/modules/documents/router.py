@@ -22,7 +22,7 @@ from app.modules.generator import (
     get_filename,
     physical_order_for,
 )
-from app.modules.matcher import rules_from_db
+from app.modules.matcher import match_against_catalog, match_against_catalog_hydraulika, rules_from_db
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 from app.modules.users import get_current_user
@@ -31,7 +31,14 @@ from app.modules.users.models import UserModel
 
 from . import repository
 from .models import DocumentItemModel, DocumentModel
-from .schemas import DocumentCreatedOut, DocumentItemOut, DocumentItemUpdateIn, DocumentOut, GenerateRequest
+from .schemas import (
+    DocumentCreatedOut,
+    DocumentItemOut,
+    DocumentItemUpdateIn,
+    DocumentOut,
+    GenerateRequest,
+    MagazynUpdateIn,
+)
 from .storage import get_storage
 from .tasks import process_ocr_document
 
@@ -194,6 +201,56 @@ def update_document_item(
 
     item = repository.update_item(session, item, **update_kwargs)
     return _item_to_schema(item)
+
+
+@router.patch("/{document_id}/magazyn", response_model=DocumentOut)
+def update_document_magazyn(
+    document_id: str,
+    body: MagazynUpdateIn,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+):
+    """Zmiana magazynu PO zakonczonym OCR (Krok Hydraulika-6) - np. gdy nie wybrano go przy
+    uploadzie. Ponownie dopasowuje WSZYSTKIE pozycje z nowym magazynem (R5: podstawienie kodu
+    wg wariantu magazynowego zalezy od magazynu), nie tylko podmienia etykiete - inaczej
+    wygenerowany plik mialby kod dopasowany do STAREGO magazynu.
+
+    UWAGA: to nadpisuje ewentualne reczne korekty `match_kod` zrobione wczesniej przez
+    PATCH .../items/{item_id} na tym dokumencie (ten endpoint nie wie, ktore dopasowania byly
+    poprawiane recznie) - akceptowany kompromis, opisany w docs/RAPORT_ETAP_HYDRAULIKA_6.md."""
+    document = repository.get_document(session, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
+    _check_owner_or_admin(document, user)
+    check_magazyn_access(user, body.magazyn)
+
+    dzial = document.dzial or "elektryka"
+    catalog = Catalog.from_db(session, dzial=dzial)
+    repository.set_magazyn(session, document, body.magazyn)
+
+    special_rules = None if dzial == "hydraulika" else rules_from_db(session)
+    for item in document.items:
+        if dzial == "hydraulika":
+            match = match_against_catalog_hydraulika(item.rozpoznana_nazwa, catalog, magazyn=body.magazyn)
+        else:
+            match = match_against_catalog(
+                item.rozpoznana_nazwa, catalog, magazyn=body.magazyn, special_rules=special_rules,
+            )
+        product_row = None
+        if match.kod:
+            product_row = session.query(ProductModel.id).filter(
+                ProductModel.kod == match.kod, ProductModel.dzial == dzial,
+            ).first()
+        repository.update_item(
+            session, item,
+            match_kod=match.kod, match_nazwa=match.nazwa, match_jm=match.jm_override,
+            match_quality=match.quality, match_score=match.ratio,
+            matched_product_id=product_row[0] if product_row else None,
+            commit=False,
+        )
+    session.commit()
+    session.refresh(document)
+    return _to_schema(document)
 
 
 @router.post("/{document_id}/generate")

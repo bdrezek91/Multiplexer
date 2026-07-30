@@ -63,6 +63,18 @@ def baza_hydraulika_json() -> dict:
     return json.loads(_HYDRAULIKA_FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Rate limiting na /auth/token (Etap "quick winy") liczy proby w Redis per-IP, wspolnym
+    dla calego procesu testowego - bez resetu przed kazdym testem setki logowan przez fixture
+    `admin_headers`/`elektryk_headers` (kazdy test loguje sie od nowa) szybko wyczerpalyby limit
+    "5/minute" i posypaly niepowiazane testy 429-kami zamiast prawdziwych bledow."""
+    from app.core.rate_limit import limiter
+
+    limiter.reset()
+    yield
+
+
 @pytest.fixture()
 def client(db_session):
     """TestClient z Depends(get_db) podmienionym na sesje testowa (rollback po tescie)."""

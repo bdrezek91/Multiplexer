@@ -1,12 +1,21 @@
 """Endpointy auth (Etap 5): logowanie, odswiezanie tokenu, dane biezacego uzytkownika.
-Endpointy zarzadzania uzytkownikami (Etap 11, admin-only) - patrz osobny `users_router` nizej."""
-from __future__ import annotations
+Endpointy zarzadzania uzytkownikami (Etap 11, admin-only) - patrz osobny `users_router` nizej.
 
-from fastapi import APIRouter, Depends, HTTPException, status
+UWAGA: bez `from __future__ import annotations` (usuniete 2026-07-30, wczesniej tu bylo) -
+swiadomie. @limiter.limit() (slowapi) opakowuje login() swoim wrapperem przez functools.wraps,
+ktory NIE dziedziczy __globals__ oryginalnej funkcji (to niemozliwe do przekazania w Pythonie).
+Z postponed evaluation adnotacje typow sa stringami w momencie definicji, a FastAPI rozwiazuje
+je pozniej przez __globals__ funkcji, ktore dla wrappera slowapi wskazuja na modul slowapi, nie
+na ten plik - OAuth2PasswordRequestForm nie jest tam widoczny, wiec FastAPI dostaje
+nierozwiazany ForwardRef zamiast klasy i wywala sie przy starcie. Bez postponed evaluation
+adnotacje sa prawdziwymi obiektami klas juz w momencie definicji funkcji, wiec ten problem
+w ogole nie wystepuje. Python 3.11 i tak nie wymaga tego importu (natywne `X | Y`/`list[X]`)."""
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.rate_limit import limiter
 
 from . import repository
 from .deps import get_current_user, require_admin
@@ -21,7 +30,12 @@ users_router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.post("/token", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    session: Session = Depends(get_db),
+):
     user = repository.get_user_by_email(session, form_data.username)
     if user is None or not user.active or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nieprawidłowy email lub hasło")

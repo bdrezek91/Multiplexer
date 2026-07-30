@@ -23,6 +23,22 @@ def test_login_nieistniejacy_uzytkownik(client):
     assert r.status_code == 401
 
 
+def test_login_rate_limit_po_5_probach(client, admin_user):
+    """Etap "quick winy" (2026-07-30) - ochrona przed brute-force: 5 prob/minute na /auth/token,
+    niezaleznie od tego czy haslo bylo poprawne czy nie (limit liczy proby, nie tylko porazki)."""
+    for _ in range(5):
+        r = client.post("/auth/token", data={"username": admin_user.email, "password": "zle-haslo"})
+        assert r.status_code == 401
+
+    r = client.post("/auth/token", data={"username": admin_user.email, "password": "zle-haslo"})
+    assert r.status_code == 429
+    assert r.json() == {"detail": "Zbyt wiele prób logowania - spróbuj ponownie za chwilę"}
+
+    # Nawet z POPRAWNYM haslem - limit blokuje IP/klucz, nie ocenia poprawnosci danych.
+    r = client.post("/auth/token", data={"username": admin_user.email, "password": ADMIN_PASSWORD})
+    assert r.status_code == 429
+
+
 def test_me_bez_tokenu_zwraca_401(client):
     r = client.get("/auth/me")
     assert r.status_code == 401

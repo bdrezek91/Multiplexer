@@ -12,9 +12,11 @@ from typing import Literal
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.rate_limit import limiter
 from app.modules.documents.router import router as documents_router
 from app.modules.matcher import match_against_catalog, match_against_catalog_hydraulika, rules_from_db
 from app.modules.products import Catalog
@@ -28,10 +30,23 @@ from app.modules.users.router import users_router
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Multiplekser v1.0.0 API", version="0.7.0-etap7")
+app.state.limiter = limiter
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(products_router)
 app.include_router(documents_router)
+
+
+# Rate limiting (patrz app/core/rate_limit.py) - limit ustawiony bezposrednio przy endpoincie
+# /auth/token (users/router.py), nie tutaj. Wlasny handler zamiast domyslnego slowapi (ktory
+# zwraca {"error": ...}) - trzymamy jeden spojny ksztalt bledu {"detail": ...} w calym API
+# (patrz tez ApiError we frontend/src/api/client.ts).
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Zbyt wiele prób logowania - spróbuj ponownie za chwilę"},
+    )
 
 
 # Etap "quick winy" (2026-07-30): bez tego kazdy nieprzewidziany wyjatek (blad w kodzie, nie

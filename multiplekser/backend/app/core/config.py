@@ -42,7 +42,7 @@ class Settings(BaseSettings):
 
     # Skalowanie zdjec (nie-PDF) przed wyslaniem do AI - mniejszy upload = szybsza odpowiedz.
     # Podniesione z 1800/85 (port 1:1 z monolitu) - realny przypadek z produkcji (patrz
-    # docs/RAPORT_PORTABLE_1.md): drobne odreczne znaki (np. cyfra "1" tuz obok ptaszka
+    # docs/RAPORT_OCR_NIEZAWODNOSC_1.md): drobne odreczne znaki (np. cyfra "1" tuz obok ptaszka
     # potwierdzenia) tracily wyrazistosc przy kompresji, model czasem nie mial pewnosci czy to
     # cyfra czy sam ptaszek. Wyzsza rozdzielczosc/jakosc kosztuje kilka sekund dluzszy upload,
     # ale zachowuje wiecej szczegolow drobnego pisma - w parze z doprecyzowanym promptem (patrz

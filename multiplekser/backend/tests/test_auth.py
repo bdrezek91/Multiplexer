@@ -18,6 +18,28 @@ def test_login_zle_haslo(client, admin_user):
     assert r.status_code == 401
 
 
+def test_login_sukces_loguje_zdarzenie(client, admin_user, caplog):
+    """Etap "quick winy" (2026-07-30) - strukturalne logowanie: udane logowanie zostawia slad
+    (kto, kiedy) - patrz app/core/logging_config.py."""
+    with caplog.at_level("INFO", logger="app.modules.users.router"):
+        r = client.post("/auth/token", data={"username": admin_user.email, "password": ADMIN_PASSWORD})
+    assert r.status_code == 200
+    assert any(
+        rec.getMessage() == "Logowanie" and getattr(rec, "email", None) == admin_user.email
+        for rec in caplog.records
+    )
+
+
+def test_login_zle_haslo_loguje_ostrzezenie(client, admin_user, caplog):
+    with caplog.at_level("WARNING", logger="app.modules.users.router"):
+        r = client.post("/auth/token", data={"username": admin_user.email, "password": "zle-haslo"})
+    assert r.status_code == 401
+    assert any(
+        rec.levelname == "WARNING" and rec.getMessage() == "Nieudane logowanie"
+        for rec in caplog.records
+    )
+
+
 def test_login_nieistniejacy_uzytkownik(client):
     r = client.post("/auth/token", data={"username": "nikt@test.local", "password": "cokolwiek"})
     assert r.status_code == 401

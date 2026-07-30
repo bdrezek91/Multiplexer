@@ -12,6 +12,7 @@ logike importu od swojego cienkiego CLI.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 
@@ -34,6 +35,8 @@ from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 
 from . import repository
+
+logger = logging.getLogger(__name__)
 
 _PDF_MIME = "application/pdf"
 
@@ -84,6 +87,11 @@ def _classify_and_recognize(file_bytes: bytes, mime: str, session: Session, docu
             return classify_result, dzial, result
         except (AllProvidersFailedError, OCRProviderError) as exc:
             last_exc = exc
+            logger.warning(
+                "OCR - przejsciowy blad dostepnosci, proba %s/%s",
+                attempt + 1, _MAX_ATTEMPTS,
+                extra={"document_id": str(document.id), "attempt": attempt + 1, "error": str(exc)},
+            )
     raise last_exc  # wyczerpano proby - blad koncowy, jak dotad ida do Document.status="error"
 
 
@@ -118,6 +126,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         return
 
     repository.mark_processing(session, document)
+    logger.info("OCR - start przetwarzania", extra={"document_id": document_id})
 
     try:
         raw = get_storage().download(document.file_key)
@@ -164,10 +173,19 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             rejected_count=result.rejected_count, items=items,
             dzial=dzial, dzial_confidence=classify_result.confidence,
         )
+        logger.info(
+            "OCR - zakonczone sukcesem",
+            extra={
+                "document_id": document_id, "dzial": dzial, "used_provider": result.used_provider,
+                "pozycje": len(items), "rejected_count": result.rejected_count,
+            },
+        )
     except (OCRUnparsableResponseError, AllProvidersFailedError, OCRProviderError) as exc:
         repository.mark_error(session, document, str(exc))
+        logger.error("OCR - zakonczone bledem", extra={"document_id": document_id, "error": str(exc)})
     except Exception as exc:  # zabezpieczenie - blad nie moze zniknac w workerze bez sladu w Document.status
         repository.mark_error(session, document, f"Nieoczekiwany blad: {exc}")
+        logger.exception("OCR - nieoczekiwany blad", extra={"document_id": document_id})
 
 
 @celery_app.task(name="documents.process_ocr")

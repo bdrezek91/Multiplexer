@@ -16,6 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.logging_config import configure_logging
 from app.core.rate_limit import limiter
 from app.modules.documents.router import router as documents_router
 from app.modules.matcher import match_against_catalog, match_against_catalog_hydraulika, rules_from_db
@@ -27,6 +28,7 @@ from app.modules.users.models import UserModel
 from app.modules.users.router import router as auth_router
 from app.modules.users.router import users_router
 
+configure_logging()
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Multiplekser v1.0.0 API", version="0.7.0-etap7")
@@ -43,6 +45,7 @@ app.include_router(documents_router)
 # (patrz tez ApiError we frontend/src/api/client.ts).
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    logger.warning("Rate limit przekroczony na %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=429,
         content={"detail": "Zbyt wiele prób logowania - spróbuj ponownie za chwilę"},

@@ -10,6 +10,9 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
 
+    # Poziom strukturalnego logowania (Etap "quick winy") - patrz app/core/logging_config.py.
+    log_level: str = "INFO"
+
     # MinIO domyslnie (docker-compose.yml) - S3-kompatybilne, wiec ten sam klient (boto3) dziala
     # bez zmian tez z prawdziwym AWS S3 czy Azure Blob (S3 gateway) - wystarczy zmienic endpoint.
     minio_endpoint_url: str = "http://localhost:9000"

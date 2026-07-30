@@ -7,6 +7,11 @@ Uruchomienie workera:
 from celery import Celery
 
 from app.core.config import settings
+from app.core.logging_config import configure_logging
+
+# Osobny proces od API (app/main.py) - ma wlasny root logger, wiec potrzebuje wlasnego wywolania
+# configure_logging() (patrz app/core/logging_config.py).
+configure_logging()
 
 # Import jawny wszystkich modeli ORM (nie poleganie na przypadkowym imporcie) - PRZED
 # skonfigurowaniem workera. Proces workera Celery importuje tylko to, co ponizej (nie caly

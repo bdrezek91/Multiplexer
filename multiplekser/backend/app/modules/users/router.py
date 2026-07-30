@@ -10,6 +10,8 @@ na ten plik - OAuth2PasswordRequestForm nie jest tam widoczny, wiec FastAPI dost
 nierozwiazany ForwardRef zamiast klasy i wywala sie przy starcie. Bez postponed evaluation
 adnotacje sa prawdziwymi obiektami klas juz w momencie definicji funkcji, wiec ten problem
 w ogole nie wystepuje. Python 3.11 i tak nie wymaga tego importu (natywne `X | Y`/`list[X]`)."""
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -25,6 +27,8 @@ from .schemas import (
 )
 from .security import InvalidTokenError, create_access_token, create_refresh_token, decode_token, verify_password
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 users_router = APIRouter(prefix="/users", tags=["users"])
 
@@ -38,8 +42,10 @@ def login(
 ):
     user = repository.get_user_by_email(session, form_data.username)
     if user is None or not user.active or not verify_password(form_data.password, user.hashed_password):
+        logger.warning("Nieudane logowanie", extra={"email": form_data.username})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nieprawidłowy email lub hasło")
     uid = str(user.id)
+    logger.info("Logowanie", extra={"user_id": uid, "email": user.email})
     return Token(access_token=create_access_token(uid), refresh_token=create_refresh_token(uid))
 
 

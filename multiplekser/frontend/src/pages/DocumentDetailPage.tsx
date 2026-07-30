@@ -105,8 +105,18 @@ function MatchKodCell({ documentId, item, dzial }: { documentId: string; item: D
     }
   }, [inputValue, dzial])
 
-  const currentValue: Product | null = item.match_kod
-    ? { kod: item.match_kod, nazwa: item.match_nazwa ?? '', jm: item.match_jm ?? '' } as Product
+  // `defaultValue` (nie `value`!) - swiadomy wybor. MUI Autocomplete z KONTROLOWANYM `value`
+  // resetuje inputValue do getOptionLabel(value) za kazdym razem, gdy referencja `value` sie
+  // zmieni - a poniewaz obiekt Product budowany tu z pol item.* powstawalby na nowo przy
+  // kazdym renderze (czyli przy kazdym wcisnietym klawiszu), backspace byl bez efektu: pole
+  // odtwarzalo caly kod z powrotem, zanim uzytkownik zdazyl cokolwiek zobaczyc (patrz
+  // useAutocomplete.js: efekt resetujacy zalezny od `value`). `defaultValue` jest odczytywane
+  // przez MUI tylko raz przy montowaniu - dokladnie zgodne z istniejacym mechanizmem remountu
+  // przez `key={item.id}-${item.match_kod}` w miejscu wywolania (remount = nowy "raz" po
+  // kazdej faktycznej zmianie dopasowania po stronie serwera), a mid-typing nie wywoluje juz
+  // zadnego resetu.
+  const defaultValue: Product | null = item.match_kod
+    ? ({ kod: item.match_kod, nazwa: item.match_nazwa ?? '', jm: item.match_jm ?? '' } as Product)
     : null
 
   return (
@@ -115,7 +125,7 @@ function MatchKodCell({ documentId, item, dzial }: { documentId: string; item: D
       sx={{ minWidth: 480 }}
       options={options}
       loading={loading}
-      value={currentValue}
+      defaultValue={defaultValue}
       inputValue={inputValue}
       isOptionEqualToValue={(option, val) => option.kod === val.kod}
       getOptionLabel={(option) => option.kod}

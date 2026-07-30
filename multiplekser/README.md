@@ -1,7 +1,39 @@
 # Multiplekser v1.0.0
 
+Wewnętrzne narzędzie firmy **Dampol Investment**, które zamienia ręczne, papierowe wydawki
+materiałowe (elektryka, hydraulika) w gotowy plik importowy do **Comarch Optima** — bez
+przepisywania pozycji z ręki.
+
+## Do czego to służy
+
+Elektrycy i hydraulicy na budowie wypełniają papierową wydawkę (albo skan/zdjęcie/Excel) z
+listą zużytych/wydanych materiałów. Ktoś musiał to później ręcznie przepisać do Optimy —
+żmudne i podatne na literówki w kodach. Multiplekser robi to automatycznie:
+
+1. **Upload** — użytkownik wgrywa zdjęcie/skan/PDF wydawki (opcjonalnie wskazując magazyn).
+2. **Rozpoznanie (OCR przez AI, Gemini)** — system **sam wykrywa, czy to wydawka Elektryki czy
+   Hydrauliki** (dwuetapowa klasyfikacja) i odczytuje pozycje wraz z ilościami.
+3. **Dopasowanie do katalogu** — każda rozpoznana nazwa jest dopasowywana do konkretnego kodu
+   produktu w Optimie (aliasy, atrybuty typu kolor/kraj/przekrój/moc, reguły specjalne
+   wypracowane na realnych błędach produkcyjnych, warianty zależne od magazynu).
+4. **Weryfikacja** — użytkownik widzi tabelę rozpoznanych pozycji z jakością dopasowania,
+   poprawia ręcznie to, co niepewne, wybiera magazyn i którą kolumnę ilości traktować jako
+   finalną (wydana/zużyta).
+5. **Generowanie** — jeden przycisk tworzy plik w formacie gotowym do importu w Optimie
+   (`kod;ilość;;jm;magazyn`, kodowanie CP1250).
+
+Całość jest **wielodziałowa i wieloużytkownikowa**: role (admin/elektryk) z przypisanymi
+magazynami, osobne katalogi produktów per dział (Elektryka, Hydraulika — kolejne działy jak
+stolarka/wentylacja można dołożyć tym samym wzorcem), pełna historia dokumentów, panel
+administracyjny katalogu i użytkowników.
+
+To migracja jednoplikowego prototypu HTML/JS (`Multiplekser_Elektryka.html`) do architektury
+webowej klasy produkcyjnej — logika biznesowa (parser/matcher/generator) przeniesiona 1:1,
+zweryfikowana testami regresyjnymi na realnych przypadkach z produkcji, nie przepisana od zera.
+
 Zobacz `docs/ETAP_0_analiza_architektury.md` (analiza + plan + diagramy Mermaid) i najnowszy
-`docs/RAPORT_ETAP_11.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego etapu).
+`docs/RAPORT_ETAP_HYDRAULIKA_6.md` (co zrobione, co odłożone, jak uruchomić, plan kolejnego
+kroku) oraz `CLAUDE.md` (pełny, aktualny stan projektu i podjęte decyzje architektoniczne).
 
 Szybki start (przez Docker - pelny stos, wymaga Dockera):
 ```bash

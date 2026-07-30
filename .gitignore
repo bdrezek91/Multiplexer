@@ -5,13 +5,3 @@ __pycache__/
 # multiplekser/.env.prod.example i multiplekser/frontend/.env.example, ktore SA sledzone (to tylko
 # szablony bez prawdziwych wartosci).
 .env
-
-# Multiplekser Portable (docs/RAPORT_PORTABLE_1.md) - artefakty budowania/uruchamiania, nie kod:
-# frontend_dist/ to kopia frontend/dist/ wstawiana przed budowa .exe (patrz build-portable.yml),
-# dane/ to lokalna baza SQLite + wgrane dokumenty + config.json (sekrety) z uruchomienia lokalnego,
-# build/ i dist/ to standardowe foldery robocze/wyjsciowe PyInstallera.
-multiplekser/backend/frontend_dist/
-multiplekser/backend/dane/
-multiplekser/backend/build/
-multiplekser/backend/dist/
-*.spec.bak

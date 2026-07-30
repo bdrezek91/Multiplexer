@@ -359,7 +359,7 @@ export function DocumentDetailPage() {
                         // prompt: "jesli wiersz w obu kolumnach jest pusty - pomin go
                         // calkowicie"), wiec pusta ilosc przy istniejacej pozycji czesto oznacza
                         // niejednoznaczny odczyt odreczny (np. "1" pomylona z samym ptaszkiem
-                        // potwierdzenia - patrz docs/RAPORT_PORTABLE_1.md i historia czatu) -
+                        // potwierdzenia - patrz docs/RAPORT_OCR_NIEZAWODNOSC_2.md i historia czatu) -
                         // wyroznienie ma zwrocic na to uwage osoby weryfikujacej dokument.
                         sx={
                           item.ilosc_finalna == null

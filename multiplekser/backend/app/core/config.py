@@ -17,11 +17,12 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "multiplekser-dokumenty"
 
-    # Tryb Multiplekser Portable (.exe na Windows, bez Dockera/Postgresa/Redis/MinIO) - patrz
-    # docs/RAPORT_PORTABLE_1.md. Przelacza: storage na lokalny folder (local_storage_path) i
-    # wykonanie OCR na watek w tym samym procesie zamiast Celery/Redis. `database_url` w tym
-    # trybie ustawia desktop_main.py na plik SQLite w katalogu danych uzytkownika - nie tutaj,
-    # bo domyslna wartosc wyzej musi zostac Postgresem dla istniejacego wdrozenia Docker.
+    # Flaga trybu "Multiplekser Portable" (.exe na Windows, bez Dockera/Postgresa/Redis/MinIO) -
+    # sam punkt wejscia (desktop_main.py) zostal usuniety (2026-07-30, niepotrzebny), wiec ta
+    # flaga jest dead code: zawsze False, nic jej juz nie ustawia na True. Zostawiona swiadomie,
+    # bo storage.py/tasks.py wciaz na niej gałęzią - patrz CLAUDE.md. Przelaczalaby: storage na
+    # lokalny folder (local_storage_path) i wykonanie OCR na watek w tym samym procesie zamiast
+    # Celery/Redis.
     desktop_mode: bool = False
     local_storage_path: str = "./dokumenty"
 

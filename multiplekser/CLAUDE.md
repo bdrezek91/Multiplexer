@@ -124,15 +124,15 @@ Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
   `api/products.ts` przyjmują `dzial`; dział produktu jest niezmienny przy edycji, tak jak
   `kod`). Plan pełny: `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
 
-**Multiplekser Portable** (`docs/RAPORT_PORTABLE_1.md`) - osobny tryb pracy dla użytkowników bez
-Dockera: `.exe` na Windows, budowany na `windows-latest` w GitHub Actions
-(`.github/workflows/build-portable.yml`, ten sandbox nie ma dostępu do Windows). Przełączany
-jedną flagą `settings.desktop_mode` (domyślnie `False`, zero wpływu na Docker/produkcję): SQLite
-zamiast Postgresa (`Uuid`/`PortableJSON` cross-dialect w modelach - patrz `app/core/db_types.py`),
-`LocalFileStorage` zamiast MinIO, wątek w procesie zamiast Celery/Redis
-(`dispatch_ocr_task` w `documents/tasks.py`). Cała logika biznesowa (parser/matcher/generator/OCR)
-bez zmian. `desktop_main.py` - punkt wejścia, okno `tkinter` przy pierwszym uruchomieniu
-(e-mail/hasło admina + klucz Gemini, bez terminala), serwuje frontend+API na jednym porcie.
+**Multiplekser Portable usunięty** (2026-07-30, na życzenie użytkownika - `.exe` był niepotrzebny):
+punkt wejścia `desktop_main.py`, workflow `.github/workflows/build-portable.yml`, plik `.spec`
+PyInstallera i testy portable zostały skasowane. Świadomie NIE tknięte przy tej okazji - dolna
+warstwa w kodzie produkcyjnym, która obsługiwała tryb desktopowy (i nadal jest tam martwym,
+nieużywanym kodem, bez wpływu na Docker/produkcję): flaga `settings.desktop_mode` (domyślnie
+`False`) w `app/core/config.py`, `Uuid`/`PortableJSON` cross-dialect w modelach
+(`app/core/db_types.py`), `LocalFileStorage` w `documents/storage.py`, `dispatch_ocr_task` w
+`documents/tasks.py`. Usunięcie tej warstwy dotykałoby aktualnie używanej ścieżki dysponowania
+zadaniami OCR w produkcji - jeśli kiedyś ma zniknąć też stąd, to osobna, świadoma decyzja.
 
 **Decyzja architektoniczna (nie kwestionować bez nowego powodu)**: Matcher NIE używa
 generycznego silnika `AttributeRule` mimo że taki był zaproponowany w

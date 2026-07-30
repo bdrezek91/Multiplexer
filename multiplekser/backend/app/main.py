@@ -40,10 +40,18 @@ app.include_router(documents_router)
 # client.ts zawsze oczekuje {"detail": "..."}). HTTPException NIE przechodzi przez ten handler
 # (FastAPI obsluguje je wczesniej, wlasnym mechanizmem) - to lapie tylko to, co i tak byloby
 # nieobsluzonym bledem 500.
+#
+# Do odpowiedzi dodajemy TYLKO nazwe klasy wyjatku (np. "RuntimeError"), NIE pelna tresc
+# str(exc) - ta czesto zawiera szczegoly, ktorych nie chcemy pokazywac klientowi (connection
+# string do bazy przy bledzie polaczenia, fragment zapytania SQL, sciezke pliku na serwerze).
+# Pelna tresc + traceback i tak trafia do logow (logger.exception ponizej).
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Nieobsluzony wyjatek na %s %s", request.method, request.url.path)
-    return JSONResponse(status_code=500, content={"detail": "Wystąpił nieoczekiwany błąd serwera"})
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Wystąpił nieoczekiwany błąd serwera ({type(exc).__name__})"},
+    )
 
 
 class MatchRequest(BaseModel):

@@ -17,7 +17,10 @@ from app.main import app
 
 
 def test_nieoczekiwany_wyjatek_zwraca_czysty_json_500(db_session, admin_headers):
-    app.dependency_overrides[get_db] = lambda: iter([db_session])
+    def _override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override_get_db
     try:
         lenient_client = TestClient(app, raise_server_exceptions=False)
         with patch("app.main.Catalog.from_db", side_effect=RuntimeError("symulowana awaria")):
@@ -30,4 +33,4 @@ def test_nieoczekiwany_wyjatek_zwraca_czysty_json_500(db_session, admin_headers)
         app.dependency_overrides.pop(get_db, None)
 
     assert r.status_code == 500
-    assert r.json() == {"detail": "Wystąpił nieoczekiwany błąd serwera"}
+    assert r.json() == {"detail": "Wystąpił nieoczekiwany błąd serwera (RuntimeError)"}

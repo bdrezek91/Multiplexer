@@ -41,6 +41,7 @@ def _to_schema(row: ProductModel) -> ProductOut:
         kolor_domniemany=row.kolor_domniemany,
         aliasy=[a.alias_text for a in row.aliasy],
         warianty_magazynowe={w.magazyn: w.kod_docelowy for w in row.warianty_magazynowe} or None,
+        dzial=row.dzial,
     )
 
 

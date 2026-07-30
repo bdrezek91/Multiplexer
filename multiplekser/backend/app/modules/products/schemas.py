@@ -25,3 +25,4 @@ class ProductUpdate(ProductBase):
 
 class ProductOut(ProductBase):
     kod: str
+    dzial: str = "elektryka"

@@ -28,6 +28,7 @@ TEST_DATABASE_URL = os.environ.get(
 )
 
 _FIXTURE_PATH = Path(__file__).parent / "fixtures" / "baza_elektryka.json"
+_HYDRAULIKA_FIXTURE_PATH = Path(__file__).parent / "fixtures" / "baza_hydraulika.json"
 
 
 @pytest.fixture(scope="session")
@@ -55,6 +56,11 @@ def db_session(db_engine):
 @pytest.fixture()
 def baza_elektryka_json() -> dict:
     return json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))
+
+
+@pytest.fixture()
+def baza_hydraulika_json() -> dict:
+    return json.loads(_HYDRAULIKA_FIXTURE_PATH.read_text(encoding="utf-8"))
 
 
 @pytest.fixture()

@@ -97,9 +97,14 @@ Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
 - **Hydraulika**: fundament danych gotowy — `parser/hydraulika.py` (`core_and_attrs_hydraulika`),
   `matcher/core.py: match_against_catalog_hydraulika()`, kolumna `dzial` na `product`
   (separacja logiczna, `kod` unikalny per-dzial), katalog `baza_hydraulika.json` (247+7 pozycji)
-  zaimportowany. **Jeszcze nie podłączone**: routery `/products`/`/match` (wciąż domyślnie
-  `dzial="elektryka"`), OCR (klasyfikacja działu), frontend. Szczegóły:
-  `docs/RAPORT_ETAP_HYDRAULIKA_1.md`, plan pełny: `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
+  zaimportowany. Routery `/products` i `/match` przyjmują `dzial` (domyślnie `"elektryka"`,
+  422 dla nieznanej wartości) — patrz `docs/RAPORT_ETAP_HYDRAULIKA_2.md`. **Jeszcze nie
+  podłączone**: OCR (klasyfikacja działu), `/documents` (upload/generate wciąż wyłącznie
+  Elektryka), frontend (nie wysyła `dzial`). **Generator sprawdzony i NIE jest neutralny
+  działowo** (na stałe importuje reguły specyficzne dla Elektryki — koryta kablowe,
+  szynoprzewody, wkręty OSB) — Hydraulika potrzebuje własnej analizy biznesowej generowania
+  receptury, zanim `/documents/{id}/generate` będzie mógł ją obsłużyć. Plan pełny:
+  `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
 
 **Decyzja architektoniczna (nie kwestionować bez nowego powodu)**: Matcher NIE używa
 generycznego silnika `AttributeRule` mimo że taki był zaproponowany w

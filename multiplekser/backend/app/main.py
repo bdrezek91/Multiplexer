@@ -6,13 +6,15 @@ Etap 7: OCR przeniesiony na potok asynchroniczny (POST /documents + Celery), sta
 - admin bez ograniczen). CRUD /products chroniony w app/modules/products/router.py (odczyt kazdy
 zalogowany, zapis tylko admin).
 """
+from typing import Literal
+
 from fastapi import Depends, FastAPI
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.modules.documents.router import router as documents_router
-from app.modules.matcher import match_against_catalog, rules_from_db
+from app.modules.matcher import match_against_catalog, match_against_catalog_hydraulika, rules_from_db
 from app.modules.products import Catalog
 from app.modules.products.router import router as products_router
 from app.modules.users import get_current_user
@@ -32,6 +34,7 @@ class MatchRequest(BaseModel):
     query: str
     dominant_country: str | None = None
     magazyn: str | None = None
+    dzial: Literal["elektryka", "hydraulika"] = "elektryka"
 
 
 class MatchResponse(BaseModel):
@@ -51,14 +54,19 @@ def health():
 def match(req: MatchRequest, session: Session = Depends(get_db), user: UserModel = Depends(get_current_user)):
     check_magazyn_access(user, req.magazyn)
 
-    catalog = Catalog.from_db(session)
-    special_rules = rules_from_db(session)
-    result = match_against_catalog(
-        req.query, catalog,
-        dominant_country=req.dominant_country,
-        magazyn=req.magazyn,
-        special_rules=special_rules,
-    )
+    catalog = Catalog.from_db(session, dzial=req.dzial)
+    if req.dzial == "hydraulika":
+        # Reguly specjalne Hydrauliki celowo puste w V1 (patrz matcher/core.py,
+        # DEFAULT_SPECIAL_RULES_HYDRAULIKA) - jeszcze nie ma tabeli special_rule per dzial.
+        result = match_against_catalog_hydraulika(req.query, catalog, magazyn=req.magazyn)
+    else:
+        special_rules = rules_from_db(session)
+        result = match_against_catalog(
+            req.query, catalog,
+            dominant_country=req.dominant_country,
+            magazyn=req.magazyn,
+            special_rules=special_rules,
+        )
     return MatchResponse(
         kod=result.kod, nazwa=result.nazwa, quality=result.quality,
         ratio=result.ratio, jm=result.jm_override,

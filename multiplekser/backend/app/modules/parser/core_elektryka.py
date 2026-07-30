@@ -1,18 +1,22 @@
 """
-Modul Parser - port logiki coreAndAttrs() z monolitu Multiplekser_Elektryka.html.
+Modul Parser (Elektryka) - port logiki coreAndAttrs() z monolitu Multiplekser_Elektryka.html.
 
 Odpowiedzialnosc: normalizacja tekstu rozpoznanego przez OCR i ekstrakcja atrybutow
 (kraj, kolor, krotnosc, prad, wymiar, przekroj, srednica, biegunowosc, moduly, montaz, faza)
 potrzebnych do dopasowania w module Matcher.
 
 Zachowuje 1:1 semantyke oryginalnego JS - patrz docs/ETAP_0_analiza_architektury.md pkt 2.
-"""
+
+Nazwa pliku (dawniej core.py, patrz docs/RAPORT_NAZEWNICTWO_1.md) - jedyna logika specyficzna
+dla Elektryki, dolna warstwa (strip_diacritics/bigrams/dice_coeff/DIM_RE) jest w shared.py,
+bo Hydraulika (parser/hydraulika.py) tez jej uzywa."""
 from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import dataclass
 from typing import Optional
+
+from .shared import DIM_RE, strip_diacritics
 
 # ---- Wzorce atrybutow (odpowiednik COUNTRY_PATTERNS / COLOR_PATTERNS / MULT_PATTERNS w JS) ----
 
@@ -54,7 +58,6 @@ MULT_PATTERNS: list[tuple[re.Pattern, str]] = [
 ]
 
 AMP_RE = re.compile(r"(\d+)\s*A\b", re.I)
-DIM_RE = re.compile(r"(\d+)\s*[xX]\s*(\d+)")
 WIRE_RE = re.compile(r"(\d+)\s*[xX]\s*(\d+(?:[.,]\d+)?)")
 SREDNICA_RE = re.compile(r"\bfi\s*(\d+(?:[.,]\d+)?)\b|\bpg\s*-?\s*(\d+(?:[.,]\d+)?)\b", re.I)
 BIEGUN_RE = re.compile(r"\b(\d)\s*p\b", re.I)
@@ -67,14 +70,6 @@ SYNONYMS: list[tuple[re.Pattern, str]] = [
 ]
 
 
-def strip_diacritics(s: str) -> str:
-    """Usuwa polskie znaki diakrytyczne (odpowiednik stripDiacritics() w JS)."""
-    if not s:
-        return ""
-    nfkd = unicodedata.normalize("NFD", s)
-    return "".join(c for c in nfkd if unicodedata.category(c) != "Mn").replace("ł", "l").replace("Ł", "L")
-
-
 def _extract(text: str, patterns: list[tuple[re.Pattern, str]]) -> tuple[Optional[str], str]:
     """Zwraca (wartosc, tekst_po_usunieciu_dopasowania) - odpowiednik extractAttr()."""
     for pattern, value in patterns:
@@ -82,26 +77,6 @@ def _extract(text: str, patterns: list[tuple[re.Pattern, str]]) -> tuple[Optiona
         if m:
             return value, pattern.sub(" ", text)
     return None, text
-
-
-def bigrams(s: str) -> list[str]:
-    s = s.replace(" ", "")
-    return [s[i:i + 2] for i in range(len(s) - 1)] if len(s) >= 2 else []
-
-
-def dice_coeff(a: str, b: str, b_bigrams: Optional[list[str]] = None) -> float:
-    if a == b:
-        return 1.0
-    if len(a) < 2 or len(b) < 2:
-        return 1.0 if a == b else 0.0
-    ga = bigrams(a)
-    gb = list(b_bigrams if b_bigrams is not None else bigrams(b))
-    matches = 0
-    for g in ga:
-        if g in gb:
-            matches += 1
-            gb.remove(g)
-    return (2 * matches) / (len(ga) + len(b_bigrams if b_bigrams is not None else bigrams(b)))
 
 
 # Pelna detekcja fazy (port 1:1 z detectPhase() w monolicie - wersja Excel): napiecia

@@ -2,7 +2,7 @@
 (patrz index.html, linie ok. 145-315). Kazdy przypadek tu to gap znaleziony podczas walidacji
 zamowionej przez uzytkownika ("czy wszystko dziala idealnie tak samo") - przed ta poprawka
 detect_phase()/COUNTRY_PATTERNS w Pythonie byly znaczaco uproszczonymi wersjami monolitu."""
-from app.modules.parser.core import core_and_attrs, detect_phase
+from app.modules.parser.core_elektryka import core_and_attrs, detect_phase
 
 
 # ---- detect_phase(): heurystyka koloru CEE (gniazda/wtyczki sily bez jawnego "1F"/"3F") ----

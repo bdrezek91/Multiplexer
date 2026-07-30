@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from app.modules.parser.core import bigrams, dice_coeff, strip_diacritics
+from app.modules.parser.shared import bigrams, dice_coeff, strip_diacritics
 
 FORM_ROWS: list[str] = [
     'Czujnik zmierzchu',

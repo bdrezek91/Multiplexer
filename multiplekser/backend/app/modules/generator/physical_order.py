@@ -9,7 +9,8 @@ wlasciwe miejsce), nigdy do oczyszczania odczytu OCR.
 """
 from __future__ import annotations
 
-from app.modules.parser.core import core_and_attrs, dice_coeff, strip_diacritics
+from app.modules.parser.core_elektryka import core_and_attrs
+from app.modules.parser.shared import dice_coeff, strip_diacritics
 import re
 
 FORM_PHYSICAL_ORDER: list[str] = [

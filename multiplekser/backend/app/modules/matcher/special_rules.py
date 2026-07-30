@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass
 from typing import Callable, Optional
 
-from app.modules.parser.core import strip_diacritics
+from app.modules.parser.shared import strip_diacritics
 
 from .result import MatchResult, QUALITY_EXCLUDED
 

@@ -16,7 +16,7 @@ import re
 from dataclasses import dataclass, replace
 from typing import Optional
 
-from app.modules.matcher.core import match_against_catalog
+from app.modules.matcher.core_elektryka import match_against_catalog
 from app.modules.matcher.result import QUALITY_BAD, QUALITY_EXCLUDED, QUALITY_OK
 from app.modules.matcher.special_rules import DEFAULT_SPECIAL_RULES, SpecialRule
 from app.modules.products.catalog import Catalog

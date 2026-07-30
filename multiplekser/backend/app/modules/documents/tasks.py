@@ -26,7 +26,7 @@ from app.modules.ocr.chain import AllProvidersFailedError
 from app.modules.ocr.classify import classify_document
 from app.modules.ocr.image import downscale_image
 from app.modules.ocr.parsing import parse_float_loose
-from app.modules.ocr.pipeline import OCRUnparsableResponseError, recognize_document
+from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
 from app.modules.ocr.providers import OCRProviderError
 from app.modules.ocr.verify import verify_ambiguous_quantity

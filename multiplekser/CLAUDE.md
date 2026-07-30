@@ -59,9 +59,11 @@ migrację **razem ze mną, krok po kroku**. Nie realizuj całego planu naraz —
 - `docs/ETAP_0_analiza_architektury.md` — pełna analiza monolitu, mapa modułów, diagramy Mermaid
   (architektura, przepływ danych, wzorzec Strategy dla OCR, ERD), plan 8 etapów.
 - `docs/RAPORT_ETAP_1.md` — co zrobione w Etapie 1, co odłożone, jak uruchomić, plan Etapu 2.
-- `backend/app/modules/parser/core.py` — **gotowy, przetestowany** port `coreAndAttrs()`.
-- `backend/app/modules/matcher/core.py` — **gotowy, przetestowany** port `matchAgainstCatalog()`
-  (blokada grupy, aliasy ze specyficznością, konflikty atrybutów, tie-break, dominujący kraj).
+- `backend/app/modules/parser/core_elektryka.py` (dawniej `core.py`, patrz
+  `docs/RAPORT_NAZEWNICTWO_1.md`) — **gotowy, przetestowany** port `coreAndAttrs()`.
+- `backend/app/modules/matcher/core_elektryka.py` (dawniej `core.py`) — **gotowy, przetestowany**
+  port `matchAgainstCatalog()` (blokada grupy, aliasy ze specyficznością, konflikty atrybutów,
+  tie-break, dominujący kraj).
 - `backend/app/modules/products/catalog.py` — model domenowy `Product`/`Alias`/`Catalog`
   (na razie wczytywany z JSON — **do podmiany na SQLAlchemy w Etapie 2**).
 - `backend/tests/test_matcher.py` — **11 testów regresyjnych, każdy to realny błąd z produkcji**
@@ -95,7 +97,7 @@ Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
 - **Elektryka**: pełny stos, Etapy 0-11 + poprawki (parser/matcher/OCR/dokumenty/generator/
   auth/frontend/docker prod) — bez zmian w tym kroku.
 - **Hydraulika**: fundament danych gotowy — `parser/hydraulika.py` (`core_and_attrs_hydraulika`),
-  `matcher/core.py: match_against_catalog_hydraulika()`, kolumna `dzial` na `product`
+  `matcher/core_hydraulika.py: match_against_catalog_hydraulika()`, kolumna `dzial` na `product`
   (separacja logiczna, `kod` unikalny per-dzial), katalog `baza_hydraulika.json` (247+7 pozycji)
   zaimportowany. Routery `/products` i `/match` przyjmują `dzial` (domyślnie `"elektryka"`,
   422 dla nieznanej wartości) — patrz `docs/RAPORT_ETAP_HYDRAULIKA_2.md`. **OCR w pełni
@@ -139,7 +141,7 @@ wybrał jawnie (Krok Hydraulika-1): zachować `special_rules.py` jako mechanizm 
 a Hydraulikę dodać jako **osobną funkcję** (`match_against_catalog_hydraulika`), tym samym
 stylem co już istniejący, sprawdzony kod — nie jako współdzielony silnik konfiguracji. Ten sam
 wzorzec ("osobna funkcja/dataclass per dział, wspólna tylko dolna warstwa") obowiązuje też w
-Parserze (`parser/core.py` vs `parser/hydraulika.py`) i ma się powtórzyć dla 3. działu, jeśli
+Parserze (`parser/core_elektryka.py` vs `parser/hydraulika.py`) i ma się powtórzyć dla 3. działu, jeśli
 się pojawi — kopiowanie funkcji, nie rozbudowa wspólnego silnika.
 
 ## Jak pracować ze mną w tym repo

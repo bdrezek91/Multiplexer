@@ -27,7 +27,7 @@ from app.modules.matcher import match_against_catalog_hydraulika
 from app.modules.matcher.result import QUALITY_OK
 from app.modules.products.catalog import Catalog
 
-from .core import GeneratorItem
+from .core_elektryka import GeneratorItem
 from .output_format import format_qty
 
 

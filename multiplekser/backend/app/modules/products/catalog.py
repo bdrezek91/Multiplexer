@@ -20,7 +20,7 @@ _PARSE_FN_BY_DZIAL = {
 
 
 def plain_norm(s: str) -> str:
-    from app.modules.parser.core import strip_diacritics
+    from app.modules.parser.shared import strip_diacritics
     import re
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", strip_diacritics((s or "").lower()))).strip()
 

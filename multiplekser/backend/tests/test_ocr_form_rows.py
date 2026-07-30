@@ -1,5 +1,5 @@
 """Testy Etapu 6: snap_to_form_row()/reconcile_form_row() - port snapToFormRow() z monolitu."""
-from app.modules.ocr.form_rows import FORM_ROWS, reconcile_form_row, snap_to_form_row
+from app.modules.ocr.form_rows_elektryka import FORM_ROWS, reconcile_form_row, snap_to_form_row
 
 
 def test_form_rows_ma_153_pozycje():

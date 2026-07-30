@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.modules.parser import hydraulika_patterns as hp
-from app.modules.parser.core import DIM_RE, strip_diacritics
+from app.modules.parser.shared import DIM_RE, strip_diacritics
 
 
 def _extract(text: str, patterns: list[tuple[re.Pattern, str]]) -> tuple[Optional[str], str]:

@@ -18,7 +18,7 @@ from app.modules.matcher.special_rules import SpecialRule
 from app.modules.products import Catalog
 
 from .chain import OCRChainStep, run_ocr_chain
-from .form_rows import reconcile_form_row, snap_to_form_row
+from .form_rows_elektryka import reconcile_form_row, snap_to_form_row
 from .parsing import extract_json, validate_item
 from .prompt import AI_OCR_PROMPT
 

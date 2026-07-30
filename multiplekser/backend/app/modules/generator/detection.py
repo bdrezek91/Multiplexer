@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.modules.matcher.core import match_against_catalog
+from app.modules.matcher.core_elektryka import match_against_catalog
 from app.modules.products.catalog import Catalog
 
 _BLACK_KEYWORDS = ("czarny", "czarna", "czarne", "czarnych")

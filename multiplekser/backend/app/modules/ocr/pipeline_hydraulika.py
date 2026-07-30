@@ -22,7 +22,7 @@ from app.modules.products import Catalog
 from .chain import OCRChainStep, run_ocr_chain
 from .form_rows_hydraulika import snap_to_known_item_hydraulika
 from .parsing import extract_json, validate_item
-from .pipeline import OCRUnparsableResponseError, normalize_project_number
+from .pipeline_elektryka import OCRUnparsableResponseError, normalize_project_number
 from .prompt import AI_OCR_PROMPT_HYDRAULIKA
 
 

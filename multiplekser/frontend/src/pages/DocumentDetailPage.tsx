@@ -325,7 +325,7 @@ export function DocumentDetailPage() {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Rozpoznana nazwa</TableCell>
+                      <TableCell sx={{ minWidth: 260 }}>Rozpoznana nazwa</TableCell>
                       <TableCell>Ilość wydana</TableCell>
                       <TableCell>Ilość zużyta</TableCell>
                       <TableCell>Ilość finalna (do generowania)</TableCell>

@@ -4,6 +4,8 @@
 
 export type Rola = 'admin' | 'elektryk'
 
+export type Dzial = 'elektryka' | 'hydraulika'
+
 export interface CurrentUser {
   id: string
   email: string
@@ -22,9 +24,13 @@ export interface Product {
   kolor_domniemany: boolean
   aliasy: string[]
   warianty_magazynowe: Record<string, string> | null
+  dzial: Dzial
 }
 
-export type ProductInput = Omit<Product, 'kod'> & { kod?: string }
+// `dzial` nie jest czescia body zadania POST/PUT /products (przekazywany jako query param,
+// domyslnie "elektryka" po stronie backendu) - katalog administracyjny w UI wciaz zarzadza
+// wylacznie Elektryka, patrz docs/RAPORT_ETAP_HYDRAULIKA_2.md.
+export type ProductInput = Omit<Product, 'kod' | 'dzial'> & { kod?: string }
 
 export type DocumentStatus = 'queued' | 'processing' | 'done' | 'error'
 
@@ -52,6 +58,8 @@ export interface DocumentDetail {
   numer_projektu: string | null
   source_type: string
   magazyn: string | null
+  dzial: Dzial | null
+  dzial_confidence: number | null
   original_filename: string
   used_provider: string | null
   rejected_count: number

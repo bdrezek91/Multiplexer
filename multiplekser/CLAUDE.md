@@ -106,9 +106,10 @@ Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
   **Generator sprawdzony i NIE jest neutralny działowo** (na stałe importuje reguły
   specyficzne dla Elektryki — koryta kablowe, szynoprzewody, wkręty OSB) —
   `POST /documents/{id}/generate` zwraca 409 dla dokumentów Hydrauliki, dopóki nie powstanie
-  własna analiza biznesowa generowania. **Jeszcze nie podłączone**: frontend (nie pokazuje
-  wykrytego działu ani komunikatu o zablokowanym generowaniu). Plan pełny:
-  `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
+  własna analiza biznesowa generowania. Frontend (Krok 4, `docs/RAPORT_ETAP_HYDRAULIKA_4.md`)
+  pokazuje wykryty dział (`DzialChip`, lista i detal dokumentu) i tłumaczy blokadę generowania
+  zamiast pokazywać przycisk, który i tak zwróci 409. Katalog administracyjny `/products` w UI
+  wciąż zarządza tylko Elektryką. Plan pełny: `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
 
 **Decyzja architektoniczna (nie kwestionować bez nowego powodu)**: Matcher NIE używa
 generycznego silnika `AttributeRule` mimo że taki był zaproponowany w

@@ -23,6 +23,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { listDocuments, uploadDocument } from '../api/documents'
 import { ApiError } from '../api/client'
+import { DzialChip } from '../components/DzialChip'
 import { StatusChip } from '../components/StatusChip'
 import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
 import { useAuth } from '../auth/AuthContext'
@@ -146,6 +147,7 @@ export function DocumentsPage() {
               <TableCell>Plik</TableCell>
               <TableCell>Numer projektu</TableCell>
               <TableCell>Magazyn</TableCell>
+              <TableCell>Dział</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Utworzono</TableCell>
             </TableRow>
@@ -153,12 +155,12 @@ export function DocumentsPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5}>Ładowanie...</TableCell>
+                <TableCell colSpan={6}>Ładowanie...</TableCell>
               </TableRow>
             )}
             {!isLoading && (documents ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={5}>Brak dokumentów - wyślij pierwszy skan powyżej</TableCell>
+                <TableCell colSpan={6}>Brak dokumentów - wyślij pierwszy skan powyżej</TableCell>
               </TableRow>
             )}
             {(documents ?? []).map((doc) => (
@@ -166,6 +168,9 @@ export function DocumentsPage() {
                 <TableCell>{doc.original_filename}</TableCell>
                 <TableCell>{doc.numer_projektu ?? '-'}</TableCell>
                 <TableCell>{doc.magazyn ? magazynLabel(doc.magazyn) : '-'}</TableCell>
+                <TableCell>
+                  <DzialChip dzial={doc.dzial} confidence={doc.dzial_confidence} />
+                </TableCell>
                 <TableCell>
                   <StatusChip status={doc.status} />
                 </TableCell>

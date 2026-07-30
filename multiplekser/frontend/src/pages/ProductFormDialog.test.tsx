@@ -60,6 +60,7 @@ describe('ProductFormDialog', () => {
       kolor_domniemany: false,
       aliasy: ['istniejacy alias'],
       warianty_magazynowe: { Zabrze: 'ISTNIEJACY ZABRZE' },
+      dzial: 'elektryka',
     }
 
     renderDialog(existing)

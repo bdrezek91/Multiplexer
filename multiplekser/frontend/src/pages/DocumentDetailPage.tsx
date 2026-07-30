@@ -23,6 +23,7 @@ import { useState, type FocusEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { generateDocument, getDocument, updateDocumentItem } from '../api/documents'
 import { StatusChip } from '../components/StatusChip'
+import { DzialChip } from '../components/DzialChip'
 import { MatchQualityChip } from '../components/MatchQualityChip'
 import { ApiError } from '../api/client'
 import type { DocumentItem } from '../types'
@@ -120,7 +121,10 @@ export function DocumentDetailPage() {
                   </Typography>
                 )}
               </Box>
-              <StatusChip status={document.status} />
+              <Stack direction="row" spacing={1}>
+                <DzialChip dzial={document.dzial} confidence={document.dzial_confidence} />
+                <StatusChip status={document.status} />
+              </Stack>
             </Stack>
 
             {document.status === 'processing' || document.status === 'queued' ? (
@@ -202,29 +206,39 @@ export function DocumentDetailPage() {
                 <Typography variant="subtitle1" gutterBottom>
                   Generowanie do Optima
                 </Typography>
-                <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
-                  <FormControlLabel
-                    control={
-                      <Checkbox checked={firstWydawka} onChange={(e) => setFirstWydawka(e.target.checked)} />
-                    }
-                    label="Pierwsza wydawka (dołącz bazę materiałów)"
-                  />
-                  <Button
-                    variant="contained"
-                    startIcon={<DownloadIcon />}
-                    onClick={() => {
-                      setGenerateError(null)
-                      generateMutation.mutate()
-                    }}
-                    disabled={generateMutation.isPending}
-                  >
-                    Generuj
-                  </Button>
-                </Stack>
-                {generateError && (
-                  <Alert severity="error" sx={{ mt: 2 }}>
-                    {generateError}
+                {document.dzial && document.dzial !== 'elektryka' ? (
+                  <Alert severity="info">
+                    Generowanie receptury dla działu „{document.dzial}" nie jest jeszcze
+                    dostępne - obsługiwane są na razie tylko dokumenty z działu Elektryka.
+                    Pozycje powyżej można sprawdzić i poprawić, eksport pojawi się w kolejnym kroku.
                   </Alert>
+                ) : (
+                  <>
+                    <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+                      <FormControlLabel
+                        control={
+                          <Checkbox checked={firstWydawka} onChange={(e) => setFirstWydawka(e.target.checked)} />
+                        }
+                        label="Pierwsza wydawka (dołącz bazę materiałów)"
+                      />
+                      <Button
+                        variant="contained"
+                        startIcon={<DownloadIcon />}
+                        onClick={() => {
+                          setGenerateError(null)
+                          generateMutation.mutate()
+                        }}
+                        disabled={generateMutation.isPending}
+                      >
+                        Generuj
+                      </Button>
+                    </Stack>
+                    {generateError && (
+                      <Alert severity="error" sx={{ mt: 2 }}>
+                        {generateError}
+                      </Alert>
+                    )}
+                  </>
                 )}
               </Paper>
             </>

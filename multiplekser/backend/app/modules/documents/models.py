@@ -31,6 +31,10 @@ class DocumentModel(Base):
     source_type: Mapped[str] = mapped_column(String, nullable=False, default="ai_scan")
     status: Mapped[str] = mapped_column(String, nullable=False, default="queued")
     magazyn: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Wykryty automatycznie przez klasyfikacje OCR (Krok Hydraulika-3) - null dopoki przetwarzanie
+    # nie dojdzie do etapu klasyfikacji (queued/processing przerwane bledem przed nia).
+    dzial: Mapped[str | None] = mapped_column(String, nullable=True)
+    dzial_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     file_key: Mapped[str] = mapped_column(String, nullable=False)
     mime: Mapped[str] = mapped_column(String, nullable=False)

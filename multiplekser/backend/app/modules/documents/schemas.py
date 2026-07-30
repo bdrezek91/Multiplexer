@@ -30,6 +30,8 @@ class DocumentOut(BaseModel):
     numer_projektu: str | None
     source_type: str
     magazyn: str | None
+    dzial: str | None
+    dzial_confidence: float | None
     original_filename: str
     used_provider: str | None
     rejected_count: int

@@ -202,3 +202,27 @@ def test_generate_cudzy_dokument_zwraca_403(client, db_session, admin_user, elek
 
     r = client.post(f"/documents/{doc_id}/generate", json={}, headers=elektryk_headers)
     assert r.status_code == 403
+
+
+def test_generate_hydraulika_zwraca_409_generator_niegotowy(
+    client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_hydraulika_json,
+):
+    """Krok Hydraulika-3: Generator sprawdzony w Kroku 2 jako NIE-neutralny dzialowo - dokument
+    automatycznie zaklasyfikowany jako Hydraulika musi dostac jawny blad, nie cichy zly wynik."""
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+    key = f"documents/test/{admin_user.id}-hydraulika.jpg"
+    get_storage().upload(key, _fake_jpeg_bytes(), "image/jpeg")
+    document = doc_repo.create_document(
+        db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
+    )
+    classify_response = '{"dzial":"hydraulika","confidence":95.0}'
+    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+    ):
+        run_ocr_task(str(document.id), db_session)
+
+    r = client.post(f"/documents/{document.id}/generate", json={}, headers=admin_headers)
+    assert r.status_code == 409
+    assert "Hydraulika" in r.json()["detail"] or "hydraulika" in r.json()["detail"]

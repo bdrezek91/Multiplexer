@@ -71,6 +71,8 @@ def _to_schema(document: DocumentModel) -> DocumentOut:
         numer_projektu=document.numer_projektu,
         source_type=document.source_type,
         magazyn=document.magazyn,
+        dzial=document.dzial,
+        dzial_confidence=document.dzial_confidence,
         original_filename=document.original_filename,
         used_provider=document.used_provider,
         rejected_count=document.rejected_count,
@@ -165,11 +167,13 @@ def update_document_item(
     if "match_kod" in fields:
         kod = fields["match_kod"]
         if kod:
-            catalog = Catalog.from_db(session)
+            catalog = Catalog.from_db(session, dzial=document.dzial or "elektryka")
             cand = catalog.find_by_kod(kod)
             if cand is None:
                 raise HTTPException(status_code=400, detail=f"Nieznany kod Optima: {kod!r}")
-            product_row = session.query(ProductModel.id).filter(ProductModel.kod == cand.kod).first()
+            product_row = session.query(ProductModel.id).filter(
+                ProductModel.kod == cand.kod, ProductModel.dzial == (document.dzial or "elektryka"),
+            ).first()
             update_kwargs.update(
                 match_kod=cand.kod, match_nazwa=cand.nazwa, match_jm=cand.jm,
                 matched_product_id=product_row[0] if product_row else None,
@@ -197,6 +201,15 @@ def generate_document_output(
     _check_owner_or_admin(document, user)
     if document.status != "done":
         raise HTTPException(status_code=409, detail=f"Dokument ma status {document.status!r}, oczekiwano 'done'")
+    if document.dzial and document.dzial != "elektryka":
+        # Krok Hydraulika-3, sprawdzone wprost (6.8, RAPORT_ETAP_HYDRAULIKA_2.md): generator
+        # jest na stale zwiazany z regulami biznesowymi Elektryki (koryta kablowe, szynoprzewody,
+        # wkrety OSB) - wygenerowanie receptury dla innego dzialu dzisiaj dalyby cichy, bledny
+        # wynik zamiast jawnego bledu. Blokujemy, dopoki nie powstanie rownowaznik dla Hydrauliki.
+        raise HTTPException(
+            status_code=409,
+            detail=f"Generowanie receptury dla działu {document.dzial!r} nie jest jeszcze zaimplementowane",
+        )
 
     items = [
         GeneratorItem(name=it.rozpoznana_nazwa, qty=it.ilosc_finalna, off_form=it.off_form)

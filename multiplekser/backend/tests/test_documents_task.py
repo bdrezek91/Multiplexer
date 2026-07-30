@@ -128,6 +128,52 @@ def test_run_ocr_task_brak_klucza_api_ustawia_status_error(db_session, admin_use
     assert "klucza" in document.error_message
 
 
+# ---- Krok Hydraulika-3: klasyfikacja automatyczna dzialu (dwa kolejne wywolania recognize) ----
+
+def _mock_recognize_sequence(*responses: str):
+    return patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=list(responses)))
+
+
+def test_run_ocr_task_klasyfikuje_hydraulike_i_uzywa_jej_katalogu(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_hydraulika_json,
+):
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = '{"dzial":"hydraulika","confidence":91.0}'
+    ocr_response = '{"pozycje": [{"nazwa": "Zawór kątowy 1/2x3/4", "ilosc_wydana": "2", "confidence": 97}]}'
+    with _mock_recognize_sequence(classify_response, ocr_response):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert document.dzial == "hydraulika"
+    assert document.dzial_confidence == 91.0
+    assert len(document.items) == 1
+    assert document.items[0].match_kod == "ZAWÓR KĄTOWY 1/2X3/4"
+
+
+def test_run_ocr_task_klasyfikacja_niesparsowalna_pozostaje_na_elektryce(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Fallback klasyfikacji (elektryka, confidence 0) nie moze zmienic dotychczasowego
+    zachowania - dokument bez wykrytego dzialu nadal jest przetwarzany jako Elektryka."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = "nie rozumiem"
+    ocr_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    with _mock_recognize_sequence(classify_response, ocr_response):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert document.dzial == "elektryka"
+    assert document.dzial_confidence == 0.0
+    assert document.items[0].match_kod == "GRZEJNIK 2000W"
+
+
 def test_process_ocr_document_deleguje_do_run_ocr_task():
     """Wiring Celery: process_ocr_document to CIENKI wrapper - test bez brokera/DB, weryfikuje
     tylko, ze otwiera sesje i przekazuje jej referencje dalej do run_ocr_task."""

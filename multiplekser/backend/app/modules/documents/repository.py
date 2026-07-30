@@ -77,6 +77,8 @@ def mark_done(
     used_provider: str,
     rejected_count: int,
     items: list[dict],
+    dzial: Optional[str] = None,
+    dzial_confidence: Optional[float] = None,
 ) -> None:
     document.numer_projektu = numer_projektu
     document.used_provider = used_provider
@@ -84,6 +86,8 @@ def mark_done(
     document.items = [DocumentItemModel(**item) for item in items]
     document.status = "done"
     document.error_message = None
+    document.dzial = dzial
+    document.dzial_confidence = dzial_confidence
     session.commit()
 
 

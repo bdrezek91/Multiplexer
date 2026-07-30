@@ -20,9 +20,11 @@ from app.core.db import SessionLocal
 from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
 from app.modules.ocr.chain import AllProvidersFailedError
+from app.modules.ocr.classify import classify_document
 from app.modules.ocr.image import downscale_image
 from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline import OCRUnparsableResponseError, recognize_document
+from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
 from app.modules.ocr.providers import OCRProviderError
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
@@ -55,12 +57,22 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         else:
             file_bytes, mime = downscale_image(raw), "image/jpeg"
 
-        catalog = Catalog.from_db(session)
-        special_rules = rules_from_db(session)
+        # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
+        # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
+        # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
+        classify_result = asyncio.run(classify_document(file_bytes, mime))
+        dzial = classify_result.dzial
 
-        result = asyncio.run(
-            recognize_document(file_bytes, mime, catalog, special_rules, magazyn=document.magazyn)
-        )
+        catalog = Catalog.from_db(session, dzial=dzial)
+        if dzial == "hydraulika":
+            result = asyncio.run(
+                recognize_document_hydraulika(file_bytes, mime, catalog, magazyn=document.magazyn)
+            )
+        else:
+            special_rules = rules_from_db(session)
+            result = asyncio.run(
+                recognize_document(file_bytes, mime, catalog, special_rules, magazyn=document.magazyn)
+            )
 
         items = []
         for it in result.pozycje:
@@ -91,6 +103,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             session, document,
             numer_projektu=result.numer_projektu, used_provider=result.used_provider,
             rejected_count=result.rejected_count, items=items,
+            dzial=dzial, dzial_confidence=classify_result.confidence,
         )
     except (OCRUnparsableResponseError, AllProvidersFailedError, OCRProviderError) as exc:
         repository.mark_error(session, document, str(exc))

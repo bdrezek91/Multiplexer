@@ -98,12 +98,16 @@ Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
   `matcher/core.py: match_against_catalog_hydraulika()`, kolumna `dzial` na `product`
   (separacja logiczna, `kod` unikalny per-dzial), katalog `baza_hydraulika.json` (247+7 pozycji)
   zaimportowany. Routery `/products` i `/match` przyjmują `dzial` (domyślnie `"elektryka"`,
-  422 dla nieznanej wartości) — patrz `docs/RAPORT_ETAP_HYDRAULIKA_2.md`. **Jeszcze nie
-  podłączone**: OCR (klasyfikacja działu), `/documents` (upload/generate wciąż wyłącznie
-  Elektryka), frontend (nie wysyła `dzial`). **Generator sprawdzony i NIE jest neutralny
-  działowo** (na stałe importuje reguły specyficzne dla Elektryki — koryta kablowe,
-  szynoprzewody, wkręty OSB) — Hydraulika potrzebuje własnej analizy biznesowej generowania
-  receptury, zanim `/documents/{id}/generate` będzie mógł ją obsłużyć. Plan pełny:
+  422 dla nieznanej wartości) — patrz `docs/RAPORT_ETAP_HYDRAULIKA_2.md`. **OCR w pełni
+  wpięty od Kroku 3** (`docs/RAPORT_ETAP_HYDRAULIKA_3.md`): `POST /documents` sam wykrywa dział
+  dokumentu (`ocr/classify.py`, dwuetapowe wywołanie Gemini — klasyfikacja, potem pełny odczyt
+  promptem/snap/matcherem właściwego działu) — **celowo bez ręcznego przełącznika w UI**,
+  użytkownik tego nie chciał. Wynik (`dzial`, `dzial_confidence`) zapisany na `Document`.
+  **Generator sprawdzony i NIE jest neutralny działowo** (na stałe importuje reguły
+  specyficzne dla Elektryki — koryta kablowe, szynoprzewody, wkręty OSB) —
+  `POST /documents/{id}/generate` zwraca 409 dla dokumentów Hydrauliki, dopóki nie powstanie
+  własna analiza biznesowa generowania. **Jeszcze nie podłączone**: frontend (nie pokazuje
+  wykrytego działu ani komunikatu o zablokowanym generowaniu). Plan pełny:
   `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
 
 **Decyzja architektoniczna (nie kwestionować bez nowego powodu)**: Matcher NIE używa

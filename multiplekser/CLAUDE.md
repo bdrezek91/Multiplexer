@@ -105,11 +105,15 @@ Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
   użytkownik tego nie chciał. Wynik (`dzial`, `dzial_confidence`) zapisany na `Document`.
   **Generator sprawdzony i NIE jest neutralny działowo** (na stałe importuje reguły
   specyficzne dla Elektryki — koryta kablowe, szynoprzewody, wkręty OSB) —
-  `POST /documents/{id}/generate` zwraca 409 dla dokumentów Hydrauliki, dopóki nie powstanie
-  własna analiza biznesowa generowania. Frontend (Krok 4, `docs/RAPORT_ETAP_HYDRAULIKA_4.md`)
-  pokazuje wykryty dział (`DzialChip`, lista i detal dokumentu) i tłumaczy blokadę generowania
-  zamiast pokazywać przycisk, który i tak zwróci 409. Katalog administracyjny `/products` w UI
-  wciąż zarządza tylko Elektryką. Plan pełny: `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
+  **Od Kroku 5 (`docs/RAPORT_ETAP_HYDRAULIKA_5.md`) `POST /documents/{id}/generate` działa też
+  dla Hydrauliki** — `generator/core_hydraulika.py: generate_output_hydraulika()`, port
+  1:1 z monolitu: BEZ fizycznego sortowania (kolejność = kolejność w dokumencie źródłowym,
+  stąd nowa kolumna `DocumentItemModel.sequence`), BEZ "pierwszej wydawki"/always-include —
+  te pojęcia po prostu nie istnieją w źródle Hydrauliki, nie są tylko pominięte. Frontend
+  (Krok 4/5) pokazuje wykryty dział (`DzialChip`) i normalny przycisk "Generuj" dla obu
+  działów (checkbox "Pierwsza wydawka" ukryty tylko dla Hydrauliki). Katalog administracyjny
+  `/products` w UI wciąż zarządza tylko Elektryką. Hydraulika jest teraz funkcjonalnie
+  kompletna end-to-end. Plan pełny: `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
 
 **Decyzja architektoniczna (nie kwestionować bez nowego powodu)**: Matcher NIE używa
 generycznego silnika `AttributeRule` mimo że taki był zaproponowany w

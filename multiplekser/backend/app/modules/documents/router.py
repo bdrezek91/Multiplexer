@@ -14,7 +14,14 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.modules.generator import GeneratorItem, encode_cp1250, generate_output, get_filename, physical_order_for
+from app.modules.generator import (
+    GeneratorItem,
+    encode_cp1250,
+    generate_output,
+    generate_output_hydraulika,
+    get_filename,
+    physical_order_for,
+)
 from app.modules.matcher import rules_from_db
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
@@ -54,10 +61,14 @@ def _item_to_schema(it: DocumentItemModel) -> DocumentItemOut:
 
 
 def _items_in_physical_order(document: DocumentModel) -> list[DocumentItemModel]:
-    """Kolejnosc pozycji w tabeli weryfikacji = fizyczny uklad kartki (ta sama funkcja co przy
-    generowaniu TXT, patrz generator/core.py) - zeby ekran podgladu dalo sie porownac ze skanem
-    "linia po linii", zamiast pokazywac przypadkowa kolejnosc zapisu w bazie (domyslne sortowanie
-    relacji Document.items to `order_by=DocumentItemModel.id`, ktory jest losowym UUID)."""
+    """Kolejnosc pozycji w tabeli weryfikacji. Elektryka: fizyczny uklad kartki (ta sama funkcja
+    co przy generowaniu TXT, patrz generator/core.py) - zeby ekran podgladu dalo sie porownac ze
+    skanem "linia po linii". Hydraulika NIE ma takiego ukladu w zrodle (patrz generator/
+    core_hydraulika.py) - `document.items` jest juz w kolejnosci odczytu OCR dzieki
+    `DocumentItemModel.sequence` (relacja `Document.items` sortuje po niej), wystarczy zwrocic
+    bez zmian."""
+    if document.dzial and document.dzial != "elektryka":
+        return document.items
     return sorted(
         document.items,
         key=lambda it: physical_order_for(it.rozpoznana_nazwa, 10000),
@@ -201,28 +212,23 @@ def generate_document_output(
     _check_owner_or_admin(document, user)
     if document.status != "done":
         raise HTTPException(status_code=409, detail=f"Dokument ma status {document.status!r}, oczekiwano 'done'")
-    if document.dzial and document.dzial != "elektryka":
-        # Krok Hydraulika-3, sprawdzone wprost (6.8, RAPORT_ETAP_HYDRAULIKA_2.md): generator
-        # jest na stale zwiazany z regulami biznesowymi Elektryki (koryta kablowe, szynoprzewody,
-        # wkrety OSB) - wygenerowanie receptury dla innego dzialu dzisiaj dalyby cichy, bledny
-        # wynik zamiast jawnego bledu. Blokujemy, dopoki nie powstanie rownowaznik dla Hydrauliki.
-        raise HTTPException(
-            status_code=409,
-            detail=f"Generowanie receptury dla działu {document.dzial!r} nie jest jeszcze zaimplementowane",
-        )
 
+    dzial = document.dzial or "elektryka"
     items = [
         GeneratorItem(name=it.rozpoznana_nazwa, qty=it.ilosc_finalna, off_form=it.off_form)
-        for it in document.items
+        for it in _items_in_physical_order(document)
         if it.ilosc_finalna is not None and it.ilosc_finalna > 0
     ]
 
-    catalog = Catalog.from_db(session)
-    special_rules = rules_from_db(session)
-    result = generate_output(
-        items, catalog, document.magazyn, special_rules=special_rules,
-        qty_mode=body.qty_mode, first_wydawka=body.first_wydawka,
-    )
+    catalog = Catalog.from_db(session, dzial=dzial)
+    if dzial == "hydraulika":
+        result = generate_output_hydraulika(items, catalog, document.magazyn, qty_mode=body.qty_mode)
+    else:
+        special_rules = rules_from_db(session)
+        result = generate_output(
+            items, catalog, document.magazyn, special_rules=special_rules,
+            qty_mode=body.qty_mode, first_wydawka=body.first_wydawka,
+        )
 
     text = "\n".join(result.lines)
     filename = get_filename(document.numer_projektu)

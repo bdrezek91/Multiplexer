@@ -47,7 +47,7 @@ class DocumentModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     items: Mapped[list["DocumentItemModel"]] = relationship(
-        back_populates="document", cascade="all, delete-orphan", order_by="DocumentItemModel.id",
+        back_populates="document", cascade="all, delete-orphan", order_by="DocumentItemModel.sequence",
     )
 
 
@@ -56,6 +56,12 @@ class DocumentItemModel(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document.id"), nullable=False, index=True)
+    # Kolejnosc odczytu OCR (Krok Hydraulika-5) - `id` (UUID losowy) nigdy nie byl uzytecznym
+    # kluczem sortowania; Elektryka i tak zawsze przesortowuje wynik przez `physical_order_for`
+    # wiec problem byl niewidoczny, ale Hydraulika NIE ma takiego sortowania w zrodle (kolejnosc
+    # wyniku = kolejnosc w dokumencie zrodlowym) - bez tej kolumny generator dostawalby
+    # pozycje w przypadkowej kolejnosci UUID zamiast kolejnosci z OCR.
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     rozpoznana_nazwa: Mapped[str] = mapped_column(String, nullable=False)
     # matched_product_id to FK (integralnosc referencyjna), ale kod/nazwa/jm dopasowania sa

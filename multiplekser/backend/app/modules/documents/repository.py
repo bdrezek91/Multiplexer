@@ -83,7 +83,7 @@ def mark_done(
     document.numer_projektu = numer_projektu
     document.used_provider = used_provider
     document.rejected_count = rejected_count
-    document.items = [DocumentItemModel(**item) for item in items]
+    document.items = [DocumentItemModel(sequence=i, **item) for i, item in enumerate(items)]
     document.status = "done"
     document.error_message = None
     document.dzial = dzial

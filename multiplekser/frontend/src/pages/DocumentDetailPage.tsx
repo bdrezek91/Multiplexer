@@ -206,39 +206,34 @@ export function DocumentDetailPage() {
                 <Typography variant="subtitle1" gutterBottom>
                   Generowanie do Optima
                 </Typography>
-                {document.dzial && document.dzial !== 'elektryka' ? (
-                  <Alert severity="info">
-                    Generowanie receptury dla działu „{document.dzial}" nie jest jeszcze
-                    dostępne - obsługiwane są na razie tylko dokumenty z działu Elektryka.
-                    Pozycje powyżej można sprawdzić i poprawić, eksport pojawi się w kolejnym kroku.
+                <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+                  {/* "Pierwsza wydawka" nie ma odpowiednika dla Hydrauliki - dopisywanie
+                      pozycji domyslnych do kazdej receptury to koncepcja specyficzna dla
+                      Elektryki, patrz generator/core_hydraulika.py. */}
+                  {document.dzial !== 'hydraulika' && (
+                    <FormControlLabel
+                      control={
+                        <Checkbox checked={firstWydawka} onChange={(e) => setFirstWydawka(e.target.checked)} />
+                      }
+                      label="Pierwsza wydawka (dołącz bazę materiałów)"
+                    />
+                  )}
+                  <Button
+                    variant="contained"
+                    startIcon={<DownloadIcon />}
+                    onClick={() => {
+                      setGenerateError(null)
+                      generateMutation.mutate()
+                    }}
+                    disabled={generateMutation.isPending}
+                  >
+                    Generuj
+                  </Button>
+                </Stack>
+                {generateError && (
+                  <Alert severity="error" sx={{ mt: 2 }}>
+                    {generateError}
                   </Alert>
-                ) : (
-                  <>
-                    <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
-                      <FormControlLabel
-                        control={
-                          <Checkbox checked={firstWydawka} onChange={(e) => setFirstWydawka(e.target.checked)} />
-                        }
-                        label="Pierwsza wydawka (dołącz bazę materiałów)"
-                      />
-                      <Button
-                        variant="contained"
-                        startIcon={<DownloadIcon />}
-                        onClick={() => {
-                          setGenerateError(null)
-                          generateMutation.mutate()
-                        }}
-                        disabled={generateMutation.isPending}
-                      >
-                        Generuj
-                      </Button>
-                    </Stack>
-                    {generateError && (
-                      <Alert severity="error" sx={{ mt: 2 }}>
-                        {generateError}
-                      </Alert>
-                    )}
-                  </>
                 )}
               </Paper>
             </>

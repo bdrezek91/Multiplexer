@@ -204,11 +204,11 @@ def test_generate_cudzy_dokument_zwraca_403(client, db_session, admin_user, elek
     assert r.status_code == 403
 
 
-def test_generate_hydraulika_zwraca_409_generator_niegotowy(
+def test_generate_hydraulika_dziala_wlasnym_generatorem(
     client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_hydraulika_json,
 ):
-    """Krok Hydraulika-3: Generator sprawdzony w Kroku 2 jako NIE-neutralny dzialowo - dokument
-    automatycznie zaklasyfikowany jako Hydraulika musi dostac jawny blad, nie cichy zly wynik."""
+    """Krok Hydraulika-5: /generate uzywa generate_output_hydraulika() dla dokumentow tego
+    dzialu (Krok 2/3 blokowaly to jawnym 409 - odblokowane po porcie generatora)."""
     import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
     key = f"documents/test/{admin_user.id}-hydraulika.jpg"
     get_storage().upload(key, _fake_jpeg_bytes(), "image/jpeg")
@@ -224,5 +224,36 @@ def test_generate_hydraulika_zwraca_409_generator_niegotowy(
         run_ocr_task(str(document.id), db_session)
 
     r = client.post(f"/documents/{document.id}/generate", json={}, headers=admin_headers)
-    assert r.status_code == 409
-    assert "Hydraulika" in r.json()["detail"] or "hydraulika" in r.json()["detail"]
+    assert r.status_code == 200, r.text
+    text = r.content.decode("cp1250")
+    assert text.strip() == "BOJLER 80 L;1;;SZT;"
+
+
+def test_generate_hydraulika_zachowuje_kolejnosc_z_dokumentu_zrodlowego(
+    client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_hydraulika_json,
+):
+    """Krok Hydraulika-5: bez fizycznego sortowania jak w Elektryce - kolejnosc wyniku musi
+    odpowiadac kolejnosci pozycji zwroconej przez OCR (kolumna DocumentItemModel.sequence)."""
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+    key = f"documents/test/{admin_user.id}-hydraulika-order.jpg"
+    get_storage().upload(key, _fake_jpeg_bytes(), "image/jpeg")
+    document = doc_repo.create_document(
+        db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
+    )
+    classify_response = '{"dzial":"hydraulika","confidence":95.0}'
+    ocr_response = (
+        '{"pozycje": ['
+        '{"nazwa": "Zawór kątowy 1/2x3/4", "ilosc_wydana": "1", "confidence": 97},'
+        '{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}'
+        ']}'
+    )
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+    ):
+        run_ocr_task(str(document.id), db_session)
+
+    r = client.post(f"/documents/{document.id}/generate", json={}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    kody = [line.split(";")[0] for line in r.content.decode("cp1250").strip().split("\n")]
+    assert kody == ["ZAWÓR KĄTOWY 1/2X3/4", "BOJLER 80 L"]

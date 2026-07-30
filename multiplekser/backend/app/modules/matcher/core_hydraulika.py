@@ -88,6 +88,21 @@ def match_against_catalog_hydraulika(
             if query_val != eff_val:
                 conflicts += 1
 
+        # wymiar_mm (np. blaty kuchenne "1250x600") - brakowalo tego porownania (bug znaleziony
+        # 2026-07-30: "Blat kuchenny 1250x600" i "825x600" oba mylnie dopasowywane do "1200x600",
+        # bo bez konfliktu na wymiarze wszystkie warianty tej samej rodziny maja identyczny
+        # `core` po odjeciu wymiaru -> remis, wygrywa pierwszy w kolejnosci katalogu). Kandydat
+        # jest resortowany tym samym sortowaniem co zapytanie (nie prostym stringowym ==), bo
+        # zapisana w katalogu kolejnosc "825x600" i posortowana alfabetycznie "600x825" moga sie
+        # roznic - identyczny wzorzec jak `dim`/`wymiar_mm` w core_elektryka.py.
+        wymiar = a.get("wymiar_mm")
+        if q.wymiar_mm and wymiar:
+            cand_wymiar = "x".join(sorted(str(wymiar).split("x")))
+            if q.wymiar_mm != cand_wymiar:
+                conflicts += 1
+        elif q.wymiar_mm and not wymiar:
+            missing += 1
+
         score = (conflicts, missing, ratio, cand)
 
         if best is None:

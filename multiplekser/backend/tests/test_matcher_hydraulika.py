@@ -72,6 +72,21 @@ def test_grzejnik_moc_nie_myli_sie_z_grzejnikiem_lazienkowym(catalog):
     assert r.kod != r2.kod
 
 
+def test_blaty_kuchenne_wymiar_rozrozniany(catalog):
+    """Realny blad z produkcji (2026-07-30): 'Blat kuchenny 1250x600' i 'Blat kuchenny 825x600'
+    oba mylnie dopasowywane do 'BLAT KUCHENNY 1200X600' - matcher Hydrauliki w ogole nie
+    porownywal atrybutu wymiar_mm (byl ekstrahowany przez parser, ale pomijany przy liczeniu
+    konfliktow), wiec cala rodzina "Blat kuchenny {wymiar}" remisowala i zawsze wygrywal
+    pierwszy w kolejnosci katalogu."""
+    r1200 = match_against_catalog_hydraulika("Blat kuchenny 1200x600", catalog)
+    r1250 = match_against_catalog_hydraulika("Blat kuchenny 1250x600", catalog)
+    r825 = match_against_catalog_hydraulika("Blat kuchenny 825x600", catalog)
+    assert r1200.kod == "BLAT KUCHENNY 1200X600"
+    assert r1250.kod == "BLAT KUCHENNY 1250X600"
+    assert r825.kod == "BLAT KUCHENNY 825X600"
+    assert len({r1200.kod, r1250.kod, r825.kod}) == 3
+
+
 def test_full_catalog_smoke(catalog):
     """Smoke test na calym katalogu (kody jako wlasne zapytania - najlatwiejszy przypadek,
     powinien dawac wysoki odsetek 'ok') - punkt odniesienia do przyszlych poprawek."""

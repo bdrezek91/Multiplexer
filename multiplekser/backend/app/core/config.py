@@ -40,8 +40,14 @@ class Settings(BaseSettings):
     ocr_timeout_seconds: int = 90
 
     # Skalowanie zdjec (nie-PDF) przed wyslaniem do AI - mniejszy upload = szybsza odpowiedz.
-    ocr_image_max_side: int = 1800
-    ocr_image_quality: int = 85
+    # Podniesione z 1800/85 (port 1:1 z monolitu) - realny przypadek z produkcji (patrz
+    # docs/RAPORT_PORTABLE_1.md): drobne odreczne znaki (np. cyfra "1" tuz obok ptaszka
+    # potwierdzenia) tracily wyrazistosc przy kompresji, model czasem nie mial pewnosci czy to
+    # cyfra czy sam ptaszek. Wyzsza rozdzielczosc/jakosc kosztuje kilka sekund dluzszy upload,
+    # ale zachowuje wiecej szczegolow drobnego pisma - w parze z doprecyzowanym promptem (patrz
+    # ocr/prompt.py, _ZNACZNIKI_DOPISEK).
+    ocr_image_max_side: int = 2600
+    ocr_image_quality: int = 95
 
 
 settings = Settings()

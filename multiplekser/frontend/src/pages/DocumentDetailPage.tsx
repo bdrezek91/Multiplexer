@@ -21,6 +21,7 @@ import {
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DownloadIcon from '@mui/icons-material/Download'
+import { alpha } from '@mui/material/styles'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, type FocusEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -273,7 +274,22 @@ export function DocumentDetailPage() {
                       </TableRow>
                     )}
                     {document.items.map((item) => (
-                      <TableRow key={item.id} hover>
+                      <TableRow
+                        key={item.id}
+                        hover
+                        // Pusta ilosc finalna dla pozycji, ktora w ogole trafila do wyniku, jest
+                        // podejrzana - AI zwraca pozycje tylko gdy cos w wierszu wykryl (patrz
+                        // prompt: "jesli wiersz w obu kolumnach jest pusty - pomin go
+                        // calkowicie"), wiec pusta ilosc przy istniejacej pozycji czesto oznacza
+                        // niejednoznaczny odczyt odreczny (np. "1" pomylona z samym ptaszkiem
+                        // potwierdzenia - patrz docs/RAPORT_PORTABLE_1.md i historia czatu) -
+                        // wyroznienie ma zwrocic na to uwage osoby weryfikujacej dokument.
+                        sx={
+                          item.ilosc_finalna == null
+                            ? { bgcolor: (theme) => alpha(theme.palette.warning.main, 0.12) }
+                            : undefined
+                        }
+                      >
                         <TableCell>
                           {item.rozpoznana_nazwa}
                           {item.needs_review && (

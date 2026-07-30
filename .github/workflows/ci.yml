@@ -1,0 +1,74 @@
+name: CI
+
+# Etap "quick winy" (2026-07-30) - dotad nic automatycznie nie odpalalo 240+ testow backendu
+# ani testow frontendu przy pushu, wiec zepsuty kod mogl trafic na main bez sladu az do
+# nastepnego recznego `pytest`/`npm run test`. Ten workflow uruchamia obie suity oraz build
+# frontendu (lapie bledy TypeScript) przy kazdym pushu i kazdym PR.
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      # Dane logowania musza sie zgadzac z domyslnym TEST_DATABASE_URL w backend/tests/conftest.py.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: multiplekser
+          POSTGRES_PASSWORD: multiplekser_dev
+          POSTGRES_DB: multiplekser_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      # Wymagany od Etapu "quick winy" - rate limiting logowania (/auth/token) trzyma liczniki
+      # w Redis, wiec logowanie w prawie kazdym tescie (fixtures admin_headers/elektryk_headers)
+      # tez tego wymaga - patrz backend/tests/conftest.py: _reset_rate_limiter.
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: multiplekser/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Zainstaluj zależności
+        run: pip install -r requirements.txt
+      - name: Testy (pytest)
+        env:
+          TEST_DATABASE_URL: postgresql://multiplekser:multiplekser_dev@localhost:5432/multiplekser_test
+          REDIS_URL: redis://localhost:6379/0
+        run: pytest tests/ -v
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: multiplekser/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: multiplekser/frontend/package-lock.json
+      - name: Zainstaluj zależności
+        run: npm ci
+      - name: Testy (Vitest)
+        run: npm run test -- --run
+      - name: Build (tsc + vite) - lapie bledy TypeScript
+        run: npm run build

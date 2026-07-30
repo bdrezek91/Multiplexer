@@ -1,0 +1,1022 @@
+[
+ {
+  "kod": "BATERIA UMYWALKOWA",
+  "nazwa": "Bateria umywalkowa"
+ },
+ {
+  "kod": "BLAT DO SZAFKI CZARNEJ 60 CM PREMIUM",
+  "nazwa": "Blat do szafki czarnej 60 cm Premium"
+ },
+ {
+  "kod": "BLAT KUCHENNY 1200X600",
+  "nazwa": "Blat kuchenny 1200x600"
+ },
+ {
+  "kod": "BLAT KUCHENNY 1250X600",
+  "nazwa": "Blat kuchenny 1250x600"
+ },
+ {
+  "kod": "BLAT KUCHENNY 825X600 ",
+  "nazwa": "Blat kuchenny 825x600"
+ },
+ {
+  "kod": "BOJLER 50 L",
+  "nazwa": "Bojler 50 L"
+ },
+ {
+  "kod": "BOJLER 80 L",
+  "nazwa": "Bojler 80 L"
+ },
+ {
+  "kod": "CZWÓRNIK 110X50 90 ST ",
+  "nazwa": "Czwórnik 110x50 90 st"
+ },
+ {
+  "kod": "CZWÓRNIK 16X16X16X16 PEX",
+  "nazwa": "Czwórnik 16x16x16x16 PEX"
+ },
+ {
+  "kod": "CZWÓRNIK FI 110/110/50/90 ST",
+  "nazwa": "Czwórnik fi 110/110/50/90 st"
+ },
+ {
+  "kod": "DRZWICZKI REWIZYJNE CZARNE",
+  "nazwa": "Drzwiczki rewizyjne czarne"
+ },
+ {
+  "kod": "GRZEJNIK ŁAZIENKOWY 40X70 BIAŁY",
+  "nazwa": "Grzejnik łazienkowy 40x70 biały"
+ },
+ {
+  "kod": "GRZEJNIK ŁAZIENKOWY 40X70 CZARNY",
+  "nazwa": "Grzejnik łazienkowy 40x70 czarny"
+ },
+ {
+  "kod": "KABINA PRYSZNICOWA 80 CM",
+  "nazwa": "Kabina prysznicowa 80 cm"
+ },
+ {
+  "kod": "KABINA PRYSZNICOWA 80 CM CZARNA PREMIUM",
+  "nazwa": "Kabina prysznicowa 80 cm czarna"
+ },
+ {
+  "kod": "KABINA PRYSZNICOWA 90 CM",
+  "nazwa": "Kabina prysznicowa 90 cm"
+ },
+ {
+  "kod": "KABINA PRYSZNICOWA 90 CM CZARNA",
+  "nazwa": "Kabina prysznicowa 90 cm czarna"
+ },
+ {
+  "kod": "KABINA PRYSZNICOWA 90 CM NISKI BRODZIK",
+  "nazwa": "Kabina prysznicowa 90 cm niski brodzik"
+ },
+ {
+  "kod": "KOLANKO FI 110 30 ST",
+  "nazwa": "Kolanko fi 110 30 st"
+ },
+ {
+  "kod": "KOLANKO FI 110 45 ST",
+  "nazwa": "Kolanko fi 110 45 st"
+ },
+ {
+  "kod": "KOLANKO FI 110 67 ST ",
+  "nazwa": "Kolanko fi 110 67 st"
+ },
+ {
+  "kod": "KOLANKO FI 110 90 ST",
+  "nazwa": "Kolanko fi 110 90 st"
+ },
+ {
+  "kod": "KOLANKO FI 20 45 ST ",
+  "nazwa": "Kolanko fi 20 45 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 32 15 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 32 15 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 32 30 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 32 30 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 32 45 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 32 45 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 32 67 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 32 67 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 32 90 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 32 90 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 40 15 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 40 15 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 40 30 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 40 30 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 40 45 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 40 45 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 40 67 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 40 67 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 40 90 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 40 90 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 50 15 ST.",
+  "nazwa": "Kolanko kanalizacyjne fi 50 15 st."
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 50 30 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 50 30 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 50 45 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 50 45 st"
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 50 67 ST.",
+  "nazwa": "Kolanko kanalizacyjne fi 50 67 st."
+ },
+ {
+  "kod": "KOLANKO KANALIZACYJNE FI 50 90 ST",
+  "nazwa": "Kolanko kanalizacyjne fi 50 90 st"
+ },
+ {
+  "kod": "KOLANKO PP FI 20 90 ST",
+  "nazwa": "Kolanko PP fi 20 90 st"
+ },
+ {
+  "kod": "KOLANKO REDUKCYJNE 50X32",
+  "nazwa": "Kolanko redukcyjne 50x32"
+ },
+ {
+  "kod": "KOLANO ŚCIENNE FI 20 GW",
+  "nazwa": "Kolano ścienne fi 20 GW"
+ },
+ {
+  "kod": "KOLANKO WIESZAKOWE GW 16X1/2\" PEX",
+  "nazwa": "Kolanko wieszakowe GW 16x1/2\" PEX"
+ },
+ {
+  "kod": "KOMPAKT WC",
+  "nazwa": "Kompakt WC"
+ },
+ {
+  "kod": "KOŃCÓWKA BEŻOWA ",
+  "nazwa": "Końcówka beżowa"
+ },
+ {
+  "kod": "KOREK DO UMYWALKI NABLATOWEJ CZARNY",
+  "nazwa": "Korek do umywalki nablatowej czarny"
+ },
+ {
+  "kod": "KOREK ZAŚLEPIAJĄCY FI 32",
+  "nazwa": "Korek zaślepiający Fi 32"
+ },
+ {
+  "kod": "KOREK ZAŚLEPIAJĄCY FI 40",
+  "nazwa": "Korek zaślepiający Fi 40"
+ },
+ {
+  "kod": "KOREK ZAŚLEPIAJĄCY FI 50",
+  "nazwa": "Korek zaślepiający Fi 50"
+ },
+ {
+  "kod": "LISTWA BOCZNA ALUMINIOWA ",
+  "nazwa": "Listwa boczna aluminiowa"
+ },
+ {
+  "kod": "LODÓWKA POD ZABUDOWĘ",
+  "nazwa": "Lodówka pod zabudowę"
+ },
+ {
+  "kod": "LUSTRO ŚCIENNE OKRĄGŁE ",
+  "nazwa": "Lustro ścienne okrągłe"
+ },
+ {
+  "kod": "ŁĄCZNIK KOLANKOWY DWUSTRONNY PEX",
+  "nazwa": "Łącznik kolankowy dwustronny PEX"
+ },
+ {
+  "kod": "ŁĄCZNIK KOLANKOWY GW 16X1/2\" PEX",
+  "nazwa": "Łącznik kolankowy GW 16x1/2\" PEX"
+ },
+ {
+  "kod": "ŁĄCZNIK KOLANKOWY GZ 16X1/2\" PEX",
+  "nazwa": "Łącznik kolankowy GZ 16x1/2\" PEX"
+ },
+ {
+  "kod": "ŁĄCZNIK PROSTY GW 16X1/2\" PEX",
+  "nazwa": "Łącznik prosty GW 16x1/2\" PEX"
+ },
+ {
+  "kod": "MIJANKA PP FI 20",
+  "nazwa": "Mijanka PP fi 20"
+ },
+ {
+  "kod": "MUFA DWUKIELICHOWA ",
+  "nazwa": "Mufa dwukielichowa"
+ },
+ {
+  "kod": "MUFA GW",
+  "nazwa": "Mufa GW"
+ },
+ {
+  "kod": "MUFA GZ",
+  "nazwa": "Mufa GZ"
+ },
+ {
+  "kod": "NAKRĘTKA M12",
+  "nazwa": "Nakrętka M12"
+ },
+ {
+  "kod": "NAROŻNIK WEWNĘTRZNY BEŻOWY",
+  "nazwa": "Narożnik wewnętrzny beżowy"
+ },
+ {
+  "kod": "NAROŻNIK ZEWNĘTRZNY BEŻOWY",
+  "nazwa": "Narożnik zewnętrzny beżowy"
+ },
+ {
+  "kod": "ODPOWIETRZNIK AUTOMATYCZNY 1/2” BIAŁY",
+  "nazwa": "Odpowietrznik automatyczny 1/2” biały"
+ },
+ {
+  "kod": "ODPOWIETRZNIK AUTOMATYCZNY 1/2” CZARNY",
+  "nazwa": "Odpowietrznik automatyczny 1/2” czarny"
+ },
+ {
+  "kod": "OKŁADZINA ŚCIENNA 30X60 KAMIEŃ",
+  "nazwa": "Okładzina ścienna 30x60 kamień"
+ },
+ {
+  "kod": "PISUAR",
+  "nazwa": "Pisuar"
+ },
+ {
+  "kod": "PŁYTA INDUKCYJNA DWA POLA ",
+  "nazwa": "Płyta indukcyjna dwa pola"
+ },
+ {
+  "kod": "PODGRZEWACZ NADUMYWALKOWY 10L",
+  "nazwa": "Podgrzewacz Nadumywalkowy 10L"
+ },
+ {
+  "kod": "PODGRZEWACZ PODUMYWALKOWY 10L",
+  "nazwa": "Podgrzewacz podumywalkowy 10L"
+ },
+ {
+  "kod": "PODKŁADKA M12 ",
+  "nazwa": "Podkładka M12"
+ },
+ {
+  "kod": "PRĘT 12X1000",
+  "nazwa": "Pręt 12x1000"
+ },
+ {
+  "kod": "PRZYBLATÓWKA SONOMA",
+  "nazwa": "Przyblatówka sonoma"
+ },
+ {
+  "kod": "REDUKCJA KANALIZACYJNA FI 40X32 ",
+  "nazwa": "Redukcja kanalizacyjna fi 40x32"
+ },
+ {
+  "kod": "REDUKCJA KANALIZACYJNA FI 50X32",
+  "nazwa": "Redukcja kanalizacyjna fi 50x32"
+ },
+ {
+  "kod": "REDUKCJA KANALIZACYJNA FI 50X40",
+  "nazwa": "Redukcja kanalizacyjna fi 50x40"
+ },
+ {
+  "kod": "ROZETA 110",
+  "nazwa": "Rozeta 110"
+ },
+ {
+  "kod": "ROZETA 50 ",
+  "nazwa": "Rozeta 50"
+ },
+ {
+  "kod": "RURA FI 30 100 CM",
+  "nazwa": "Rura fi 30 100 cm"
+ },
+ {
+  "kod": "RURA FI 32 30 CM",
+  "nazwa": "Rura fi 32 30 cm"
+ },
+ {
+  "kod": "RURA FI 32 50 CM",
+  "nazwa": "Rura fi 32 50 cm"
+ },
+ {
+  "kod": "RURA FI 40 100 CM",
+  "nazwa": "Rura fi 40 100 cm"
+ },
+ {
+  "kod": "RURA FI 40 30 CM",
+  "nazwa": "Rura fi 40 30 cm"
+ },
+ {
+  "kod": "RURA FI 40 50 CM",
+  "nazwa": "Rura fi 40 50 cm"
+ },
+ {
+  "kod": "RURA FI 50 100 CM",
+  "nazwa": "Rura fi 50 100 cm"
+ },
+ {
+  "kod": "RURA FI 50 30 CM ",
+  "nazwa": "Rura fi 50 30 cm"
+ },
+ {
+  "kod": "RURA FI 50 50 CM",
+  "nazwa": "Rura fi 50 50 cm"
+ },
+ {
+  "kod": "RURA KANALIZACYJNA 110X2,7X315",
+  "nazwa": "Rura kanalizacyjna 110x2,7x315"
+ },
+ {
+  "kod": "RURA PEX FI 16",
+  "nazwa": "Rura pex fi 16"
+ },
+ {
+  "kod": "RURA PP FI 20",
+  "nazwa": "Rura PP fi 20"
+ },
+ {
+  "kod": "SYFON DO UMYWALKI NABLATOWEJ NISKI",
+  "nazwa": "Syfon do umywalki nablatowej niski"
+ },
+ {
+  "kod": "SYFON PRYSZNICOWY",
+  "nazwa": "Syfon prysznicowy"
+ },
+ {
+  "kod": "SYFON UMYWALKOWY ",
+  "nazwa": "Syfon umywalkowy"
+ },
+ {
+  "kod": "SZAFKA UMYWALKOWA 60CM CZARNA PREMIUM",
+  "nazwa": "Szafka umywalkowa 60cm czarna premium"
+ },
+ {
+  "kod": "SZAFKA Z UMYWALKĄ 50 CM",
+  "nazwa": "Szafka z umywalką 50 cm"
+ },
+ {
+  "kod": "SZYNA DO MONTAŻU SZAFEK",
+  "nazwa": "Szyna do montażu szafek"
+ },
+ {
+  "kod": "ŚRUBA DO ŁĄCZENIA SZAFEK",
+  "nazwa": "Śruba do łączenia szafek"
+ },
+ {
+  "kod": "ŚRUBUNEK DO WODOMIERZY ",
+  "nazwa": "Śrubunek do wodomierzy"
+ },
+ {
+  "kod": "ŚRUBY MONTAŻOWE ",
+  "nazwa": "Śruby montażowe"
+ },
+ {
+  "kod": "TRÓJNIK 16X16X16 PEX",
+  "nazwa": "Trójnik 16x16x16 PEX"
+ },
+ {
+  "kod": "TRÓJNIK KANALIZACYJNY 100X50 90 ST ",
+  "nazwa": "Trójnik kanalizacyjny 100x50 90 st"
+ },
+ {
+  "kod": "TRÓJNIK KANALIZACYJNY FI 32 45 ST ",
+  "nazwa": "Trójnik kanalizacyjny fi 32 45 st"
+ },
+ {
+  "kod": "TRÓJNIK KANALIZACYJNY FI 32 67 ST",
+  "nazwa": "Trójnik kanalizacyjny fi 32 67 st"
+ },
+ {
+  "kod": "TRÓJNIK KANALIZACYJNY FI 40 45 ST ",
+  "nazwa": "Trójnik kanalizacyjny fi 40 45 st"
+ },
+ {
+  "kod": "TRÓJNIK KANALIZACYJNY FI 40 90 ST",
+  "nazwa": "Trójnik kanalizacyjny fi 40 90 st"
+ },
+ {
+  "kod": "TRÓJNIK KANALIZACYJNY FI 50 45 ST",
+  "nazwa": "Trójnik kanalizacyjny fi 50 45 st"
+ },
+ {
+  "kod": "TRÓJNIK KANALIZACYJNY FI 50 90 ST",
+  "nazwa": "Trójnik kanalizacyjny fi 50 90 st"
+ },
+ {
+  "kod": "TRÓJNIK PP 20",
+  "nazwa": "Trójnik PP 20"
+ },
+ {
+  "kod": "UCHWYT DO RUR FI 16 (PEX)",
+  "nazwa": "Uchwyt do rur fi 16 (pex)"
+ },
+ {
+  "kod": "UCHWYT DO RUR FI 32 ",
+  "nazwa": "Uchwyt do rur fi 32"
+ },
+ {
+  "kod": "UCHWYT DO RUR FI 40",
+  "nazwa": "Uchwyt do rur fi 40"
+ },
+ {
+  "kod": "UCHWYT DO RUR FI 50 ",
+  "nazwa": "Uchwyt do rur fi 50"
+ },
+ {
+  "kod": "UCHWYT RUR PODWÓJNY FI 20",
+  "nazwa": "Uchwyt rur podwójny fi 20"
+ },
+ {
+  "kod": "UCHWYT RUR POJEDYŃCZY FI 20 PP",
+  "nazwa": "Uchwyt rur pojedyńczy fi 20 PP"
+ },
+ {
+  "kod": "UMYWALKA NABLATOWA",
+  "nazwa": "Umywalka nablatowa"
+ },
+ {
+  "kod": "WĄŻ 1/2 X 1/2 120 CM Z KOLANKIEM",
+  "nazwa": "Wąż 1/2 x 1/2 120 cm z kolankiem"
+ },
+ {
+  "kod": "WĄŻ 1/2 X 1/2 40 CM Z KOLANKIEM",
+  "nazwa": "Wąż 1/2 x 1/2 40 cm z kolankiem"
+ },
+ {
+  "kod": "WĄŻ 1/2X1/2 CALA 30 CM",
+  "nazwa": "Wąż 1/2x1/2 cala 30 cm"
+ },
+ {
+  "kod": "WĄŻ 1/2X1/2 CALA 40 CM ",
+  "nazwa": "Wąż 1/2x1/2 cala 40 cm"
+ },
+ {
+  "kod": "WĄŻ 1/2X3/8 CALA 40 CM ",
+  "nazwa": "Wąż 1/2x3/8 cala 40 cm"
+ },
+ {
+  "kod": "WĄŻ 3/8X3/8 CALA 30 CM",
+  "nazwa": "Wąż 3/8x3/8 cala 30 cm"
+ },
+ {
+  "kod": "WĄŻ 3/8X3/8 CALA 40 CM",
+  "nazwa": "Wąż 3/8x3/8 cala 40 cm"
+ },
+ {
+  "kod": "ZAŚLEPKA FI 10 ANTRACYT",
+  "nazwa": "Zaślepka fi 10 antracyt"
+ },
+ {
+  "kod": "ZAŚLEPKA FI 13 ANTRACYT",
+  "nazwa": "Zaślepka fi 13 antracyt"
+ },
+ {
+  "kod": "ZAŚLEPKA FI 13 BIAŁA",
+  "nazwa": "Zaślepka fi 13 biała"
+ },
+ {
+  "kod": "ZAŚLEPKA FI 17 ANTRACYT ",
+  "nazwa": "Zaślepka fi 17 antracyt"
+ },
+ {
+  "kod": "ZAŚLEPKA FI 19 ANTRACYT ",
+  "nazwa": "Zaślepka fi 19 antracyt"
+ },
+ {
+  "kod": "ZAŚLEPKA FI 19 BIAŁA",
+  "nazwa": "Zaślepka fi 19 biała"
+ },
+ {
+  "kod": "ZAWÓR KĄTOWY 1/2X3/4",
+  "nazwa": "Zawór kątowy 1/2x3/4"
+ },
+ {
+  "kod": "ZAWÓR CZASOWY DO PISUARU",
+  "nazwa": "Zawór czasowy do pisuaru"
+ },
+ {
+  "kod": "ZAWÓR CZERPALNY 1/2",
+  "nazwa": "Zawór czerpalny 1/2"
+ },
+ {
+  "kod": "ZAWÓR KĄTOWY 1/2X1/2",
+  "nazwa": "Zawór kątowy 1/2x1/2"
+ },
+ {
+  "kod": "ZAWÓR KĄTOWY 1/2X3/8 ",
+  "nazwa": "Zawór kątowy 1/2x3/8"
+ },
+ {
+  "kod": "ZAWÓR KULOWY 1/2 CALA",
+  "nazwa": "Zawór kulowy 1/2 cala"
+ },
+ {
+  "kod": "ZAWÓR KULOWY DN15 PN16 ZE ŚRUBUNKIEM ",
+  "nazwa": "Zawór kulowy DN15 PN16 ze śrubunkiem"
+ },
+ {
+  "kod": "ZESTAW GEBERIT WC",
+  "nazwa": "Zestaw geberit WC"
+ },
+ {
+  "kod": "ZESTAW MEBLI BIAŁYCH",
+  "nazwa": "Zestaw mebli białych"
+ },
+ {
+  "kod": "ZESTAW MEBLI PREMIUM",
+  "nazwa": "Zestaw mebli premium"
+ },
+ {
+  "kod": "ZESTAW MEBLI PREMIUM Z SZUFLADĄ ",
+  "nazwa": "Zestaw mebli premium z szufladą"
+ },
+ {
+  "kod": "ZLEW KUCHENNY CZARNY + BATERIA + KOSZYCZEK + SYFON",
+  "nazwa": "Zlew kuchenny czarny + bateria + koszyczek + syfon"
+ },
+ {
+  "kod": "ZŁĄCZE HARMONIJKOWE WC",
+  "nazwa": "Złącze harmonijkowe WC"
+ },
+ {
+  "kod": "ZŁĄCZKA SKRĘCANA 16X1/2\" GW PEX",
+  "nazwa": "Złączka skręcana 16x1/2\" GW PEX"
+ },
+ {
+  "kod": "ZŁĄCZKA SKRĘCANA 16X1/2\" GZ PEX",
+  "nazwa": "Złączka skręcana 16x1/2\" GZ PEX"
+ },
+ {
+  "kod": "ZŁĄCZKA SKRĘCANA 16X16 PEX",
+  "nazwa": "Złączka skręcana 16x16 PEX"
+ },
+ {
+  "kod": "ZŁĄCZKA ZACISKOWA  PP 20X1/2",
+  "nazwa": "Złączka zaciskowa  PP 20x1/2"
+ },
+ {
+  "kod": "BATERIA PRYSZNICOWA",
+  "nazwa": "Bateria prysznicowa"
+ },
+ {
+  "kod": "BATERIA UMYWALKOWA CZARNA",
+  "nazwa": "Bateria umywalkowa czarna"
+ },
+ {
+  "kod": "BATERIA ZLEWOZMYWAKOWA CZARNA",
+  "nazwa": "Bateria zlewozmywakowa czarna"
+ },
+ {
+  "kod": "BLAT KUCHENNY 1550X600 ",
+  "nazwa": "Blat kuchenny 1550x600"
+ },
+ {
+  "kod": "BLAT KUCHENNY LANCELOT MEBLE PREMIUM",
+  "nazwa": "Blat kuchenny Lancelot meble Premium"
+ },
+ {
+  "kod": "DRZWICZKI REWIZYJNE 30/30 BIAŁE ",
+  "nazwa": "Drzwiczki rewizyjne 30/30 białe"
+ },
+ {
+  "kod": "GRZEJNIK 1000W ",
+  "nazwa": "Grzejnik 1000W"
+ },
+ {
+  "kod": "GRZEJNIK 2000W ",
+  "nazwa": "Grzejnik 2000W"
+ },
+ {
+  "kod": "GRZEJNIK 2000W (30/06/2026)",
+  "nazwa": "Grzejnik 2000W (30/06/2026)"
+ },
+ {
+  "kod": "KABINA PRYSZNICOWA (105/04/2026)",
+  "nazwa": "Kabina prysznicowa (105/04/2026)"
+ },
+ {
+  "kod": "KOMPAKT WC (DEANTE)",
+  "nazwa": "Kompakt WC (Deante)"
+ },
+ {
+  "kod": "KOMPLET ŚRUB DO MOCOWANIA KOMPAKTU",
+  "nazwa": "Komplet śrub do mocowania kompaktu"
+ },
+ {
+  "kod": "KOREK ZAŚLEPIAJĄCY CHROM 1/2 \"",
+  "nazwa": "Korek zaślepiający chrom 1/2 \""
+ },
+ {
+  "kod": "KRAN CHROMOWANY 1/2X3/4 ",
+  "nazwa": "Kran chromowany 1/2x3/4"
+ },
+ {
+  "kod": "KRATKA WENTYLACYJNA + OKAPNIK (50-57/07/2025)",
+  "nazwa": "Kratka wentylacyjna + okapnik (50-57/07/2025)"
+ },
+ {
+  "kod": "KRATKA WENTYLACYJNA 140X140 BIAŁA",
+  "nazwa": "Kratka wentylacyjna 140x140 biała"
+ },
+ {
+  "kod": "KRATKA WENTYLACYJNA 140X140 CZARNA",
+  "nazwa": "Kratka wentylacyjna 140x140 czarna"
+ },
+ {
+  "kod": "KRATKA WENTYLACYJNA 140X140 GRAFIT ",
+  "nazwa": "Kratka wentylacyjna 140x140 grafit"
+ },
+ {
+  "kod": "KRATKA WENTYLACYJNA ŻALUZJA BIAŁA",
+  "nazwa": "Kratka wentylacyjna żaluzja biała"
+ },
+ {
+  "kod": "NAROŻNIK WEWNĘTRZNY SREBRNY",
+  "nazwa": "Narożnik wewnętrzny srebrny"
+ },
+ {
+  "kod": "ODPŁYW PODŁOGOWY 55-57/04/2026",
+  "nazwa": "Odpływ podłogowy 55-57/04/2026"
+ },
+ {
+  "kod": "OSŁONA WENT. 14X14 CZARNA",
+  "nazwa": "Osłona went. 14x14 czarne"
+ },
+ {
+  "kod": "PODGRZEWACZ PRZEPŁYWOWY 21KW (97/01/2026)",
+  "nazwa": "PODGRZEWACZ PRZEPŁYWOWY 21KW (97/01/2026)"
+ },
+ {
+  "kod": "PRZYBLATÓWKA SREBRNA",
+  "nazwa": "Przyblatówka srebrna"
+ },
+ {
+  "kod": "ROZETA 130 STALOWA",
+  "nazwa": "Rozeta 130 stalowa"
+ },
+ {
+  "kod": "RURA WODNA NIEBIESKA 32X3,0 ",
+  "nazwa": "Rura wodna niebieska 32x3,0"
+ },
+ {
+  "kod": "SYFON ZLEWOZMYWAKOWY",
+  "nazwa": "Syfon zlewozmywakowy"
+ },
+ {
+  "kod": "SZAFKA Z UMYWALKĄ 60 CM (97/01/2026)",
+  "nazwa": "Szafka z umywalką 60 cm (97/01/2026)"
+ },
+ {
+  "kod": "SZCZOTKA DO WC CZARNA",
+  "nazwa": "Szczotka do WC czarna"
+ },
+ {
+  "kod": "UCHWYT NA PAPIER CZARNY ",
+  "nazwa": "Uchwyt na papier czarny"
+ },
+ {
+  "kod": "UMYWALKA 50CM PROSTOKĄTNA",
+  "nazwa": "Umywalka 50cm prostokątna"
+ },
+ {
+  "kod": "UMYWALKA NABLATOWA ",
+  "nazwa": "Umywalka nablatowa"
+ },
+ {
+  "kod": "WODOMIERZ NA ZIMNĄ WODĘ ",
+  "nazwa": "Wodomierz na zimną wodę"
+ },
+ {
+  "kod": "WYLOT WENTYLACYJNY Z OKAPEM 125 GRAFIT",
+  "nazwa": "wylot wentylacyjny z okapem 125 grafit"
+ },
+ {
+  "kod": "ZESTAW GEBERIT WC (DEANTE)",
+  "nazwa": "Zestaw geberit WC (Deante)"
+ },
+ {
+  "kod": "ZLEW KUCHENNY + BATERIA + SYFON (DEANTE)",
+  "nazwa": "Zlew kuchenny + bateria + syfon (Deante)"
+ },
+ {
+  "kod": "BATERIA UMYWALKOWA (DEANTE)",
+  "nazwa": "Bateria umywalkowa (Deante)"
+ },
+ {
+  "kod": "BATERIA ZLEWOZMYWAKOWA",
+  "nazwa": "Bateria zlewozmywakowa"
+ },
+ {
+  "kod": "BLAT KUCHENNY 1400X600",
+  "nazwa": "Blat kuchenny 1400x600"
+ },
+ {
+  "kod": "BLAT KUCHENNY 1450X600",
+  "nazwa": "Blat kuchenny 1450x600"
+ },
+ {
+  "kod": "BLAT KUCHENNY 1650X600",
+  "nazwa": "Blat kuchenny 1650x600"
+ },
+ {
+  "kod": "BLAT KUCHENNY 1700X600",
+  "nazwa": "Blat kuchenny 1700x600"
+ },
+ {
+  "kod": "BLAT KUCHENNY 1750X600",
+  "nazwa": "Blat kuchenny 1750x600"
+ },
+ {
+  "kod": "BLAT KUCHENNY 1800X600",
+  "nazwa": "Blat kuchenny 1800x600"
+ },
+ {
+  "kod": "BOJLER 200 L",
+  "nazwa": "Bojler 200 L"
+ },
+ {
+  "kod": "BOJLER 30 L",
+  "nazwa": "Bojler 30 L"
+ },
+ {
+  "kod": "ELEKTRYCZNY OGRZEWACZ WODY ",
+  "nazwa": "Elektryczny ogrzewacz wody"
+ },
+ {
+  "kod": "GRZEJNIK 1500W",
+  "nazwa": "Grzejnik 1500W"
+ },
+ {
+  "kod": "GRZEJNIK 500W ",
+  "nazwa": "Grzejnik 500W"
+ },
+ {
+  "kod": "KABINA PRYSZNICOWA 80 CM NISKI BRODZIK",
+  "nazwa": "Kabina prysznicowa 80 cm niski brodzik"
+ },
+ {
+  "kod": "KOLANKO 3/4",
+  "nazwa": "Kolanko 3/4"
+ },
+ {
+  "kod": "KOLANKO FI 110 15 ST",
+  "nazwa": "Kolanko fi 110 15 st"
+ },
+ {
+  "kod": "KOLANKO SKRĘCANE GW",
+  "nazwa": "Kolanko skręcane GW"
+ },
+ {
+  "kod": "KOMPAKT WC PREMIUM (DEANTE)",
+  "nazwa": "Kompakt WC premium (Deante)"
+ },
+ {
+  "kod": "KOREK CZARNY 1/2",
+  "nazwa": "Korek czarny 1/2"
+ },
+ {
+  "kod": "KOREK ZAŚLEPIAJĄCY 3/8 \" CHROM",
+  "nazwa": "Korek zaślepiający 3/8 \" chrom"
+ },
+ {
+  "kod": "KOŃCÓWKA SREBRNA",
+  "nazwa": "Końcówka srebrna"
+ },
+ {
+  "kod": "KRATKA WENTYLACYJNA 25X25",
+  "nazwa": "Kratka wentylacyjna 25x25"
+ },
+ {
+  "kod": "KRATKA WENTYLACYJNA CZARNA",
+  "nazwa": "Kratka wentylacyjna czarna"
+ },
+ {
+  "kod": "KRATKA WENTYLACYJNA ŻALUZJA GRAFIT",
+  "nazwa": "Kratka wentylacyjna żaluzja grafit"
+ },
+ {
+  "kod": "KUREK KĄTOWY 1/2X3/4",
+  "nazwa": "Kurek kątowy 1/2x3/4"
+ },
+ {
+  "kod": "KĄTOWNIK ALU DO OKŁADZINY ŚCIENNEJ",
+  "nazwa": "Kątownik Alu do okładziny ściennej"
+ },
+ {
+  "kod": "LISTWA PRZYSZYBOWA BIAŁA",
+  "nazwa": "Listwa przyszybowa biała"
+ },
+ {
+  "kod": "MISKA DO STELAŻA WC",
+  "nazwa": "Miska do stelaża WC"
+ },
+ {
+  "kod": "MUFA DO PODGRZEWACZA 21 KW",
+  "nazwa": "mufa do podgrzewacza 21 KW"
+ },
+ {
+  "kod": "NYPEL 1/2",
+  "nazwa": "Nypel 1/2"
+ },
+ {
+  "kod": "ODPOWIETRZNIK AUTOMATYCZNY 1/2” MOSIĄDZ",
+  "nazwa": "Odpowietrznik automatyczny 1/2” Mosiądz"
+ },
+ {
+  "kod": "OGRZEWACZ PRZECIWMROZOWY GRZEJNIK 400W",
+  "nazwa": "Ogrzewacz przeciwmrozowy grzejnik 400W"
+ },
+ {
+  "kod": "PISUAR Z ZAWOREM ",
+  "nazwa": "Pisuar z zaworem"
+ },
+ {
+  "kod": "PISUAR Z ZAWOREM I SYFONEM",
+  "nazwa": "Pisuar z zaworem i syfonem"
+ },
+ {
+  "kod": "PODGRZEWACZ NADUMYWALKOWY 5 L ",
+  "nazwa": "Podgrzewacz nadumywalkowy 5 L"
+ },
+ {
+  "kod": "PODGRZEWACZ PODUMYWALKOWY 5 L ",
+  "nazwa": "Podgrzewacz podumywalkowy 5 L"
+ },
+ {
+  "kod": "REDUKCJA  100/50",
+  "nazwa": "Redukcja  100/50"
+ },
+ {
+  "kod": "REDUKCJA 1/2 ",
+  "nazwa": "Redukcja 1/2"
+ },
+ {
+  "kod": "RURA 16X2",
+  "nazwa": "Rura 16x2"
+ },
+ {
+  "kod": "RURA 50 100CM",
+  "nazwa": "Rura 50 100cm"
+ },
+ {
+  "kod": "RURA FI 40 25 CM",
+  "nazwa": "Rura fi 40 25 cm"
+ },
+ {
+  "kod": "RURA FI 50 200 CM",
+  "nazwa": "Rura fi 50 200 cm"
+ },
+ {
+  "kod": "RURA KANALIZACYJNA 110X2,7 0,5M ",
+  "nazwa": "Rura kanalizacyjna 110x2,7 0,5m"
+ },
+ {
+  "kod": "RURA KANALIZACYJNA 110X2,7 1M ",
+  "nazwa": "Rura kanalizacyjna 110x2,7 1m"
+ },
+ {
+  "kod": "RURA KANALIZACYJNA 50X1,8 1M ",
+  "nazwa": "Rura kanalizacyjna 50x1,8 1m"
+ },
+ {
+  "kod": "RURA KANALIZACYJNA WEW. 110X2,7 2M ",
+  "nazwa": "Rura Kanalizacyjna wew. 110x2,7 2M"
+ },
+ {
+  "kod": "RURA KARBOWANA AROT  NIEBIESKA 40/32 ",
+  "nazwa": "Rura karbowana arot  niebieska 40/32"
+ },
+ {
+  "kod": "STELAŻ PODTYNKOWY WC",
+  "nazwa": "Stelaż podtynkowy WC"
+ },
+ {
+  "kod": "SYFON DO PISUARU",
+  "nazwa": "Syfon do pisuaru"
+ },
+ {
+  "kod": "SZAFKA 50 CM PROSTOKĄTNA (98/02/2026)",
+  "nazwa": "Szafka 50 cm prostokątna"
+ },
+ {
+  "kod": "SZAFKA Z UMYWALKĄ 45 CM",
+  "nazwa": "Szafka z umywalką 45 cm"
+ },
+ {
+  "kod": "SZAFKA Z UMYWALKĄ 50 CM CZARNA",
+  "nazwa": "Szafka z umywalką 50 cm czarna"
+ },
+ {
+  "kod": "SZAFKA Z UMYWALKĄ 60 CM CZARNA ",
+  "nazwa": "Szafka z umywalką 60 cm czarna"
+ },
+ {
+  "kod": "TRÓJNIK KANALIZACYJNY FI 50 67 ST",
+  "nazwa": "Trójnik kanalizacyjny fi 50 67 st"
+ },
+ {
+  "kod": "TRÓJNIK ZACISKOWY CZARNY 32 PE ",
+  "nazwa": "Trójnik zaciskowy czarny 32 PE"
+ },
+ {
+  "kod": "UCHWYT RUR POJEDYŃCZY FI 34",
+  "nazwa": "Uchwyt rur pojedyńczy fi 34"
+ },
+ {
+  "kod": "USZCZELKA WĘŻA",
+  "nazwa": "uszczelka węża"
+ },
+ {
+  "kod": "WĄŻ 1/2X1/2 CALA 100 CM",
+  "nazwa": "Wąż 1/2x1/2 cala 100 cm"
+ },
+ {
+  "kod": "WĄŻ 1/2X1/2 CALA 20 CM ",
+  "nazwa": "Wąż 1/2x1/2 cala 20 cm"
+ },
+ {
+  "kod": "WĄŻ 1/2X3/8 CALA 30 CM",
+  "nazwa": "Wąż 1/2x3/8 cala 30 cm"
+ },
+ {
+  "kod": "ZAWÓR PISUAROWY FERRO",
+  "nazwa": "Zawór pisuarowy ferro"
+ },
+ {
+  "kod": "ZAŚLEPKA FI 17 BIAŁA",
+  "nazwa": "Zaślepka fi 17 biała"
+ },
+ {
+  "kod": "ZESTAW HYDRAULICZNY (HALA STOLARKI)",
+  "nazwa": "Zestaw hydrauliczny (hala stolarki)"
+ },
+ {
+  "kod": "ZESTAW HYDRAULIKI DO HALI 72",
+  "nazwa": "Zestaw hydrauliki do hali 72"
+ },
+ {
+  "kod": "ZESTAW PRZYŁĄCZENIOWY GEBERIT",
+  "nazwa": "Zestaw przyłączeniowy geberit"
+ },
+ {
+  "kod": "ZESTAW WENTYLACYJNY",
+  "nazwa": "Zestaw wentylacyjny"
+ },
+ {
+  "kod": "ZESTAW WKRĘTÓW DO HYDRAULIKI ",
+  "nazwa": "Zestaw wkrętów do hydrauliki"
+ },
+ {
+  "kod": "ZLEW KUCHENNY Z SYFONEM",
+  "nazwa": "Zlew kuchenny z syfonem"
+ },
+ {
+  "kod": "ZLEW KUCHENNY Z SYFONEM GRANITOWY",
+  "nazwa": "Zlew kuchenny z syfonem granitowy"
+ },
+ {
+  "kod": "ZŁĄCZE HARMONIJKOWE WC WZMOCNIONE ",
+  "nazwa": "Złącze harmonijkowe WC wzmocnione"
+ },
+ {
+  "kod": "ZŁĄCZE SKRĘCANE GW",
+  "nazwa": "Złącze skręcane GW"
+ },
+ {
+  "kod": "ZŁĄCZKA ZACISKOWA 32X1 GW - PE",
+  "nazwa": "Złączka zaciskowa 32x1 GW - PE"
+ },
+ {
+  "kod": "ZŁĄCZKA ZACISKOWA 32X1\" GZ PE",
+  "nazwa": "Złączka zaciskowa 32x1\" GZ PE"
+ },
+ {
+  "kod": "ŁĄCZNIK H DO PLIŚNI BIAŁY",
+  "nazwa": "Łącznik H do pliśni biały"
+ },
+ {
+  "kod": "ŁĄCZNIK PROSTY GZ 16X1/2\" PEX",
+  "nazwa": "Łącznik prosty GZ 16x1/2\" PEX"
+ }
+]

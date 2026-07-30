@@ -88,10 +88,34 @@ migrację **razem ze mną, krok po kroku**. Nie realizuj całego planu naraz —
 | 7 | Nginx, docker-compose produkcyjny, dokumentacja wdrożeniowa |
 | 8+ | Kolejne działy (hydraulika, stolarka...) jako dodatkowe `grupa`/katalogi |
 
+## Stan obecny repozytorium (zaktualizowane po Kroku Hydraulika-1)
+
+Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
+
+- **Elektryka**: pełny stos, Etapy 0-11 + poprawki (parser/matcher/OCR/dokumenty/generator/
+  auth/frontend/docker prod) — bez zmian w tym kroku.
+- **Hydraulika**: fundament danych gotowy — `parser/hydraulika.py` (`core_and_attrs_hydraulika`),
+  `matcher/core.py: match_against_catalog_hydraulika()`, kolumna `dzial` na `product`
+  (separacja logiczna, `kod` unikalny per-dzial), katalog `baza_hydraulika.json` (247+7 pozycji)
+  zaimportowany. **Jeszcze nie podłączone**: routery `/products`/`/match` (wciąż domyślnie
+  `dzial="elektryka"`), OCR (klasyfikacja działu), frontend. Szczegóły:
+  `docs/RAPORT_ETAP_HYDRAULIKA_1.md`, plan pełny: `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
+
+**Decyzja architektoniczna (nie kwestionować bez nowego powodu)**: Matcher NIE używa
+generycznego silnika `AttributeRule` mimo że taki był zaproponowany w
+`docs/MIGRATION_PLAN_HYDRAULIKA.md` (sekcja 4.1, z innej, wcześniejszej sesji). Użytkownik
+wybrał jawnie (Krok Hydraulika-1): zachować `special_rules.py` jako mechanizm dla Elektryki,
+a Hydraulikę dodać jako **osobną funkcję** (`match_against_catalog_hydraulika`), tym samym
+stylem co już istniejący, sprawdzony kod — nie jako współdzielony silnik konfiguracji. Ten sam
+wzorzec ("osobna funkcja/dataclass per dział, wspólna tylko dolna warstwa") obowiązuje też w
+Parserze (`parser/core.py` vs `parser/hydraulika.py`) i ma się powtórzyć dla 3. działu, jeśli
+się pojawi — kopiowanie funkcji, nie rozbudowa wspólnego silnika.
+
 ## Jak pracować ze mną w tym repo
 
-1. Na początku każdej sesji przeczytaj `docs/RAPORT_ETAP_N.md` o najwyższym N — to Twój punkt
-   startowy, mówi dokładnie co już działa i co jest następne.
+1. Na początku każdej sesji przeczytaj `docs/RAPORT_ETAP_N.md`/`docs/RAPORT_ETAP_HYDRAULIKA_*.md`
+   o najwyższym numerze — to Twój punkt startowy, mówi dokładnie co już działa i co jest
+   następne. Jeśli pracujesz nad Hydrauliką, przeczytaj też `docs/MIGRATION_PLAN_HYDRAULIKA.md`.
 2. Przed rozpoczęciem etapu: krótko streść mi co planujesz zrobić i zapytaj o potwierdzenie,
    jeśli zmiana dotyka logiki biznesowej, modelu danych lub czegoś nieodwracalnego.
 3. Podczas etapu: rób małe, weryfikowalne kroki (commit po każdym sensownym kawałku).

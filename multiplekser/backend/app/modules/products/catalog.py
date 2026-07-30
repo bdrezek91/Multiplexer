@@ -11,7 +11,12 @@ from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.modules.parser import core_and_attrs, bigrams
+from app.modules.parser import bigrams, core_and_attrs, core_and_attrs_hydraulika
+
+_PARSE_FN_BY_DZIAL = {
+    "elektryka": core_and_attrs,
+    "hydraulika": core_and_attrs_hydraulika,
+}
 
 
 def plain_norm(s: str) -> str:
@@ -47,6 +52,7 @@ class Product:
     aliasy: list[Alias] = field(default_factory=list)
     warianty_magazynowe: Optional[dict] = None
     status: str = "generyczny"
+    dzial: str = "elektryka"
 
     # Pola wyliczone przy budowie katalogu (odpowiednik cand.core/coreBigrams w JS)
     core: str = ""
@@ -55,10 +61,11 @@ class Product:
 
     def __post_init__(self):
         if not self.core:
-            parsed = core_and_attrs(self.nazwa)
+            parse_fn = _PARSE_FN_BY_DZIAL[self.dzial]
+            parsed = parse_fn(self.nazwa)
             self.core = parsed.core
             self.core_bigrams = bigrams(parsed.core)
-            self.phase = parsed.phase
+            self.phase = getattr(parsed, "phase", None)
 
 
 class Catalog:
@@ -95,7 +102,7 @@ class Catalog:
         return None
 
     @classmethod
-    def from_json_dict(cls, db: dict) -> "Catalog":
+    def from_json_dict(cls, db: dict, dzial: str = "elektryka") -> "Catalog":
         products = []
         for section, status in (("generyczne", "generyczny"), ("archiwalne", "archiwalny")):
             for kod, rec in db.get(section, {}).items():
@@ -109,14 +116,17 @@ class Catalog:
                     aliasy=[Alias.from_text(a) for a in (rec.get("aliasy") or [])],
                     warianty_magazynowe=rec.get("warianty_magazynowe"),
                     status=status,
+                    dzial=dzial,
                 ))
         return cls(products)
 
     @classmethod
-    def from_db(cls, session: Session) -> "Catalog":
+    def from_db(cls, session: Session, dzial: str = "elektryka") -> "Catalog":
+        """Separacja logiczna dzialow: zawsze filtruje po kolumnie `dzial`, nigdy nie
+        zwraca produktow z innego dzialu w tym samym Catalog (patrz test_dzial_izolacja)."""
         from .models import ProductModel
 
-        rows = session.query(ProductModel).options(
+        rows = session.query(ProductModel).filter(ProductModel.dzial == dzial).options(
             selectinload(ProductModel.aliasy),
             selectinload(ProductModel.warianty_magazynowe),
         ).all()
@@ -131,6 +141,7 @@ class Catalog:
                 aliasy=[Alias.from_text(a.alias_text) for a in row.aliasy],
                 warianty_magazynowe={w.magazyn: w.kod_docelowy for w in row.warianty_magazynowe} or None,
                 status=row.status,
+                dzial=row.dzial,
             )
             for row in rows
         ]

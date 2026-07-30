@@ -1,14 +1,16 @@
-"""Import katalogu z baza_elektryka.json do Postgresa (Etap 2).
+"""Import katalogu produktow do Postgresa (Etap 2 + Krok Hydraulika-1: parametr dzial).
 
-Idempotentny: kod produktu jest kluczem - istniejacy produkt jest
-aktualizowany (aliasy i warianty magazynowe zastepowane), nowy jest tworzony.
+Idempotentny: kod produktu jest kluczem WEWNATRZ danego dzialu (dwa dzialy moga w teorii
+miec ten sam kod bez kolizji) - istniejacy produkt danego dzialu jest aktualizowany
+(aliasy i warianty magazynowe zastepowane), nowy jest tworzony.
 
 Pola spoza ERD (kod_producenta, zrodlo_stanu, stan) nie sa tracone - trafiaja
 do atrybuty['_meta'], bo ERD z Etapu 0 przewiduje dla nich tylko generyczna
 kolumne jsonb "atrybuty", a nie sa uzywane przez Parser/Matcher.
 
 Uzycie:
-    python -m scripts.import_catalog [sciezka_do_json]
+    python -m scripts.import_catalog [sciezka_do_json] [dzial]
+    python -m scripts.import_catalog tests/fixtures/baza_hydraulika.json hydraulika
 """
 from __future__ import annotations
 
@@ -45,16 +47,16 @@ def _build_atrybuty(rec: dict) -> dict:
     return atrybuty
 
 
-def import_catalog(session: Session, data: dict) -> dict[str, int]:
+def import_catalog(session: Session, data: dict, dzial: str = "elektryka") -> dict[str, int]:
     stats = {"utworzone": 0, "zaktualizowane": 0}
-    existing = {p.kod: p for p in session.query(ProductModel).all()}
+    existing = {p.kod: p for p in session.query(ProductModel).filter_by(dzial=dzial).all()}
 
     for section, status in _SECTION_STATUS.items():
         for kod_key, rec in data.get(section, {}).items():
             kod = rec.get("kod", kod_key)
             product = existing.get(kod)
             if product is None:
-                product = ProductModel(kod=kod)
+                product = ProductModel(kod=kod, dzial=dzial)
                 session.add(product)
                 stats["utworzone"] += 1
             else:
@@ -83,11 +85,12 @@ def import_catalog(session: Session, data: dict) -> dict[str, int]:
 
 def main() -> None:
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else _DEFAULT_PATH
+    dzial = sys.argv[2] if len(sys.argv) > 2 else "elektryka"
     data = json.loads(path.read_text(encoding="utf-8"))
 
     session = SessionLocal()
     try:
-        stats = import_catalog(session, data)
+        stats = import_catalog(session, data, dzial=dzial)
     finally:
         session.close()
 

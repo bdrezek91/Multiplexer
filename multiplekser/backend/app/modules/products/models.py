@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,12 +12,18 @@ from app.core.db import Base
 
 class ProductModel(Base):
     __tablename__ = "product"
+    __table_args__ = (
+        # Kod jest unikalny WEWNATRZ dzialu, nie globalnie (Krok Hydraulika-1) - dwa
+        # niezaleznie budowane katalogi moga miec ten sam kod (np. oba maja "GRZEJNIK 1000W").
+        UniqueConstraint("kod", "dzial", name="uq_product_kod_dzial"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    kod: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    kod: Mapped[str] = mapped_column(String, nullable=False, index=True)
     nazwa: Mapped[str] = mapped_column(String, nullable=False)
     jm: Mapped[str] = mapped_column(String, nullable=False, default="SZT")
     grupa: Mapped[str] = mapped_column(String, nullable=False, default="")
+    dzial: Mapped[str] = mapped_column(String, nullable=False, default="elektryka", index=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="generyczny")
     atrybuty: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     kolor_domniemany: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

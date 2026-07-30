@@ -51,8 +51,9 @@ def list_products(
     search: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    dzial: str = "elektryka",
 ) -> list[ProductOut]:
-    query = _query(session)
+    query = _query(session).filter(ProductModel.dzial == dzial)
     if status:
         query = query.filter(ProductModel.status == status)
     if grupa:
@@ -63,20 +64,23 @@ def list_products(
     return [_to_schema(r) for r in rows]
 
 
-def get_product(session: Session, kod: str) -> ProductOut:
-    row = _query(session).filter(ProductModel.kod == kod).first()
+def get_product(session: Session, kod: str, dzial: str = "elektryka") -> ProductOut:
+    row = _query(session).filter(ProductModel.kod == kod, ProductModel.dzial == dzial).first()
     if row is None:
         raise ProductNotFoundError(kod)
     return _to_schema(row)
 
 
-def create_product(session: Session, data: ProductCreate) -> ProductOut:
-    if session.query(ProductModel).filter(ProductModel.kod == data.kod).first() is not None:
+def create_product(session: Session, data: ProductCreate, dzial: str = "elektryka") -> ProductOut:
+    exists = session.query(ProductModel).filter(
+        ProductModel.kod == data.kod, ProductModel.dzial == dzial
+    ).first()
+    if exists is not None:
         raise DuplicateKodError(data.kod)
 
     row = ProductModel(
         kod=data.kod, nazwa=data.nazwa, jm=data.jm, grupa=data.grupa, status=data.status,
-        atrybuty=data.atrybuty, kolor_domniemany=data.kolor_domniemany,
+        atrybuty=data.atrybuty, kolor_domniemany=data.kolor_domniemany, dzial=dzial,
     )
     row.aliasy = [ProductAliasModel(alias_text=a) for a in data.aliasy]
     row.warianty_magazynowe = [
@@ -88,8 +92,8 @@ def create_product(session: Session, data: ProductCreate) -> ProductOut:
     return _to_schema(row)
 
 
-def update_product(session: Session, kod: str, data: ProductUpdate) -> ProductOut:
-    row = _query(session).filter(ProductModel.kod == kod).first()
+def update_product(session: Session, kod: str, data: ProductUpdate, dzial: str = "elektryka") -> ProductOut:
+    row = _query(session).filter(ProductModel.kod == kod, ProductModel.dzial == dzial).first()
     if row is None:
         raise ProductNotFoundError(kod)
 
@@ -110,8 +114,8 @@ def update_product(session: Session, kod: str, data: ProductUpdate) -> ProductOu
     return _to_schema(row)
 
 
-def delete_product(session: Session, kod: str) -> None:
-    row = session.query(ProductModel).filter(ProductModel.kod == kod).first()
+def delete_product(session: Session, kod: str, dzial: str = "elektryka") -> None:
+    row = session.query(ProductModel).filter(ProductModel.kod == kod, ProductModel.dzial == dzial).first()
     if row is None:
         raise ProductNotFoundError(kod)
     session.delete(row)

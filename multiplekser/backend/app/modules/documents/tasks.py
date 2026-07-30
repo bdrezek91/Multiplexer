@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,7 @@ from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline import OCRUnparsableResponseError, recognize_document
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
 from app.modules.ocr.providers import OCRProviderError
+from app.modules.ocr.verify import verify_ambiguous_quantity
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 
@@ -35,12 +37,77 @@ from . import repository
 
 _PDF_MIME = "application/pdf"
 
+# Retry na PRZEJSCIOWE bledy sieci/dostepnosci (patrz docs/RAPORT_OCR_NIEZAWODNOSC_1.md) -
+# WYLACZNIE (AllProvidersFailedError, OCRProviderError), czyli "zaden dostawca nie odpowiedzial
+# poprawnie" - NIE obejmuje OCRUnparsableResponseError (model odpowiedzial, ale tresc byla
+# bezuzyteczna - to problem jakosci danych/prompta, nie dostepnosci, wiec ponawianie na slepo
+# nie jest tu wlasciwa reakcja). 3 proby razem (1 pierwsza + 2 ponowienia), rosnace opoznienie.
+_MAX_ATTEMPTS = 3
+_RETRY_DELAYS_S = (5, 15)
+
+# Druga, waska proba odczytu ilosci (patrz app/modules/ocr/verify.py) - ograniczona do
+# rozsadnej liczby pozycji na dokument, zeby pojedynczy, mocno uszkodzony skan (duzo pustych
+# wierszy) nie wygenerowal lawiny dodatkowych zapytan do AI.
+_MAX_VERIFY_ITEMS = 8
+
 
 def _resolve_product_id(session: Session, kod):
     if not kod:
         return None
     row = session.query(ProductModel.id).filter(ProductModel.kod == kod).first()
     return row[0] if row else None
+
+
+def _classify_and_recognize(file_bytes: bytes, mime: str, session: Session, document):
+    """Klasyfikacja dzialu + pelny odczyt, z automatycznym ponowieniem na przejsciowe bledy
+    dostepnosci AI (patrz _MAX_ATTEMPTS/_RETRY_DELAYS_S wyzej). Klasyfikacja jest ponawiana
+    razem z odczytem (nie osobno) - jest tania/szybka, a w praktyce oba kroki zawodza z tego
+    samego powodu (brak sieci/limit), wiec nie ma sensu ich rozdzielac."""
+    last_exc: Exception | None = None
+    for attempt in range(_MAX_ATTEMPTS):
+        if attempt > 0:
+            time.sleep(_RETRY_DELAYS_S[attempt - 1])
+        try:
+            classify_result = asyncio.run(classify_document(file_bytes, mime))
+            dzial = classify_result.dzial
+
+            catalog = Catalog.from_db(session, dzial=dzial)
+            if dzial == "hydraulika":
+                result = asyncio.run(
+                    recognize_document_hydraulika(file_bytes, mime, catalog, magazyn=document.magazyn)
+                )
+            else:
+                special_rules = rules_from_db(session)
+                result = asyncio.run(
+                    recognize_document(file_bytes, mime, catalog, special_rules, magazyn=document.magazyn)
+                )
+            return classify_result, dzial, result
+        except (AllProvidersFailedError, OCRProviderError) as exc:
+            last_exc = exc
+    raise last_exc  # wyczerpano proby - blad koncowy, jak dotad ida do Document.status="error"
+
+
+async def _verify_ambiguous_items(file_bytes: bytes, mime: str, items: list[dict]) -> None:
+    """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
+    ptaszka przy pierwszym przebiegu) - druga, waska proba per-wiersz, rownolegle. Modyfikuje
+    `items` w miejscu; kazdy blad pojedynczej proby jest juz pochloniety w verify_ambiguous_quantity
+    (best-effort), wiec tu nie ma juz obslugi wyjatkow do zrobienia."""
+    targets = [
+        i for i, it in enumerate(items)
+        if it["ilosc_wydana"] is None and it["ilosc_zuzyta"] is None
+    ][:_MAX_VERIFY_ITEMS]
+    if not targets:
+        return
+
+    results = await asyncio.gather(
+        *(verify_ambiguous_quantity(file_bytes, mime, items[i]["rozpoznana_nazwa"]) for i in targets)
+    )
+    for idx, result in zip(targets, results):
+        if not result.found_anything:
+            continue
+        items[idx]["ilosc_wydana"] = result.ilosc_wydana
+        items[idx]["ilosc_zuzyta"] = result.ilosc_zuzyta
+        items[idx]["ilosc_finalna"] = pick_qty_razem(result.ilosc_wydana, result.ilosc_zuzyta)
 
 
 def run_ocr_task(document_id: str, session: Session) -> None:
@@ -62,19 +129,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
         # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
-        classify_result = asyncio.run(classify_document(file_bytes, mime))
-        dzial = classify_result.dzial
-
-        catalog = Catalog.from_db(session, dzial=dzial)
-        if dzial == "hydraulika":
-            result = asyncio.run(
-                recognize_document_hydraulika(file_bytes, mime, catalog, magazyn=document.magazyn)
-            )
-        else:
-            special_rules = rules_from_db(session)
-            result = asyncio.run(
-                recognize_document(file_bytes, mime, catalog, special_rules, magazyn=document.magazyn)
-            )
+        classify_result, dzial, result = _classify_and_recognize(file_bytes, mime, session, document)
 
         items = []
         for it in result.pozycje:
@@ -100,6 +155,8 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "match_nazwa": it.match.nazwa,
                 "match_jm": it.match.jm_override,
             })
+
+        asyncio.run(_verify_ambiguous_items(file_bytes, mime, items))
 
         repository.mark_done(
             session, document,

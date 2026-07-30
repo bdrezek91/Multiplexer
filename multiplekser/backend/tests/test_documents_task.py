@@ -8,6 +8,7 @@ from PIL import Image
 from app.modules.documents import repository as doc_repo
 from app.modules.documents.storage import get_storage
 from app.modules.documents.tasks import process_ocr_document, run_ocr_task
+from app.modules.ocr.providers import OCRProviderError
 from scripts.import_catalog import import_catalog
 from scripts.import_special_rules import import_special_rules
 from app.modules.matcher.special_rules import DEFAULT_SPECIAL_RULES
@@ -187,3 +188,93 @@ def test_process_ocr_document_deleguje_do_run_ocr_task():
     session_factory.assert_called_once()
     run_task.assert_called_once_with("some-document-id", fake_session)
     fake_session.close.assert_called_once()
+
+
+# ---- Retry na przejsciowe bledy sieci/dostepnosci (patrz docs/RAPORT_OCR_NIEZAWODNOSC_1.md) ----
+
+def test_run_ocr_task_ponawia_po_przejsciowym_bledzie_i_konczy_sukcesem(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_hydraulika_json,
+):
+    """Pierwsza proba pada calkowicie (kazdy krok lancucha z kluczem darmowym zwraca blad
+    dostepnosci - AllProvidersFailedError), druga (po odczekaniu) juz sie udaje - dokument
+    konczy sie na status="done", nie "error"."""
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = '{"dzial":"hydraulika","confidence":93.0}'
+    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
+    # 4 kroki lancucha na kluczu darmowym (patrz default_ocr_chain) zawodza w pierwszej probie
+    # klasyfikacji - dopiero druga proba (attempt 1) dochodzi do sukcesu.
+    responses = [OCRProviderError("timeout"), OCRProviderError("timeout"),
+                 OCRProviderError("timeout"), OCRProviderError("timeout"),
+                 classify_response, ocr_response]
+    with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=responses)), \
+         patch("app.modules.documents.tasks.time.sleep") as fake_sleep:
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert document.dzial == "hydraulika"
+    fake_sleep.assert_called_once_with(5)  # jedno opoznienie miedzy 1. a 2. proba
+
+
+def test_run_ocr_task_wyczerpuje_proby_i_konczy_sie_bledem(
+    db_session, admin_user, mocked_storage, gemini_key_configured,
+):
+    """Kazda z 3 prob pada tym samym bledem dostepnosci - dokument konczy sie na status="error"
+    (dokladnie tak jak przed wprowadzeniem retry), nie wisi w nieskonczonosc."""
+    document_id = _create_document(db_session, admin_user)
+
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=OCRProviderError("timeout")),
+    ), patch("app.modules.documents.tasks.time.sleep") as fake_sleep:
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "error"
+    assert fake_sleep.call_count == 2  # 2 opoznienia miedzy 3 probami (5s, 15s)
+
+
+# ---- Druga, waska proba dla pozycji z pusta iloscia w obu kolumnach (patrz ocr/verify.py) ----
+
+def test_run_ocr_task_druga_proba_uzupelnia_pomijeta_ilosc(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_hydraulika_json,
+):
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = '{"dzial":"hydraulika","confidence":93.0}'
+    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "confidence": 90}]}'  # brak ilosci
+    verify_response = '{"ilosc_wydana": 1, "ilosc_zuzyta": null}'
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response]),
+    ):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert document.items[0].ilosc_wydana == 1.0
+    assert document.items[0].ilosc_finalna == 1.0
+
+
+def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_hydraulika_json,
+):
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = '{"dzial":"hydraulika","confidence":93.0}'
+    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "confidence": 90}]}'
+    verify_response = '{"ilosc_wydana": null, "ilosc_zuzyta": null}'  # sam ptaszek, bez cyfry
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response]),
+    ):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert document.items[0].ilosc_wydana is None
+    assert document.items[0].ilosc_finalna is None

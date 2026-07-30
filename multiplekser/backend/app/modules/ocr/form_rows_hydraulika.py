@@ -4,7 +4,10 @@ snapToKnownItem()).
 
 W przeciwienstwie do Elektryki (jeden FORM_ROWS), Hydraulika ma DWA poziomy dopasowania -
 swiadoma decyzja z oryginalnego monolitu (nie do "uproszczenia"):
-  1) FORM_ROWS - staly szablon formularza pracownika (144 pozycje).
+  1) FORM_ROWS - staly szablon formularza pracownika (145 pozycji - "Rura fi 32 100 cm"
+     dopisana pozniej, patrz docs/RAPORT_OCR_NIEZAWODNOSC_2.md: prawdziwy, drukowany wiersz
+     formularza pominiety przy pierwotnym porcie, potwierdzone bezposrednio przez wlasciciela
+     - ten sam realny material co "RURA FI 32 100 CM" dodane do katalogu Optima wczesniej).
   2) ADDITIONAL_ROWS - baza pomocnicza "INNE/DODATKOWE" (114 pozycji): istnieja w Optimie,
      pracownik moze je odrecznie dopisac, ale NIE sa czescia stalego formularza.
 
@@ -106,6 +109,7 @@ FORM_ROWS: list[str] = [
     'Rura fi 30 100 cm',
     'Rura fi 32 30 cm',
     'Rura fi 32 50 cm',
+    'Rura fi 32 100 cm',
     'Rura fi 40 100 cm',
     'Rura fi 40 30 cm',
     'Rura fi 40 50 cm',

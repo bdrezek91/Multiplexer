@@ -3,8 +3,20 @@ Multipekser_Hydraulika.html (dwupoziomowe dopasowanie FORM_ROWS -> ADDITIONAL_RO
 from app.modules.ocr.form_rows_hydraulika import ADDITIONAL_ROWS, FORM_ROWS, snap_to_known_item_hydraulika
 
 
-def test_form_rows_ma_144_pozycje():
-    assert len(FORM_ROWS) == 144
+def test_form_rows_ma_145_pozycji():
+    """145, nie 144 - "Rura fi 32 100 cm" dopisana pozniej (prawdziwy wiersz formularza
+    pominiety przy pierwotnym porcie, patrz docs/RAPORT_OCR_NIEZAWODNOSC_2.md)."""
+    assert len(FORM_ROWS) == 145
+
+
+def test_snap_rura_fi_32_100_cm_nie_myli_sie_z_50_cm():
+    """Realny przypadek z produkcji: przed dopisaniem tego wiersza "Rura fi 32 100 cm"
+    dopasowywalo sie fuzzy-matchingiem do istniejacego "Rura fi 32 50 cm" (ta sama srednica,
+    zla dlugosc) - dokladny wiersz w FORM_ROWS musi wygrywac jako "exact", nie "fixed" na cudzy
+    wiersz."""
+    r = snap_to_known_item_hydraulika("Rura fi 32 100 cm")
+    assert r.name == "Rura fi 32 100 cm"
+    assert r.status == "exact"
 
 
 def test_additional_rows_ma_114_pozycji():

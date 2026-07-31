@@ -17,7 +17,7 @@ from dataclasses import dataclass, replace
 from typing import Optional
 
 from app.modules.matcher.core_elektryka import match_against_catalog
-from app.modules.matcher.result import QUALITY_BAD, QUALITY_EXCLUDED, QUALITY_OK
+from app.modules.matcher.result import QUALITY_BAD, QUALITY_EXCLUDED, QUALITY_OK, MatchResult
 from app.modules.matcher.special_rules import DEFAULT_SPECIAL_RULES, SpecialRule
 from app.modules.products.catalog import Catalog
 
@@ -43,6 +43,12 @@ class GeneratorItem:
     name: str
     qty: float
     off_form: bool = False
+    # Dopasowanie juz zapisane na pozycji dokumentu (z pierwszego OCR albo z recznej korekty
+    # przez PATCH .../items/{item_id}) - patrz uzycie ponizej, "reczna korekta trafia do TXT".
+    match_kod: Optional[str] = None
+    match_nazwa: Optional[str] = None
+    match_jm: Optional[str] = None
+    match_quality: Optional[str] = None
 
 
 @dataclass
@@ -143,7 +149,16 @@ def generate_output(
             add_kod(tray, it.qty, "M")
             continue
 
-        match = match_against_catalog(it.name, catalog, dominant_country=dominant_country, magazyn=magazyn, special_rules=rules)
+        # Reczna korekta (PATCH .../items/{item_id}) albo juz-dobre dopasowanie z pierwszego OCR
+        # ma pierwszenstwo przed ponownym dopasowywaniem od zera - inaczej generator ignorowal
+        # poprawki uzytkownika i eksportowal "BRAK DOPASOWANIA" mimo poprawionego kodu w UI.
+        if it.match_quality == QUALITY_OK and it.match_kod:
+            match = MatchResult(
+                kod=it.match_kod, nazwa=it.match_nazwa, quality=QUALITY_OK, ratio=1.0,
+                jm_override=it.match_jm,
+            )
+        else:
+            match = match_against_catalog(it.name, catalog, dominant_country=dominant_country, magazyn=magazyn, special_rules=rules)
         if it.off_form and match.quality == QUALITY_OK and match.ratio < 0.70:
             match = replace(match, quality=QUALITY_BAD)
 

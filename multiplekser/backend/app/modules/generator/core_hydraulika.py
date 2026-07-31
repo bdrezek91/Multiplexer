@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.modules.matcher import match_against_catalog_hydraulika
-from app.modules.matcher.result import QUALITY_OK
+from app.modules.matcher.result import QUALITY_OK, MatchResult
 from app.modules.products.catalog import Catalog
 
 from .core_elektryka import GeneratorItem
@@ -54,7 +54,16 @@ def generate_output_hydraulika(
         seq.append({"type": "kod", "kod": kod, "qty": qty, "jm": jm})
 
     for it in items:
-        match = match_against_catalog_hydraulika(it.name, catalog, magazyn=magazyn)
+        # Reczna korekta (PATCH .../items/{item_id}) albo juz-dobre dopasowanie z pierwszego OCR
+        # ma pierwszenstwo przed ponownym dopasowywaniem od zera - inaczej generator ignorowal
+        # poprawki uzytkownika i eksportowal "BRAK DOPASOWANIA" mimo poprawionego kodu w UI.
+        if it.match_quality == QUALITY_OK and it.match_kod:
+            match = MatchResult(
+                kod=it.match_kod, nazwa=it.match_nazwa, quality=QUALITY_OK, ratio=1.0,
+                jm_override=it.match_jm,
+            )
+        else:
+            match = match_against_catalog_hydraulika(it.name, catalog, magazyn=magazyn)
         jm = match.jm_override or "SZT"
 
         if match.quality == QUALITY_OK and match.kod:

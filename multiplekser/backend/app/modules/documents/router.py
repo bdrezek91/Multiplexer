@@ -22,7 +22,13 @@ from app.modules.generator import (
     get_filename,
     physical_order_for,
 )
-from app.modules.matcher import match_against_catalog, match_against_catalog_hydraulika, rules_from_db
+from app.modules.matcher import (
+    QUALITY_BAD,
+    QUALITY_OK,
+    match_against_catalog,
+    match_against_catalog_hydraulika,
+    rules_from_db,
+)
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 from app.modules.users import get_current_user
@@ -195,9 +201,16 @@ def update_document_item(
             update_kwargs.update(
                 match_kod=cand.kod, match_nazwa=cand.nazwa, match_jm=cand.jm,
                 matched_product_id=product_row[0] if product_row else None,
+                # Reczna korekta = potwierdzone dopasowanie: przelacza badge z "Brak dopasowania"
+                # na "OK" i sprawia, ze generator (core_elektryka.py/core_hydraulika.py) uzyje
+                # tego kodu wprost zamiast ponownie dopasowywac od zera surowa nazwe z OCR.
+                match_quality=QUALITY_OK, match_score=1.0,
             )
         else:
-            update_kwargs.update(match_kod=None, match_nazwa=None, match_jm=None, matched_product_id=None)
+            update_kwargs.update(
+                match_kod=None, match_nazwa=None, match_jm=None, matched_product_id=None,
+                match_quality=QUALITY_BAD, match_score=0.0,
+            )
 
     item = repository.update_item(session, item, **update_kwargs)
     return _item_to_schema(item)
@@ -272,7 +285,11 @@ def generate_document_output(
 
     dzial = document.dzial or "elektryka"
     items = [
-        GeneratorItem(name=it.rozpoznana_nazwa, qty=it.ilosc_finalna, off_form=it.off_form)
+        GeneratorItem(
+            name=it.rozpoznana_nazwa, qty=it.ilosc_finalna, off_form=it.off_form,
+            match_kod=it.match_kod, match_nazwa=it.match_nazwa, match_jm=it.match_jm,
+            match_quality=it.match_quality,
+        )
         for it in _items_in_physical_order(document)
         if it.ilosc_finalna is not None and it.ilosc_finalna > 0
     ]

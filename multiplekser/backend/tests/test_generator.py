@@ -226,3 +226,28 @@ def test_encode_cp1250_polskie_znaki():
 
 def test_encode_cp1250_nieznany_znak_fallback_pytajnik():
     assert encode_cp1250("emoji 😀") == b"emoji ?"
+
+
+# ---- Reczna korekta dopasowania (2026-07-31) ----
+
+def test_generate_output_uzywa_zapisanego_dopasowania_gdy_ok(catalog):
+    """Realny blad z produkcji: generator ignorowal reczna korekte match_kod (PATCH
+    .../items/{item_id}) i zawsze dopasowywal surowa nazwe od zera - "cos niejasnego xyz" nigdy
+    nie dopasuje sie samo, wiec test przechodzi TYLKO jesli generator faktycznie uzyje
+    przekazanego match_kod/match_jm zamiast wlasnego dopasowania."""
+    items = [GeneratorItem(
+        name="cos niejasnego xyz", qty=3, match_kod="KORYTKO 32X15", match_nazwa="Korytko 32x15",
+        match_jm="M", match_quality="ok",
+    )]
+    result = generate_output(items, catalog, magazyn=None)
+    assert result.lines == ["KORYTKO 32X15;3;;M;"]
+
+
+def test_generate_output_ignoruje_zapisane_dopasowanie_gdy_nie_ok(catalog):
+    """Jesli match_quality nie jest 'ok' (np. nigdy nie poprawione recznie) - generator
+    dopasowuje normalnie, tak jak dotychczas."""
+    items = [GeneratorItem(
+        name="Grzejnik 1800W", qty=1, match_kod="KORYTKO 32X15", match_quality="bad",
+    )]
+    result = generate_output(items, catalog, magazyn=None)
+    assert result.lines == ["GRZEJNIK 2000W;1;;SZT;"]

@@ -84,3 +84,22 @@ def test_pusta_lista_pozycji(catalog):
     result = generate_output_hydraulika([], catalog, magazyn=None)
     assert result.lines == []
     assert result.warning_no_magazyn is False
+
+
+# ---- Reczna korekta dopasowania (2026-07-31) ----
+
+def test_generate_output_hydraulika_uzywa_zapisanego_dopasowania_gdy_ok(catalog):
+    """Ten sam realny blad co w Elektryce (patrz test_generator.py) - generator ignorowal
+    reczna korekte match_kod i dopasowywal surowa nazwe od zera."""
+    items = [GeneratorItem(
+        name="cos niejasnego xyz", qty=2, match_kod="BOJLER 80 L", match_nazwa="Bojler 80 L",
+        match_jm="SZT", match_quality="ok",
+    )]
+    result = generate_output_hydraulika(items, catalog, magazyn=None)
+    assert result.lines == ["BOJLER 80 L;2;;SZT;"]
+
+
+def test_generate_output_hydraulika_ignoruje_zapisane_dopasowanie_gdy_nie_ok(catalog):
+    items = [GeneratorItem(name="Bojler 80 L", qty=1, match_kod="ZAWÓR KĄTOWY 1/2X3/4", match_quality="bad")]
+    result = generate_output_hydraulika(items, catalog, magazyn=None)
+    assert result.lines == ["BOJLER 80 L;1;;SZT;"]

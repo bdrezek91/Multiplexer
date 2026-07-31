@@ -70,7 +70,7 @@ def test_import_hydraulika_tworzy_oczekiwana_liczbe_produktow(db_session):
     baza_hydraulika = json.loads(_HYDRAULIKA_FIXTURE.read_text(encoding="utf-8"))
     stats = import_catalog(db_session, baza_hydraulika, dzial="hydraulika")
 
-    assert stats["utworzone"] == 249 + 7
+    assert stats["utworzone"] == 250 + 7
     assert stats["zaktualizowane"] == 0
 
 
@@ -83,7 +83,7 @@ def test_dzial_izolacja_elektryka_i_hydraulika_nie_mieszaja_sie(db_session, baza
     hydraulika_catalog = Catalog.from_db(db_session, dzial="hydraulika")
 
     assert len(elektryka_catalog.products) == 379
-    assert len(hydraulika_catalog.products) == 249
+    assert len(hydraulika_catalog.products) == 250
     assert all(p.dzial == "elektryka" for p in elektryka_catalog.products)
     assert all(p.dzial == "hydraulika" for p in hydraulika_catalog.products)
 

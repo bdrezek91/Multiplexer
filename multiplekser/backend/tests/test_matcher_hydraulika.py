@@ -123,6 +123,26 @@ def test_skroty_z_dopiskow_poza_formularzem(catalog):
     assert r_grzejnik_bialy.kod == "GRZEJNIK ŁAZIENKOWY 40X70 BIAŁY"
     assert r_grzejnik_bialy.quality == "ok"
 
+    r_parabond = match_against_catalog_hydraulika("Parabond", catalog)
+    assert r_parabond.kod == "PARABOND"
+    assert r_parabond.quality == "ok"
+
+
+def test_waz_120cm_bez_x_i_bez_kolankiem_w_nazwie(catalog):
+    """Realny przypadek z produkcji (2026-07-31): na wydawce pracownik pisze "Wąż 1/2 1/2
+    120cm" (bez "x" miedzy gwintami, bez "z kolankiem") - parser wyciaga te same atrybuty co
+    z pelnej nazwy (gwint_cal='1/2x1/2', dlugosc_cm=120), ale sam tekst "core" po ekstrakcji
+    ('waz' vs 'waz x z kolankiem' dla pelnej nazwy) byl za krotki, zeby wygrac scoring przeciw
+    innym wariantom Wąż - dawalo to kompletnie zly produkt (ŚRUBUNEK DO WODOMIERZY, ratio 0.0)
+    zamiast właściwego WĄŻ ... Z KOLANKIEM. Naprawione aliasem (dwie wersje pisowni "120cm"/
+    "120 cm", bo alias wymaga dokladnego dopasowania tokenow)."""
+    r1 = match_against_catalog_hydraulika("Wąż 1/2 1/2 120cm", catalog)
+    r2 = match_against_catalog_hydraulika("Wąż 1/2 1/2 120 cm", catalog)
+    assert r1.kod == "WĄŻ 1/2 X 1/2 120 CM Z KOLANKIEM"
+    assert r1.quality == "ok"
+    assert r2.kod == "WĄŻ 1/2 X 1/2 120 CM Z KOLANKIEM"
+    assert r2.quality == "ok"
+
 
 def test_jednostki_niezgodne_z_optima_poprawione(catalog):
     """Realny przypadek z produkcji (2026-07-31): eksport do Optimy zglaszal blad "Nie
@@ -133,3 +153,6 @@ def test_jednostki_niezgodne_z_optima_poprawione(catalog):
     assert catalog.find_by_kod("SZAFKA Z UMYWALKĄ 50 CM").jm == "KPL"
     assert catalog.find_by_kod("SZAFKA Z UMYWALKĄ 50 CM CZARNA").jm == "KPL"
     assert catalog.find_by_kod("ZLEW KUCHENNY CZARNY + BATERIA + KOSZYCZEK + SYFON").jm == "KPL"
+    assert catalog.find_by_kod("PRZYBLATÓWKA SONOMA").jm == "M"
+    assert catalog.find_by_kod("PRZYBLATÓWKA SREBRNA").jm == "M"
+    assert catalog.find_by_kod("SZYNA DO MONTAŻU SZAFEK").jm == "M"

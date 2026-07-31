@@ -3,7 +3,7 @@
   "branza": "hydraulika (pawilony modulowe) - Dampol",
   "wersja": "0.1-etap6.3",
   "zasada_nadrzedna": "Program nigdy nie tworzy nowych pozycji ani nie zgaduje kodow.",
-  "liczba_generyczne": 249,
+  "liczba_generyczne": 250,
   "liczba_archiwalne": 7
  },
  "generyczne": {
@@ -1651,7 +1651,7 @@
   "PRZYBLATÓWKA SONOMA": {
    "kod": "PRZYBLATÓWKA SONOMA",
    "nazwa": "Przyblatówka sonoma",
-   "jm": "SZT",
+   "jm": "M",
    "grupa": "Meble łazienkowe/kuchenne",
    "atrybuty": {
     "srednica_mm": null,
@@ -2203,7 +2203,7 @@
   "SZYNA DO MONTAŻU SZAFEK": {
    "kod": "SZYNA DO MONTAŻU SZAFEK",
    "nazwa": "Szyna do montażu szafek",
-   "jm": "SZT",
+   "jm": "M",
    "grupa": "Meble łazienkowe/kuchenne",
    "atrybuty": {
     "srednica_mm": null,
@@ -2680,7 +2680,10 @@
     "pn": null,
     "gwint_metryczny": null
    },
-   "aliasy": [],
+   "aliasy": [
+    "WĄŻ 1/2 1/2 120 CM",
+    "WĄŻ 1/2 1/2 120CM"
+   ],
    "status": "generyczny"
   },
   "WĄŻ 1/2 X 1/2 40 CM Z KOLANKIEM": {
@@ -3767,7 +3770,7 @@
   "PRZYBLATÓWKA SREBRNA": {
    "kod": "PRZYBLATÓWKA SREBRNA",
    "nazwa": "Przyblatówka srebrna",
-   "jm": "SZT",
+   "jm": "M",
    "grupa": "Meble łazienkowe/kuchenne",
    "atrybuty": {
     "srednica_mm": null,
@@ -5742,6 +5745,29 @@
    "aliasy": [
     "SILIKON SAN"
    ],
+   "status": "generyczny"
+  },
+  "PARABOND": {
+   "kod": "PARABOND",
+   "nazwa": "Parabond",
+   "jm": "SZT",
+   "grupa": "Mocowania i drobny osprzęt",
+   "atrybuty": {
+    "srednica_mm": null,
+    "kat_st": null,
+    "gwint_cal": null,
+    "material": null,
+    "zlacze": null,
+    "dlugosc_cm": null,
+    "pojemnosc_l": null,
+    "moc_W": null,
+    "wymiar_mm": null,
+    "kolor": null,
+    "dn": null,
+    "pn": null,
+    "gwint_metryczny": null
+   },
+   "aliasy": [],
    "status": "generyczny"
   }
  },

@@ -4,10 +4,10 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import Boolean, Float, Integer, String, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
-from app.core.db_types import PortableJSON
 
 
 class SpecialRuleModel(Base):
@@ -19,7 +19,7 @@ class SpecialRuleModel(Base):
     target_kod: Mapped[str | None] = mapped_column(String, nullable=True)
     kod_template: Mapped[str | None] = mapped_column(String, nullable=True)
     value_regex: Mapped[str | None] = mapped_column(String, nullable=True)
-    rounding_steps: Mapped[list | None] = mapped_column(PortableJSON, nullable=True)
+    rounding_steps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     default_value: Mapped[float | None] = mapped_column(Float, nullable=True)
     normalize: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

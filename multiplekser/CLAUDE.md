@@ -4,8 +4,8 @@
 
 To repozytorium to migracja **Multipleksera Elektryka** — istniejącej aplikacji HTML/JavaScript
 (monolit w jednym pliku, silnik OCR + parser + matcher produktów Optima + generator receptur)
-do architektury webowej klasy Enterprise, dla wielu użytkowników, z docelową rozbudową o kolejne
-działy (hydraulika, stolarka, konstrukcje, wentylacja).
+do architektury webowej klasy Enterprise, dla wielu użytkowników, rozbudowanej o dział Hydrauliki.
+Kolejne działy nie są planowane — zakres na dziś to Elektryka + Hydraulika.
 
 **Oryginalny plik monolitu** (`Multiplekser_Elektryka.html`) reprezentuje **działającą, wielokrotnie
 przetestowaną logikę biznesową** wypracowaną iteracyjnie na realnych błędach (patrz
@@ -88,7 +88,7 @@ migrację **razem ze mną, krok po kroku**. Nie realizuj całego planu naraz —
 | 5 | Auth (JWT+RBAC), model użytkowników/magazynów |
 | 6 | Frontend React (upload, tabela weryfikacji, generowanie) |
 | 7 | Nginx, docker-compose produkcyjny, dokumentacja wdrożeniowa |
-| 8+ | Kolejne działy (hydraulika, stolarka...) jako dodatkowe `grupa`/katalogi |
+| 8 ✅ | Dział Hydrauliki (Kroki Hydraulika 1-6) — kolejne działy nie są planowane |
 
 ## Stan obecny repozytorium (zaktualizowane po Kroku Hydraulika-1)
 
@@ -126,13 +126,13 @@ Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
 
 **Multiplekser Portable usunięty** (2026-07-30, na życzenie użytkownika - `.exe` był niepotrzebny):
 punkt wejścia `desktop_main.py`, workflow `.github/workflows/build-portable.yml`, plik `.spec`
-PyInstallera i testy portable zostały skasowane. Świadomie NIE tknięte przy tej okazji - dolna
-warstwa w kodzie produkcyjnym, która obsługiwała tryb desktopowy (i nadal jest tam martwym,
-nieużywanym kodem, bez wpływu na Docker/produkcję): flaga `settings.desktop_mode` (domyślnie
-`False`) w `app/core/config.py`, `Uuid`/`PortableJSON` cross-dialect w modelach
-(`app/core/db_types.py`), `LocalFileStorage` w `documents/storage.py`, `dispatch_ocr_task` w
-`documents/tasks.py`. Usunięcie tej warstwy dotykałoby aktualnie używanej ścieżki dysponowania
-zadaniami OCR w produkcji - jeśli kiedyś ma zniknąć też stąd, to osobna, świadoma decyzja.
+PyInstallera i testy portable zostały skasowane. Pozostałość po trybie desktopowym w kodzie
+produkcyjnym (flaga `settings.desktop_mode`, cross-dialect `PortableJSON`/`app/core/db_types.py`,
+`LocalFileStorage` w `documents/storage.py`, gałąź watkowa w `dispatch_ocr_task`, `check_same_thread`
+branch w `app/core/db.py`) posprzątana w kroku porządkowym (2026-07-31) - Postgres jest jedyną
+bazą w użyciu, więc `PortableJSON` zastąpiony wprost `sqlalchemy.dialects.postgresql.JSONB` w
+modelach (`users`, `products`, `matcher`), storage zawsze S3/MinIO, `dispatch_ocr_task` zawsze
+przez Celery. Zero zmiany zachowania na Postgresie/Docker - potwierdzone pełną suitą testów.
 
 **Decyzja architektoniczna (nie kwestionować bez nowego powodu)**: Matcher NIE używa
 generycznego silnika `AttributeRule` mimo że taki był zaproponowany w
@@ -141,8 +141,7 @@ wybrał jawnie (Krok Hydraulika-1): zachować `special_rules.py` jako mechanizm 
 a Hydraulikę dodać jako **osobną funkcję** (`match_against_catalog_hydraulika`), tym samym
 stylem co już istniejący, sprawdzony kod — nie jako współdzielony silnik konfiguracji. Ten sam
 wzorzec ("osobna funkcja/dataclass per dział, wspólna tylko dolna warstwa") obowiązuje też w
-Parserze (`parser/core_elektryka.py` vs `parser/hydraulika.py`) i ma się powtórzyć dla 3. działu, jeśli
-się pojawi — kopiowanie funkcji, nie rozbudowa wspólnego silnika.
+Parserze (`parser/core_elektryka.py` vs `parser/hydraulika.py`). Kolejne działy nie są planowane.
 
 ## Jak pracować ze mną w tym repo
 

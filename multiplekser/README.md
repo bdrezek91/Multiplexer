@@ -23,9 +23,8 @@ listą zużytych/wydanych materiałów. Ktoś musiał to później ręcznie prze
    (`kod;ilość;;jm;magazyn`, kodowanie CP1250).
 
 Całość jest **wielodziałowa i wieloużytkownikowa**: role (admin/elektryk) z przypisanymi
-magazynami, osobne katalogi produktów per dział (Elektryka, Hydraulika — kolejne działy jak
-stolarka/wentylacja można dołożyć tym samym wzorcem), pełna historia dokumentów, panel
-administracyjny katalogu i użytkowników.
+magazynami, osobne katalogi produktów per dział (Elektryka, Hydraulika — kolejne działy nie są
+planowane), pełna historia dokumentów, panel administracyjny katalogu i użytkowników.
 
 To migracja jednoplikowego prototypu HTML/JS (`Multiplekser_Elektryka.html`) do architektury
 webowej klasy produkcyjnej — logika biznesowa (parser/matcher/generator) przeniesiona 1:1,

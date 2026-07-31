@@ -7,7 +7,6 @@ Azure Blob przez S3 gateway) bez zmian kodu - jedyna roznica to `endpoint_url` w
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import Optional
 
 import boto3
@@ -52,35 +51,10 @@ class S3FileStorage(FileStorage):
         return obj["Body"].read()
 
 
-class LocalFileStorage(FileStorage):
-    """Storage na zwykly folder na dysku (Multiplekser Portable, patrz
-    docs/RAPORT_PORTABLE_1.md) - zamiennik MinIO/S3 dla trybu desktopowego bez Dockera. `key`
-    (UUID dokumentu + rozszerzenie, patrz router.py) jest bezpieczny jako nazwa pliku wprost -
-    generowany przez backend, nigdy z danych wejsciowych uzytkownika, wiec nie ma tu ryzyka
-    path traversal mimo braku dodatkowej sanityzacji."""
-
-    def __init__(self, base_path: str):
-        self._base = Path(base_path)
-        self._base.mkdir(parents=True, exist_ok=True)
-
-    def upload(self, key: str, data: bytes, content_type: str) -> None:
-        # `key` zawiera podfoldery (np. "documents/{uuid}/plik.jpg" - patrz router.py) - S3/MinIO
-        # nie ma prawdziwych katalogow (klucz to plaski string), wiec ten krok jest specyficzny
-        # dla realnego systemu plikow.
-        path = self._base / key
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-
-    def download(self, key: str) -> bytes:
-        return (self._base / key).read_bytes()
-
-
 def get_storage() -> FileStorage:
     """Bez cache'owania w pamieci procesu - ta sama zasada co Catalog.from_db()/get_db() od
     Etapu 4 (swiezy stan zamiast globalnego singletona), i pozwala testom uzyc moto (mock_aws)
     bez ryzyka, ze zostanie zwrocony wczesniej skonstruowany, prawdziwy klient."""
-    if settings.desktop_mode:
-        return LocalFileStorage(settings.local_storage_path)
     return S3FileStorage(
         endpoint_url=settings.minio_endpoint_url,
         access_key=settings.minio_access_key,

@@ -109,13 +109,46 @@ repozytorium (efemeryczna weryfikacja manualna, jak w poprzednich krokach).
 |---|---|---|
 | Rozróżnienie "dopasowanie automatyczne" vs "ręcznie poprawione" przy zmianie magazynu | `PATCH .../magazyn` nadpisuje ręczne korekty `match_kod` — patrz opis wyżej | Gdyby to zaczęło realnie przeszkadzać w codziennej pracy — dodać flagę na `DocumentItemModel` |
 | Walidacja `dzial` w `ProductFormDialog` względem faktycznie zalogowanego katalogu przy edycji | Dział produktu jest z założenia niezmienny (jak `kod`), więc nie ma tu realnego ryzyka — tylko notatka, że nie jest to osobno testowane | Nie planuje się zmiany bez konkretnego przypadku |
-| Weryfikacja E2E z realnym `docker compose up` i realnym kluczem Gemini | Jak w poprzednich krokach — brak Dockera w tym sandboksie | Przed wdrożeniem produkcyjnym |
+| Weryfikacja E2E z realnym kluczem Gemini | Ten sandboks nie ma dostępu do internetu do Google AI Studio — bez zmian, patrz sekcja niżej | Przed wdrożeniem produkcyjnym |
 
 ## Ryzyka
 
 Bez zmian względem `RAPORT_ETAP_HYDRAULIKA_5.md` (JWT_SECRET_KEY/klucze Gemini, tokeny w
 `localStorage`, brak CI z Postgresem, brak retry Celery, brak TLS) — ten krok nie dotyka
 żadnego z tych obszarów.
+
+## Weryfikacja E2E pełnego stosu (2026-07-31)
+
+`docker compose up` w tym konkretnym sandboksie nie mógł ściągnąć obrazów (`postgres`, `redis`,
+`minio`) — polityka sieciowa środowiska blokuje `production.cloudfront.docker.com` (rejestr
+Docker Hub), niezależnie od repozytorium. Zamiast tego złożono ten sam pełny stos co do
+zachowania, ale z lokalnie zainstalowanymi usługami (Postgres 16, Redis 7, `moto_server` jako
+zamiennik MinIO/S3 — identyczny wzorzec co w weryfikacjach E2E poprzednich kroków) i
+uruchomiono osobno: `uvicorn`, `celery worker`, `vite dev`. Zweryfikowano:
+
+- **Migracje**: `alembic upgrade head` czysto od zera do najnowszej rewizji (łącznie z indeksem
+  na `document.status` z etapu "quick winy").
+- **Import**: `import_catalog` (671 pozycji), `import_special_rules` (9 reguł), `create_admin`.
+- **Backend**: pełna suita `pytest tests/ -q` — **248 testów, 1 pominięty, zero błędów**.
+- **Frontend**: `npm run build` bez błędów, `npm run test -- --run` — **26 testów, wszystkie
+  przechodzą**.
+- **API na żywo**: `/docs`, `/health`, logowanie (`/auth/token`, w tym rate limiting 5/minutę —
+  potwierdzone: 5 prób przechodzi, 6+ dostaje `429`), `/products`, `/match` (poprawny wynik
+  dopasowania), brak tokenu → `401`.
+- **Pełny pipeline dokumentu**: upload przez `POST /documents` → zapis do S3 (moto) → zadanie w
+  Celery → automatyczny retry (3 próby, opóźnienia 5s/15s, zgodnie z
+  `docs/RAPORT_OCR_NIEZAWODNOSC_1.md`) → brak kluczy Gemini w tym środowisku → czysty status
+  `document.status = "error"` z czytelnym komunikatem (`"Nie podano zadnego klucza API..."`) —
+  dokładnie zgodnie z zamierzonym zachowaniem opisanym w README.
+- **Frontend w przeglądarce (Playwright, Chromium)**: załadowanie `/`, logowanie jako admin,
+  przekierowanie na `/documents`, zero błędów w konsoli, tabela dokumentów poprawnie pokazuje
+  status "Błąd" na przesłanym dokumencie testowym, nawigacja (Dokumenty/Katalog
+  produktów/Użytkownicy) widoczna i poprawna wizualnie.
+
+**Jedyne, czego nie dało się zweryfikować w tym sandboksie**: budowanie obrazów Dockera przez
+`docker compose` (blokada sieciowa rejestru) i pełny odczyt OCR z prawdziwym kluczem Gemini
+(brak dostępu do internetu do Google AI Studio) — oba pozostają jako krok do zrobienia przed
+wdrożeniem produkcyjnym, na realnym serwerze/komputerze z pełnym dostępem do sieci.
 
 ## Jak zweryfikować
 
@@ -130,6 +163,6 @@ npm run build && npm run test -- --run   # 25 testow
 
 ## Plan kolejnego kroku
 
-Czekam na sygnał — możliwe kierunki: kolejny dział (stolarka/konstrukcje/wentylacja, ten sam
-wzorzec co Hydraulika), pełna weryfikacja E2E przez `docker compose up`, albo porządki/refaktor
-jeśli coś w tej migracji wymaga poprawki po dłuższym użytkowaniu.
+Decyzja: kolejny dział nie jest planowany — zakres pozostaje Elektryka + Hydraulika. Dalsze
+kroki: pełna weryfikacja E2E przez `docker compose up`, oraz porządki/refaktor jeśli coś w tej
+migracji wymaga poprawki po dłuższym użytkowaniu.

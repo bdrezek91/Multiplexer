@@ -95,4 +95,41 @@ def test_full_catalog_smoke(catalog):
     for rec in db["generyczne"].values():
         r = match_against_catalog_hydraulika(rec["nazwa"], catalog)
         counts[r.quality] += 1
-    assert counts["ok"] >= 200  # z 247 generycznych
+    assert counts["ok"] >= 200  # z 249 generycznych
+
+
+def test_skroty_z_dopiskow_poza_formularzem(catalog):
+    """Realny przypadek z produkcji (2026-07-31): dopiski pod tabela pisane skrotowo -
+    "silikon san"/"automat czarny"/"automat bialy"/"grzejnik czarny"/"grzejnik bialy" - musza
+    trafiac na wlasciwy kod przez alias, niezaleznie od tego, jak dobrze OCR odczyta reszte
+    dopisku (patrz tez prompt.py, DOPISKI POZA TABELĄ w Hydraulice)."""
+    r_silikon = match_against_catalog_hydraulika("Silikon san", catalog)
+    assert r_silikon.kod == "SILIKON SANITARNY"
+    assert r_silikon.quality == "ok"
+
+    r_automat_czarny = match_against_catalog_hydraulika("Automat czarny", catalog)
+    assert r_automat_czarny.kod == "ODPOWIETRZNIK AUTOMATYCZNY 1/2” CZARNY"
+    assert r_automat_czarny.quality == "ok"
+
+    r_automat_bialy = match_against_catalog_hydraulika("Automat biały", catalog)
+    assert r_automat_bialy.kod == "ODPOWIETRZNIK AUTOMATYCZNY 1/2” BIAŁY"
+    assert r_automat_bialy.quality == "ok"
+
+    r_grzejnik_czarny = match_against_catalog_hydraulika("Grzejnik czarny", catalog)
+    assert r_grzejnik_czarny.kod == "GRZEJNIK ŁAZIENKOWY 40X70 CZARNY"
+    assert r_grzejnik_czarny.quality == "ok"
+
+    r_grzejnik_bialy = match_against_catalog_hydraulika("Grzejnik biały", catalog)
+    assert r_grzejnik_bialy.kod == "GRZEJNIK ŁAZIENKOWY 40X70 BIAŁY"
+    assert r_grzejnik_bialy.quality == "ok"
+
+
+def test_jednostki_niezgodne_z_optima_poprawione(catalog):
+    """Realny przypadek z produkcji (2026-07-31): eksport do Optimy zglaszal blad "Nie
+    znaleziono jednostki SZT" dla tych kodow - caly plik seed mial wszedzie domyslnie SZT,
+    mimo ze te konkretne pozycje sa w Optimie zdefiniowane w innej jednostce (patrz tez
+    formularz papierowy, kolumna Jednostka)."""
+    assert catalog.find_by_kod("RURA PP FI 20").jm == "M"
+    assert catalog.find_by_kod("SZAFKA Z UMYWALKĄ 50 CM").jm == "KPL"
+    assert catalog.find_by_kod("SZAFKA Z UMYWALKĄ 50 CM CZARNA").jm == "KPL"
+    assert catalog.find_by_kod("ZLEW KUCHENNY CZARNY + BATERIA + KOSZYCZEK + SYFON").jm == "KPL"

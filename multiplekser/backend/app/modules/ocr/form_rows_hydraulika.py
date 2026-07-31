@@ -263,6 +263,7 @@ ADDITIONAL_ROWS: list[str] = [
     'Rura kanalizacyjna 50x1,8 1m',
     'Rura Kanalizacyjna wew. 110x2,7 2M',
     'Rura karbowana arot  niebieska 40/32',
+    'Silikon sanitarny',
     'Stelaż podtynkowy WC',
     'Syfon do pisuaru',
     'Szafka 50 cm prostokątna',

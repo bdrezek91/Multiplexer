@@ -19,8 +19,10 @@ def test_snap_rura_fi_32_100_cm_nie_myli_sie_z_50_cm():
     assert r.status == "exact"
 
 
-def test_additional_rows_ma_114_pozycji():
-    assert len(ADDITIONAL_ROWS) == 114
+def test_additional_rows_ma_115_pozycji():
+    """115, nie 114 - "Silikon sanitarny" dopisany pozniej (patrz prompt.py, dopisek
+    DOPISKI POZA TABELĄ w Hydraulice)."""
+    assert len(ADDITIONAL_ROWS) == 115
 
 
 def test_snap_dokladne_dopasowanie_formularza_jest_exact():

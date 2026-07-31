@@ -3,7 +3,7 @@
   "branza": "hydraulika (pawilony modulowe) - Dampol",
   "wersja": "0.1-etap6.3",
   "zasada_nadrzedna": "Program nigdy nie tworzy nowych pozycji ani nie zgaduje kodow.",
-  "liczba_generyczne": 247,
+  "liczba_generyczne": 249,
   "liczba_archiwalne": 7
  },
  "generyczne": {
@@ -280,7 +280,9 @@
     "pn": null,
     "gwint_metryczny": null
    },
-   "aliasy": [],
+   "aliasy": [
+    "GRZEJNIK BIAŁY"
+   ],
    "status": "generyczny"
   },
   "GRZEJNIK ŁAZIENKOWY 40X70 CZARNY": {
@@ -303,7 +305,9 @@
     "pn": null,
     "gwint_metryczny": null
    },
-   "aliasy": [],
+   "aliasy": [
+    "GRZEJNIK CZARNY"
+   ],
    "status": "generyczny"
   },
   "KABINA PRYSZNICOWA 80 CM": {
@@ -1453,7 +1457,9 @@
     "pn": null,
     "gwint_metryczny": null
    },
-   "aliasy": [],
+   "aliasy": [
+    "AUTOMAT BIAŁY"
+   ],
    "status": "generyczny"
   },
   "ODPOWIETRZNIK AUTOMATYCZNY 1/2” CZARNY": {
@@ -1476,7 +1482,9 @@
     "pn": null,
     "gwint_metryczny": null
    },
-   "aliasy": [],
+   "aliasy": [
+    "AUTOMAT CZARNY"
+   ],
    "status": "generyczny"
   },
   "OKŁADZINA ŚCIENNA 30X60 KAMIEŃ": {
@@ -2057,7 +2065,7 @@
   "RURA PP FI 20": {
    "kod": "RURA PP FI 20",
    "nazwa": "Rura PP fi 20",
-   "jm": "SZT",
+   "jm": "M",
    "grupa": "Rury i kształtki",
    "atrybuty": {
     "srednica_mm": 20.0,
@@ -2172,7 +2180,7 @@
   "SZAFKA Z UMYWALKĄ 50 CM": {
    "kod": "SZAFKA Z UMYWALKĄ 50 CM",
    "nazwa": "Szafka z umywalką 50 cm",
-   "jm": "SZT",
+   "jm": "KPL",
    "grupa": "Ceramika i kabiny",
    "atrybuty": {
     "srednica_mm": null,
@@ -3207,7 +3215,7 @@
   "ZLEW KUCHENNY CZARNY + BATERIA + KOSZYCZEK + SYFON": {
    "kod": "ZLEW KUCHENNY CZARNY + BATERIA + KOSZYCZEK + SYFON",
    "nazwa": "Zlew kuchenny czarny + bateria + koszyczek + syfon",
-   "jm": "SZT",
+   "jm": "KPL",
    "grupa": "Kanalizacja",
    "atrybuty": {
     "srednica_mm": null,
@@ -5162,7 +5170,7 @@
   "SZAFKA Z UMYWALKĄ 50 CM CZARNA": {
    "kod": "SZAFKA Z UMYWALKĄ 50 CM CZARNA",
    "nazwa": "Szafka z umywalką 50 cm czarna",
-   "jm": "SZT",
+   "jm": "KPL",
    "grupa": "Ceramika i kabiny",
    "atrybuty": {
     "srednica_mm": null,
@@ -5709,6 +5717,31 @@
     "gwint_metryczny": null
    },
    "aliasy": [],
+   "status": "generyczny"
+  },
+  "SILIKON SANITARNY": {
+   "kod": "SILIKON SANITARNY",
+   "nazwa": "Silikon sanitarny",
+   "jm": "SZT",
+   "grupa": "Mocowania i drobny osprzęt",
+   "atrybuty": {
+    "srednica_mm": null,
+    "kat_st": null,
+    "gwint_cal": null,
+    "material": null,
+    "zlacze": null,
+    "dlugosc_cm": null,
+    "pojemnosc_l": null,
+    "moc_W": null,
+    "wymiar_mm": null,
+    "kolor": null,
+    "dn": null,
+    "pn": null,
+    "gwint_metryczny": null
+   },
+   "aliasy": [
+    "SILIKON SAN"
+   ],
    "status": "generyczny"
   }
  },

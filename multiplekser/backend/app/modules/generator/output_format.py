@@ -10,6 +10,11 @@ _CP1250_MAP: dict[str, int] = {
     "Ą": 0xA5, "ą": 0xB9, "Ć": 0xC6, "ć": 0xE6, "Ę": 0xCA, "ę": 0xEA,
     "Ł": 0xA3, "ł": 0xB3, "Ń": 0xD1, "ń": 0xF1, "Ó": 0xD3, "ó": 0xF3,
     "Ś": 0x8C, "ś": 0x9C, "Ź": 0x8F, "ź": 0x9F, "Ż": 0xAF, "ż": 0xBF,
+    # Typograficzny cudzyslow prawy/lewy (np. w kodach "ODPOWIETRZNIK AUTOMATYCZNY 1/2” ...") -
+    # realny blad z produkcji (2026-08-03): brak tych dwoch znakow w mapie zamienial je cicho na
+    # '?', wiec Optima nie znajdowala takiej pozycji przy imporcie (kod z '?' zamiast cudzyslowu
+    # nie istnieje). Wartosci ponizej to standardowe kody CP1250 dla tych znakow.
+    "”": 0x94, "“": 0x93,
 }
 
 

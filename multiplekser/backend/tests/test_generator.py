@@ -228,6 +228,14 @@ def test_encode_cp1250_nieznany_znak_fallback_pytajnik():
     assert encode_cp1250("emoji 😀") == b"emoji ?"
 
 
+def test_encode_cp1250_typograficzny_cudzyslow():
+    """Realny blad z produkcji (2026-08-03): kody typu 'ODPOWIETRZNIK AUTOMATYCZNY 1/2” BIALY'
+    mialy cudzyslow zamieniany na '?' (brak w mapie), Optima nie znajdowala takiej pozycji przy
+    imporcie."""
+    assert encode_cp1250("1/2”") == b"1/2" + bytes([0x94])
+    assert encode_cp1250("“cytat”") == bytes([0x93]) + b"cytat" + bytes([0x94])
+
+
 # ---- Reczna korekta dopasowania (2026-07-31) ----
 
 def test_generate_output_uzywa_zapisanego_dopasowania_gdy_ok(catalog):

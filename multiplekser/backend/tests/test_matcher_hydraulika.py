@@ -156,3 +156,4 @@ def test_jednostki_niezgodne_z_optima_poprawione(catalog):
     assert catalog.find_by_kod("PRZYBLATÓWKA SONOMA").jm == "M"
     assert catalog.find_by_kod("PRZYBLATÓWKA SREBRNA").jm == "M"
     assert catalog.find_by_kod("SZYNA DO MONTAŻU SZAFEK").jm == "M"
+    assert catalog.find_by_kod("RURA PEX FI 16").jm == "M"

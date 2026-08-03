@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
 import { DampolLogo } from '../components/DampolLogo'
+import loginBg from '../assets/login-bg.jpeg'
 
 export function LoginPage() {
   const { login } = useAuth()
@@ -33,7 +34,18 @@ export function LoginPage() {
   }
 
   return (
-    <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh" bgcolor="background.default">
+    <Box
+      display="flex"
+      justifyContent="center"
+      alignItems="center"
+      minHeight="100vh"
+      sx={{
+        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)), url(${loginBg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+      }}
+    >
       <Paper sx={{ p: 4, width: 360, border: 1, borderColor: 'divider' }} component="form" onSubmit={handleSubmit}>
         <Box display="flex" flexDirection="column" alignItems="center" mb={2} textAlign="center">
           <DampolLogo height={48} />

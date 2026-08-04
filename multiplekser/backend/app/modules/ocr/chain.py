@@ -41,6 +41,8 @@ def default_ocr_chain() -> list[OCRChainStep]:
     return [
         OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key),
         OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key),
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key),
         OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key),
         OCRChainStep(
             f"OpenAI {settings.openai_model} (klucz platny)",

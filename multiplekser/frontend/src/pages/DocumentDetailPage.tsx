@@ -7,7 +7,6 @@ import {
   Chip,
   FormControlLabel,
   IconButton,
-  MenuItem,
   Paper,
   Stack,
   Table,
@@ -34,7 +33,6 @@ import { StatusChip } from '../components/StatusChip'
 import { DzialChip } from '../components/DzialChip'
 import { MatchQualityChip } from '../components/MatchQualityChip'
 import { ApiError } from '../api/client'
-import { useAuth } from '../auth/AuthContext'
 import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
 import type { Dzial, DocumentItem, Product } from '../types'
 
@@ -259,8 +257,6 @@ export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { user } = useAuth()
-  const isAdmin = user?.rola === 'admin'
   const documentId = id as string
   const [firstWydawka, setFirstWydawka] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
@@ -342,37 +338,19 @@ export function DocumentDetailPage() {
                     <Typography variant="body2" color="text.secondary">
                       Magazyn:
                     </Typography>
-                    {isAdmin ? (
-                      <ToggleButtonGroup
-                        exclusive
-                        value={document.magazyn || null}
-                        onChange={(_, next: string | null) => magazynMutation.mutate(next)}
-                        size="small"
-                        disabled={magazynMutation.isPending}
-                      >
-                        {KNOWN_MAGAZYNY.map((m) => (
-                          <ToggleButton key={m.value} value={m.value}>
-                            {m.label}
-                          </ToggleButton>
-                        ))}
-                      </ToggleButtonGroup>
-                    ) : (
-                      <TextField
-                        select
-                        size="small"
-                        value={document.magazyn ?? ''}
-                        onChange={(e) => magazynMutation.mutate(e.target.value || null)}
-                        disabled={magazynMutation.isPending || (user?.magazyny_dostepne ?? []).length === 0}
-                        sx={{ minWidth: 200 }}
-                      >
-                        <MenuItem value="">Bez magazynu</MenuItem>
-                        {(user?.magazyny_dostepne ?? []).map((m) => (
-                          <MenuItem key={m} value={m}>
-                            {magazynLabel(m)}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-                    )}
+                    <ToggleButtonGroup
+                      exclusive
+                      value={document.magazyn || null}
+                      onChange={(_, next: string | null) => magazynMutation.mutate(next)}
+                      size="small"
+                      disabled={magazynMutation.isPending}
+                    >
+                      {KNOWN_MAGAZYNY.map((m) => (
+                        <ToggleButton key={m.value} value={m.value}>
+                          {m.label}
+                        </ToggleButton>
+                      ))}
+                    </ToggleButtonGroup>
                   </Stack>
                 )}
                 {document.status !== 'done' && (

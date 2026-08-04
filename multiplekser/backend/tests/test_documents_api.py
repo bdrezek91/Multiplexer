@@ -117,12 +117,14 @@ def test_create_document_dwa_pliki_tworzy_jeden_dokument_z_dodatkowa_strona(clie
     assert document.extra_files[0].mime == "image/jpeg"
 
 
-def test_create_document_magazynier_ograniczony_do_przypisanych_magazynow(client, magazynier_headers, mocked_storage):
-    """magazynier_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py) - ta sama regula RBAC co /match."""
+def test_create_document_magazynier_ma_dostep_do_kazdego_magazynu(client, magazynier_headers, mocked_storage):
+    """magazynier_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py), ale ograniczenie
+    RBAC do przypisanych magazynow zostalo usuniete (2026-08-04, na zyczenie uzytkownika) -
+    magazynier ma teraz pelny dostep do kazdego magazynu, tak jak admin."""
     files = {"plik": ("skan.jpg", _fake_jpeg(), "image/jpeg")}
     with _no_delay():
         r = client.post("/documents", files=files, data={"magazyn": "Czekanów"}, headers=magazynier_headers)
-    assert r.status_code == 403
+    assert r.status_code == 202, r.text
 
 
 def test_get_document_zwraca_pozycje_w_fizycznej_kolejnosci_formularza(

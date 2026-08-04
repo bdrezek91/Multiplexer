@@ -109,8 +109,10 @@ def test_match_bez_tokenu_zwraca_401(client):
     assert r.status_code == 401
 
 
-def test_magazynier_ograniczony_do_przypisanych_magazynow(client, magazynier_headers, db_session, baza_elektryka_json):
-    """magazynier_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py)."""
+def test_magazynier_ma_dostep_do_kazdego_magazynu(client, magazynier_headers, db_session, baza_elektryka_json):
+    """magazynier_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py), ale ograniczenie RBAC
+    do przypisanych magazynow zostalo usuniete (2026-08-04, na zyczenie uzytkownika) - magazynier
+    ma teraz pelny dostep do kazdego magazynu, tak jak admin."""
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
 
@@ -120,10 +122,10 @@ def test_magazynier_ograniczony_do_przypisanych_magazynow(client, magazynier_hea
     assert r_ok.status_code == 200
     assert r_ok.json()["kod"] == "BEZPIECZNIK 25A NIEMIECKI"
 
-    r_forbidden = client.post(
+    r_also_ok = client.post(
         "/match", json={"query": "Bezpiecznik 25A Niemiecki", "magazyn": "Czekanów"}, headers=magazynier_headers
     )
-    assert r_forbidden.status_code == 403
+    assert r_also_ok.status_code == 200
 
 
 def test_admin_ma_dostep_do_kazdego_magazynu(client, admin_headers, db_session, baza_elektryka_json):

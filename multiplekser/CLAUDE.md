@@ -117,8 +117,12 @@ Repo jest już **dwudziałowe**, nie "Elektryka + plan na przyszłość":
   funkcjonalnie kompletna end-to-end. **Krok 6** (`docs/RAPORT_ETAP_HYDRAULIKA_6.md`) dodał:
   edycję magazynu **po** zakończonym OCR (`PATCH /documents/{id}/magazyn`, ponownie dopasowuje
   wszystkie pozycje z nowym magazynem — świadomie nadpisuje ręczne korekty `match_kod`, patrz
-  raport) z UI na stronie szczegółów dokumentu (admin: wszystkie magazyny, inne role: tylko
-  `magazyny_dostepne`); przyciski "Ilość finalna z kolumny: Wydana/Zużyta" do hurtowego
+  raport) z UI na stronie szczegółów dokumentu (pierwotnie: admin wszystkie magazyny, rola
+  magazynier tylko `magazyny_dostepne` — ograniczenie usunięte 2026-08-04 na życzenie
+  użytkownika, magazynier ma teraz pełny dostęp do obu magazynów jak admin, patrz
+  `check_magazyn_access` w `backend/app/modules/users/deps.py`; pole `magazyny_dostepne` zostaje
+  w modelu/schemacie, ale nie jest już nigdzie wymuszane ani edytowalne z UI); przyciski
+  "Ilość finalna z kolumny: Wydana/Zużyta" do hurtowego
   przepisania kolumny źródłowej do `ilosc_finalna`; katalog `/products` w UI zarządza teraz
   **obydwoma** działami przez przełącznik Elektryka/Hydraulika (wszystkie funkcje CRUD w
   `api/products.ts` przyjmują `dzial`; dział produktu jest niezmienny przy edycji, tak jak

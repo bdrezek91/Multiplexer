@@ -4,7 +4,6 @@ import {
   Box,
   Button,
   FormHelperText,
-  MenuItem,
   Paper,
   Stack,
   Table,
@@ -13,7 +12,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
@@ -26,10 +24,8 @@ import { ApiError } from '../api/client'
 import { DzialChip } from '../components/DzialChip'
 import { StatusChip } from '../components/StatusChip'
 import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
-import { useAuth } from '../auth/AuthContext'
 
 export function DocumentsPage() {
-  const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -71,9 +67,6 @@ export function DocumentsPage() {
     uploadMutation.mutate()
   }
 
-  const magazynyDostepne = user?.magazyny_dostepne ?? []
-  const isAdmin = user?.rola === 'admin'
-
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
@@ -112,40 +105,21 @@ export function DocumentsPage() {
               </FormHelperText>
             )}
           </Box>
-          {isAdmin ? (
-            <Box>
-              <ToggleButtonGroup
-                exclusive
-                value={magazyn || null}
-                onChange={(_, next: string | null) => setMagazyn(next ?? '')}
-                size="small"
-              >
-                {KNOWN_MAGAZYNY.map((m) => (
-                  <ToggleButton key={m.value} value={m.value}>
-                    {m.label}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-              <FormHelperText>Magazyn (opcjonalnie) - kliknij ponownie, żeby odznaczyć</FormHelperText>
-            </Box>
-          ) : (
-            <TextField
-              select
-              label="Magazyn (opcjonalnie)"
-              value={magazyn}
-              onChange={(e) => setMagazyn(e.target.value)}
-              sx={{ minWidth: 220 }}
-              disabled={magazynyDostepne.length === 0}
-              helperText={magazynyDostepne.length === 0 ? 'Brak przypisanych magazynów' : undefined}
+          <Box>
+            <ToggleButtonGroup
+              exclusive
+              value={magazyn || null}
+              onChange={(_, next: string | null) => setMagazyn(next ?? '')}
+              size="small"
             >
-              <MenuItem value="">Bez magazynu</MenuItem>
-              {magazynyDostepne.map((m) => (
-                <MenuItem key={m} value={m}>
-                  {magazynLabel(m)}
-                </MenuItem>
+              {KNOWN_MAGAZYNY.map((m) => (
+                <ToggleButton key={m.value} value={m.value}>
+                  {m.label}
+                </ToggleButton>
               ))}
-            </TextField>
-          )}
+            </ToggleButtonGroup>
+            <FormHelperText>Magazyn (opcjonalnie) - kliknij ponownie, żeby odznaczyć</FormHelperText>
+          </Box>
           <Button
             variant="contained"
             onClick={handleUpload}

@@ -110,11 +110,12 @@ def test_zmiana_magazynu_cudzy_dokument_zwraca_403(
     assert r.status_code == 403
 
 
-def test_zmiana_magazynu_magazynier_ograniczony_do_przypisanych_magazynow(
+def test_zmiana_magazynu_magazynier_ma_dostep_do_kazdego_magazynu(
     client, db_session, magazynier_user, magazynier_headers, mocked_storage, gemini_key_configured, baza_elektryka_json,
 ):
-    """magazynier_user ma dostep tylko do Zabrza (patrz conftest.py) - proba ustawienia Czekanowa
-    (do ktorego nie ma dostepu) musi zostac odrzucona."""
+    """magazynier_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py), ale ograniczenie RBAC
+    do przypisanych magazynow zostalo usuniete (2026-08-04, na zyczenie uzytkownika) - magazynier
+    moze ustawic rowniez Czekanow, tak jak admin."""
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
     key = f"documents/test/{magazynier_user.id}-own.jpg"
@@ -127,4 +128,4 @@ def test_zmiana_magazynu_magazynier_ograniczony_do_przypisanych_magazynow(
         run_ocr_task(str(document.id), db_session)
 
     r = client.patch(f"/documents/{document.id}/magazyn", json={"magazyn": "Czekanów"}, headers=magazynier_headers)
-    assert r.status_code == 403
+    assert r.status_code == 200

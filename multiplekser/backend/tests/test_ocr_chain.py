@@ -15,7 +15,7 @@ class _FakeProvider(OCRProvider):
         self.behavior = behavior  # callable(model) -> str | raises OCRProviderError
         self.calls: list[str] = []
 
-    async def recognize(self, *, files, model, api_key, prompt):
+    async def recognize(self, *, files, model, api_key, prompt, thinking_level="medium"):
         self.calls.append(model)
         return self.behavior(model)
 

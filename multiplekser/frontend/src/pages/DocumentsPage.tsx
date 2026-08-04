@@ -27,6 +27,7 @@ import { ApiError } from '../api/client'
 import { DzialChip } from '../components/DzialChip'
 import { StatusChip } from '../components/StatusChip'
 import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
+import { compressImageForUpload } from '../utils/compressImage'
 
 export function DocumentsPage() {
   const navigate = useNavigate()
@@ -46,9 +47,12 @@ export function DocumentsPage() {
   const [magazyn, setMagazyn] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const addFiles = (newFiles: FileList | null) => {
+  const addFiles = async (newFiles: FileList | null) => {
     if (!newFiles || newFiles.length === 0) return
-    setFiles((prev) => [...prev, ...Array.from(newFiles)])
+    // Kompresja PRZED dodaniem do listy - patrz utils/compressImage.ts (nie traci jakosci
+    // widzianej przez AI, tylko skraca czas przesylu z telefonu, zwlaszcza na wolnym LTE).
+    const compressed = await Promise.all(Array.from(newFiles).map((f) => compressImageForUpload(f)))
+    setFiles((prev) => [...prev, ...compressed])
   }
 
   const removeFile = (index: number) => {

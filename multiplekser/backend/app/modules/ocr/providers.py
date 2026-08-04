@@ -22,11 +22,13 @@ class OCRProvider(ABC):
     @abstractmethod
     async def recognize(
         self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
+        thinking_level: str = "medium",
     ) -> str:
         """Zwraca surowy tekst odpowiedzi modelu (do sparsowania przez ocr/parsing.py).
         `files` to lista (bytes, mime) - zwykle jeden element, ale wiecej niz jeden gdy
         dokument sklada sie z kilku osobnych plikow (np. dwa zdjecia z telefonu = dwie strony
-        tej samej papierowej wydawki, patrz historia czatu)."""
+        tej samej papierowej wydawki, patrz historia czatu). `thinking_level` - patrz
+        GeminiProvider nizej (ignorowane przez dostawcow bez tej koncepcji, np. OpenAI)."""
 
 
 class GeminiProvider(OCRProvider):
@@ -37,6 +39,7 @@ class GeminiProvider(OCRProvider):
 
     async def recognize(
         self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
+        thinking_level: str = "medium",
     ) -> str:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model, safe='')}:generateContent"
         file_parts = [
@@ -45,14 +48,15 @@ class GeminiProvider(OCRProvider):
         ]
         body = {
             "contents": [{"parts": [*file_parts, {"text": prompt}]}],
-            # thinkingLevel podniesiony z "low" na "medium" (2026-08-04, realny przypadek
-            # produkcyjny) - przy formularzach z grupami niemal identycznych wierszy pod rzad
-            # (np. "Rozdzielnica SRN 12/24/36/48") model przy "low" potrafil "zgubic wiersz" i
-            # zmyslic zaznaczenie na sasiedniej etykiecie mimo temperature=0 (ten sam obraz dawal
-            # rozne wyniki miedzy przebiegami). "low" bylo swiadomym portem z monolitu dla
-            # szybkosci - poprawnosc jest tu wyzszym priorytetem (patrz PRIORYTET w promptcie),
-            # wiec kosztem nieco dluzszej odpowiedzi wybieramy "medium".
-            "generationConfig": {"temperature": 0, "thinkingConfig": {"thinkingLevel": "medium"}},
+            # thinkingLevel domyslnie "medium" (2026-08-04, realny przypadek produkcyjny) - przy
+            # formularzach z grupami niemal identycznych wierszy pod rzad (np. "Rozdzielnica SRN
+            # 12/24/36/48") model przy "low" potrafil "zgubic wiersz" i zmyslic zaznaczenie na
+            # sasiedniej etykiecie mimo temperature=0. Wywolujacy moze jednak zazadac "low" dla
+            # prostszych zadan (patrz classify.py - klasyfikacja dzialu to trywialna decyzja, nie
+            # potrzebuje glebszego rozumowania, a spowalniala CALY dokument, bo jest pierwszym z
+            # dwoch sekwencyjnych zapytan) - poprawnosc pozostaje priorytetem tam, gdzie faktycznie
+            # ma znaczenie (pelny odczyt tabeli), nie wszedzie na sile.
+            "generationConfig": {"temperature": 0, "thinkingConfig": {"thinkingLevel": thinking_level}},
         }
         try:
             async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
@@ -80,7 +84,10 @@ class OpenAIProvider(OCRProvider):
 
     async def recognize(
         self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
+        thinking_level: str = "medium",
     ) -> str:
+        # thinking_level ignorowane - Responses API dla gpt-4o nie ma tego pojecia (parametr
+        # istnieje tylko dla zgodnosci z interfejsem OCRProvider, patrz klasa bazowa wyzej).
         url = "https://api.openai.com/v1/responses"
         content_parts = []
         for file_bytes, mime in files:

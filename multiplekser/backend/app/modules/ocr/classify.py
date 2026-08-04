@@ -48,7 +48,11 @@ class ClassifyResult:
 async def classify_document(
     files: list[tuple[bytes, str]], chain: Optional[list[OCRChainStep]] = None,
 ) -> ClassifyResult:
-    chain_result = await run_ocr_chain(files, CLASSIFY_PROMPT, chain=chain)
+    # thinking_level="low" (2026-08-04, na zyczenie uzytkownika - przetwarzanie calego dokumentu
+    # trwalo 2-3 minuty) - to trywialna decyzja (jedno pole naglowka), nie potrzebuje glebszego
+    # rozumowania jak pelny odczyt tabeli (patrz GeminiProvider.recognize) - a jest PIERWSZYM z
+    # dwoch sekwencyjnych zapytan, wiec kazda sekunda tutaj przeklada sie wprost na czas calosci.
+    chain_result = await run_ocr_chain(files, CLASSIFY_PROMPT, chain=chain, thinking_level="low")
     parsed = extract_json(chain_result.text)
 
     dzial = None

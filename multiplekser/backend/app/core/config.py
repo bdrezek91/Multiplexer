@@ -32,7 +32,11 @@ class Settings(BaseSettings):
     # bezpieczenstwa: monolit (index.html) mial klucze zaszyte w kodzie, co jest wyciekiem.
     gemini_api_key_free: str | None = None
     gemini_api_key_paid: str | None = None
-    ocr_timeout_seconds: int = 90
+    # Skrocone z 90s (2026-08-04, na zyczenie uzytkownika - przetwarzanie calego dokumentu
+    # trwalo 2-3 minuty, za dlugo) - przy opornym/przeciazonym kroku lancucha lepiej szybciej
+    # poddac sie i przejsc do kolejnego kroku (patrz chain.py) niz czekac az do 90s na kazdym
+    # z kilku sekwencyjnych zapytan (klasyfikacja + pelny odczyt) z osobna.
+    ocr_timeout_seconds: int = 30
 
     # Klucz OpenAI - OSTATNI krok w default_ocr_chain() (patrz ocr/chain.py), uzywany WYLACZNIE
     # gdy wszystkie kroki Gemini zawioda (429/timeout/limit) - nie przy kazdym dokumencie.

@@ -70,9 +70,12 @@ class OCRChainResult:
 
 async def run_ocr_chain(
     files: list[tuple[bytes, str]], prompt: str, chain: Optional[list[OCRChainStep]] = None,
+    thinking_level: str = "medium",
 ) -> OCRChainResult:
     """Przejscie po lancuchu: pierwszy dostawca z kluczem, ktory odpowie poprawnie, wygrywa.
-    `files` - lista (bytes, mime), patrz OCRProvider.recognize."""
+    `files` - lista (bytes, mime), patrz OCRProvider.recognize. `thinking_level` - patrz
+    GeminiProvider.recognize(); wolacy przekazuje "low" dla prostszych zadan (np. klasyfikacja
+    dzialu w classify.py), domyslnie "medium" dla pelnego odczytu tabeli."""
     steps = chain if chain is not None else default_ocr_chain()
     last_error: Optional[Exception] = None
     skipped: list[str] = []
@@ -84,6 +87,7 @@ async def run_ocr_chain(
         try:
             text = await step.provider.recognize(
                 files=files, model=step.model, api_key=step.api_key, prompt=prompt,
+                thinking_level=thinking_level,
             )
             return OCRChainResult(text=text, used_label=step.label)
         except OCRProviderError as exc:

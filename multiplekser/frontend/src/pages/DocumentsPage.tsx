@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   FormHelperText,
   Paper,
   Stack,
@@ -17,6 +18,8 @@ import {
   Typography,
 } from '@mui/material'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera'
+import CloseIcon from '@mui/icons-material/Close'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { listDocuments, uploadDocument } from '../api/documents'
@@ -29,14 +32,28 @@ export function DocumentsPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  // Zwykle jeden plik (skan PDF albo jedno zdjecie), czasem dwa - papierowa wydawka
-  // rozlozona na dwoch osobnych zdjeciach z telefonu, bo nie zmiescila sie na jednym
+  // Zwykle jeden plik (skan PDF albo jedno zdjecie), czasem dwa-trzy - papierowa wydawka
+  // rozlozona na kilku osobnych zdjeciach z telefonu, bo nie zmiescila sie na jednym
   // (w przeciwienstwie do wielostronicowego PDF-a) - patrz historia czatu. Backend laczy
   // wszystkie pliki w jeden dokument/jedna rozpiske (patrz prompt.py, WIELE OBRAZOW).
+  //
+  // Aparat na telefonie robi jedno zdjecie na wywolanie (input z "capture"), wiec zdjecia sie
+  // DOKLADAJA do listy przy kazdym wywolaniu "Zrob zdjecie" - konwersja/wyslanie startuje
+  // dopiero po recznym kliknieciu "Wyslij i rozpoznaj", nigdy automatycznie po zdjeciu.
   const [files, setFiles] = useState<File[]>([])
   const [magazyn, setMagazyn] = useState('')
   const [error, setError] = useState<string | null>(null)
+
+  const addFiles = (newFiles: FileList | null) => {
+    if (!newFiles || newFiles.length === 0) return
+    setFiles((prev) => [...prev, ...Array.from(newFiles)])
+  }
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index))
+  }
 
   const { data: documents, isLoading } = useQuery({
     queryKey: ['documents'],
@@ -55,6 +72,7 @@ export function DocumentsPage() {
       void queryClient.invalidateQueries({ queryKey: ['documents'] })
       setFiles([])
       if (fileInputRef.current) fileInputRef.current.value = ''
+      if (cameraInputRef.current) cameraInputRef.current.value = ''
       navigate(`/documents/${created.id}`)
     },
     onError: (err) => {
@@ -83,28 +101,34 @@ export function DocumentsPage() {
           </Alert>
         )}
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Box>
-            <Button variant="outlined" component="label" startIcon={<UploadFileIcon />}>
-              {files.length === 0
-                ? 'Wybierz plik(i)'
-                : files.length === 1
-                  ? files[0].name
-                  : `Wybrano ${files.length} plików`}
-              <input
-                ref={fileInputRef}
-                type="file"
-                hidden
-                multiple
-                accept="image/*,application/pdf"
-                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-              />
-            </Button>
-            {files.length > 1 && (
-              <FormHelperText>
-                Kilka zdjęć = kolejne strony JEDNEJ wydawki (np. nie zmieściła się na jednym zdjęciu z telefonu)
-              </FormHelperText>
-            )}
-          </Box>
+          <Button variant="outlined" component="label" startIcon={<PhotoCameraIcon />}>
+            Zrób zdjęcie
+            <input
+              ref={cameraInputRef}
+              type="file"
+              hidden
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => {
+                addFiles(e.target.files)
+                e.target.value = ''
+              }}
+            />
+          </Button>
+          <Button variant="outlined" component="label" startIcon={<UploadFileIcon />}>
+            Wybierz plik(i)
+            <input
+              ref={fileInputRef}
+              type="file"
+              hidden
+              multiple
+              accept="image/*,application/pdf"
+              onChange={(e) => {
+                addFiles(e.target.files)
+                e.target.value = ''
+              }}
+            />
+          </Button>
           <Box>
             <ToggleButtonGroup
               exclusive
@@ -125,9 +149,29 @@ export function DocumentsPage() {
             onClick={handleUpload}
             disabled={files.length === 0 || uploadMutation.isPending}
           >
-            {uploadMutation.isPending ? 'Wysyłanie...' : 'Wyślij i rozpoznaj'}
+            {uploadMutation.isPending ? 'Wysyłanie...' : 'Zatwierdź i wyślij do rozpoznania'}
           </Button>
         </Stack>
+
+        {files.length > 0 && (
+          <Box sx={{ mt: 2 }}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              {files.map((f, i) => (
+                <Chip
+                  key={`${f.name}-${i}`}
+                  label={f.name}
+                  onDelete={() => removeFile(i)}
+                  deleteIcon={<CloseIcon aria-label={`Usuń ${f.name}`} />}
+                />
+              ))}
+            </Stack>
+            <FormHelperText>
+              {files.length === 1
+                ? '1 zdjęcie/plik wybrany - dodaj kolejne albo zatwierdź, żeby wysłać do rozpoznania'
+                : `${files.length} zdjęć/plików = kolejne strony JEDNEJ wydawki - dodaj kolejne albo zatwierdź, żeby wysłać do rozpoznania`}
+            </FormHelperText>
+          </Box>
+        )}
       </Paper>
 
       <TableContainer component={Paper}>

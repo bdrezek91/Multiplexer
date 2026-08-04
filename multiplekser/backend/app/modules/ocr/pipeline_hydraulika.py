@@ -84,13 +84,12 @@ def _build_item_hydraulika(item: dict, catalog: Catalog, magazyn: Optional[str])
 
 
 async def recognize_document_hydraulika(
-    file_bytes: bytes,
-    mime: str,
+    files: list[tuple[bytes, str]],
     catalog: Catalog,
     magazyn: Optional[str] = None,
     chain: Optional[list[OCRChainStep]] = None,
 ) -> OCRResultHydraulika:
-    chain_result = await run_ocr_chain(file_bytes, mime, AI_OCR_PROMPT_HYDRAULIKA, chain=chain)
+    chain_result = await run_ocr_chain(files, AI_OCR_PROMPT_HYDRAULIKA, chain=chain)
     parsed: Any = extract_json(chain_result.text)
     if parsed is None:
         raise OCRUnparsableResponseError(chain_result.text)

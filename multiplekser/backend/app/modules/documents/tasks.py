@@ -59,28 +59,32 @@ def _resolve_product_id(session: Session, kod):
     return row[0] if row else None
 
 
-def _classify_and_recognize(file_bytes: bytes, mime: str, session: Session, document):
+def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, document):
     """Klasyfikacja dzialu + pelny odczyt, z automatycznym ponowieniem na przejsciowe bledy
     dostepnosci AI (patrz _MAX_ATTEMPTS/_RETRY_DELAYS_S wyzej). Klasyfikacja jest ponawiana
     razem z odczytem (nie osobno) - jest tania/szybka, a w praktyce oba kroki zawodza z tego
-    samego powodu (brak sieci/limit), wiec nie ma sensu ich rozdzielac."""
+    samego powodu (brak sieci/limit), wiec nie ma sensu ich rozdzielac. `files` - jeden element
+    dla zwyklego skanu/PDF, wiecej gdy dokument sklada sie z kilku osobnych plikow (np. dwa
+    zdjecia z telefonu = dwie strony jednej papierowej wydawki, patrz historia czatu) - wszystkie
+    trafiaja do Gemini w JEDNYM zapytaniu (patrz ocr/providers.py), prompt uczy model laczyc je
+    w jeden wynik."""
     last_exc: Exception | None = None
     for attempt in range(_MAX_ATTEMPTS):
         if attempt > 0:
             time.sleep(_RETRY_DELAYS_S[attempt - 1])
         try:
-            classify_result = asyncio.run(classify_document(file_bytes, mime))
+            classify_result = asyncio.run(classify_document(files))
             dzial = classify_result.dzial
 
             catalog = Catalog.from_db(session, dzial=dzial)
             if dzial == "hydraulika":
                 result = asyncio.run(
-                    recognize_document_hydraulika(file_bytes, mime, catalog, magazyn=document.magazyn)
+                    recognize_document_hydraulika(files, catalog, magazyn=document.magazyn)
                 )
             else:
                 special_rules = rules_from_db(session)
                 result = asyncio.run(
-                    recognize_document(file_bytes, mime, catalog, special_rules, magazyn=document.magazyn)
+                    recognize_document(files, catalog, special_rules, magazyn=document.magazyn)
                 )
             return classify_result, dzial, result
         except (AllProvidersFailedError, OCRProviderError) as exc:
@@ -93,7 +97,7 @@ def _classify_and_recognize(file_bytes: bytes, mime: str, session: Session, docu
     raise last_exc  # wyczerpano proby - blad koncowy, jak dotad ida do Document.status="error"
 
 
-async def _verify_ambiguous_items(file_bytes: bytes, mime: str, items: list[dict]) -> None:
+async def _verify_ambiguous_items(files: list[tuple[bytes, str]], items: list[dict]) -> None:
     """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
     ptaszka przy pierwszym przebiegu) - druga, waska proba per-wiersz, rownolegle. Modyfikuje
     `items` w miejscu; kazdy blad pojedynczej proby jest juz pochloniety w verify_ambiguous_quantity
@@ -106,7 +110,7 @@ async def _verify_ambiguous_items(file_bytes: bytes, mime: str, items: list[dict
         return
 
     results = await asyncio.gather(
-        *(verify_ambiguous_quantity(file_bytes, mime, items[i]["rozpoznana_nazwa"]) for i in targets)
+        *(verify_ambiguous_quantity(files, items[i]["rozpoznana_nazwa"]) for i in targets)
     )
     for idx, result in zip(targets, results):
         if not result.found_anything:
@@ -114,6 +118,15 @@ async def _verify_ambiguous_items(file_bytes: bytes, mime: str, items: list[dict
         items[idx]["ilosc_wydana"] = result.ilosc_wydana
         items[idx]["ilosc_zuzyta"] = result.ilosc_zuzyta
         items[idx]["ilosc_finalna"] = pick_qty_razem(result.ilosc_wydana, result.ilosc_zuzyta)
+
+
+def _download_and_prepare(get_storage, file_key: str, mime: str) -> tuple[bytes, str]:
+    """Pobiera jeden plik ze storage i przygotowuje do wyslania do AI - PDF wysylany natywnie,
+    obraz najpierw przeskalowany (patrz ocr/image.py, dlaczego)."""
+    raw = get_storage().download(file_key)
+    if mime == _PDF_MIME:
+        return raw, _PDF_MIME
+    return downscale_image(raw), "image/jpeg"
 
 
 def run_ocr_task(document_id: str, session: Session) -> None:
@@ -127,16 +140,21 @@ def run_ocr_task(document_id: str, session: Session) -> None:
     logger.info("OCR - start przetwarzania", extra={"document_id": document_id})
 
     try:
-        raw = get_storage().download(document.file_key)
-        if document.mime == _PDF_MIME:
-            file_bytes, mime = raw, _PDF_MIME
-        else:
-            file_bytes, mime = downscale_image(raw), "image/jpeg"
+        # Wiele plikow = wiele osobnych stron TEGO SAMEGO dokumentu (np. dwa zdjecia z telefonu
+        # jednej papierowej wydawki, ktorej nie da sie zmiescic na jednym zdjeciu tak jak wielo-
+        # stronicowy PDF ze skanera) - patrz historia czatu. Pierwszy plik to zawsze
+        # document.file_key/mime (wsteczna zgodnosc), kolejne to document.extra_files w kolejnosci
+        # `sequence`. Wszystkie razem trafiaja do Gemini w jednym zapytaniu (ocr/providers.py).
+        files = [_download_and_prepare(get_storage, document.file_key, document.mime)]
+        files += [
+            _download_and_prepare(get_storage, extra.file_key, extra.mime)
+            for extra in document.extra_files
+        ]
 
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
         # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
-        classify_result, dzial, result = _classify_and_recognize(file_bytes, mime, session, document)
+        classify_result, dzial, result = _classify_and_recognize(files, session, document)
 
         items = []
         for it in result.pozycje:
@@ -163,7 +181,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "match_jm": it.match.jm_override,
             })
 
-        asyncio.run(_verify_ambiguous_items(file_bytes, mime, items))
+        asyncio.run(_verify_ambiguous_items(files, items))
 
         repository.mark_done(
             session, document,

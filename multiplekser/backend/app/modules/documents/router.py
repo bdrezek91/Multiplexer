@@ -114,27 +114,38 @@ def _check_owner_or_admin(document: DocumentModel, user: UserModel) -> None:
 
 @router.post("", response_model=DocumentCreatedOut, status_code=202)
 async def create_document(
-    plik: UploadFile = File(...),
+    plik: list[UploadFile] = File(...),
     magazyn: str | None = Form(default=None),
     session: Session = Depends(get_db),
     user: UserModel = Depends(get_current_user),
 ):
+    """`plik` przyjmuje jeden lub wiecej plikow - wiecej niz jeden gdy papierowa wydawka nie
+    zmiescila sie na jednym zdjeciu z telefonu (w przeciwienstwie do skanu PDF, ktory moze miec
+    kilka stron w jednym pliku) - patrz historia czatu. Wszystkie pliki trafiaja do OCR jako
+    kolejne strony JEDNEGO dokumentu (patrz tasks.py/ocr/providers.py), nie jako osobne
+    dokumenty."""
     check_magazyn_access(user, magazyn)
 
-    raw = await plik.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="Pusty plik")
-
-    is_pdf = plik.content_type == _PDF_MIME or (plik.filename or "").lower().endswith(".pdf")
-    mime = _PDF_MIME if is_pdf else (plik.content_type or "application/octet-stream")
+    if not plik:
+        raise HTTPException(status_code=400, detail="Brak pliku")
 
     document_id = uuid.uuid4()
-    file_key = f"documents/{document_id}/{plik.filename or 'plik'}"
-    get_storage().upload(file_key, raw, mime)
+    uploaded: list[tuple[str, str, str]] = []  # (file_key, mime, original_filename)
+    for upload in plik:
+        raw = await upload.read()
+        if not raw:
+            raise HTTPException(status_code=400, detail="Pusty plik")
+        is_pdf = upload.content_type == _PDF_MIME or (upload.filename or "").lower().endswith(".pdf")
+        mime = _PDF_MIME if is_pdf else (upload.content_type or "application/octet-stream")
+        file_key = f"documents/{document_id}/{upload.filename or 'plik'}"
+        get_storage().upload(file_key, raw, mime)
+        uploaded.append((file_key, mime, upload.filename or "plik"))
 
+    first_key, first_mime, first_name = uploaded[0]
     document = repository.create_document(
-        session, document_id=document_id, user_id=user.id, file_key=file_key, mime=mime,
-        original_filename=plik.filename or "plik", magazyn=magazyn,
+        session, document_id=document_id, user_id=user.id, file_key=first_key, mime=first_mime,
+        original_filename=first_name, magazyn=magazyn,
+        extra_files=[(fk, fm) for fk, fm, _ in uploaded[1:]],
     )
 
     dispatch_ocr_task(str(document.id))

@@ -98,6 +98,25 @@ def test_list_documents_nieadmin_widzi_tylko_swoje(client, admin_headers, elektr
     assert len(r_admin.json()) == 2
 
 
+def test_create_document_dwa_pliki_tworzy_jeden_dokument_z_dodatkowa_strona(client, admin_headers, db_session, mocked_storage):
+    """Realna potrzeba (patrz historia czatu): papierowa wydawka na dwoch zdjeciach z telefonu -
+    oba pliki musza trafic do JEDNEGO dokumentu (druga strona jako DocumentFileModel), nie do
+    dwoch osobnych dokumentow."""
+    files = [
+        ("plik", ("strona1.jpg", _fake_jpeg(), "image/jpeg")),
+        ("plik", ("strona2.jpg", _fake_jpeg(), "image/jpeg")),
+    ]
+    with _no_delay():
+        r = client.post("/documents", files=files, headers=admin_headers)
+    assert r.status_code == 202, r.text
+    body = r.json()
+
+    document = doc_repo.get_document(db_session, body["id"])
+    assert document.original_filename == "strona1.jpg"
+    assert len(document.extra_files) == 1
+    assert document.extra_files[0].mime == "image/jpeg"
+
+
 def test_create_document_elektryk_ograniczony_do_przypisanych_magazynow(client, elektryk_headers, mocked_storage):
     """elektryk_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py) - ta sama regula RBAC co /match."""
     files = {"plik": ("skan.jpg", _fake_jpeg(), "image/jpeg")}

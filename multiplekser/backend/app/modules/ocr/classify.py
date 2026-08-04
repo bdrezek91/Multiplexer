@@ -20,10 +20,12 @@ from .chain import OCRChainStep, run_ocr_chain
 from .parsing import extract_json
 
 CLASSIFY_PROMPT = (
-    'Jesteś klasyfikatorem dokumentów magazynowych. Na obrazie/w PDF jest formularz wydania '
-    'materiałów z nagłówkiem, w którym jedno z pól to nazwa działu - dokładnie "Elektryka" lub '
-    '"Hydraulika" (czasem odręcznie, czasem drukowane). Odczytaj WYŁĄCZNIE tę wartość, nie '
-    'analizuj tabeli pozycji ani innych pól nagłówka.\n\n'
+    'Jesteś klasyfikatorem dokumentów magazynowych. Na obrazie (lub obrazach, jeśli dostajesz '
+    'więcej niż jeden - to kolejne strony TEGO SAMEGO dokumentu, nie osobne dokumenty) / w PDF '
+    'jest formularz wydania materiałów z nagłówkiem, w którym jedno z pól to nazwa działu - '
+    'dokładnie "Elektryka" lub "Hydraulika" (czasem odręcznie, czasem drukowane). Nagłówek '
+    'zwykle jest tylko na pierwszej stronie. Odczytaj WYŁĄCZNIE tę wartość, nie analizuj tabeli '
+    'pozycji ani innych pól nagłówka.\n\n'
     'Zwróć WYŁĄCZNIE obiekt JSON, bez markdown, bez komentarzy: '
     '{"dzial":"elektryka","confidence":97.5} albo {"dzial":"hydraulika","confidence":88.0}. '
     'Pole "dzial" MUSI być dokładnie jedną z tych dwóch wartości (małymi literami, bez polskich '
@@ -44,9 +46,9 @@ class ClassifyResult:
 
 
 async def classify_document(
-    file_bytes: bytes, mime: str, chain: Optional[list[OCRChainStep]] = None,
+    files: list[tuple[bytes, str]], chain: Optional[list[OCRChainStep]] = None,
 ) -> ClassifyResult:
-    chain_result = await run_ocr_chain(file_bytes, mime, CLASSIFY_PROMPT, chain=chain)
+    chain_result = await run_ocr_chain(files, CLASSIFY_PROMPT, chain=chain)
     parsed = extract_json(chain_result.text)
 
     dzial = None

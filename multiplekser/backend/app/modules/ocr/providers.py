@@ -20,20 +20,31 @@ class OCRProviderError(Exception):
 
 class OCRProvider(ABC):
     @abstractmethod
-    async def recognize(self, *, file_bytes: bytes, mime: str, model: str, api_key: str, prompt: str) -> str:
-        """Zwraca surowy tekst odpowiedzi modelu (do sparsowania przez ocr/parsing.py)."""
+    async def recognize(
+        self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
+    ) -> str:
+        """Zwraca surowy tekst odpowiedzi modelu (do sparsowania przez ocr/parsing.py).
+        `files` to lista (bytes, mime) - zwykle jeden element, ale wiecej niz jeden gdy
+        dokument sklada sie z kilku osobnych plikow (np. dwa zdjecia z telefonu = dwie strony
+        tej samej papierowej wydawki, patrz historia czatu)."""
 
 
 class GeminiProvider(OCRProvider):
-    """Port geminiRecognize() z monolitu - PDF wysylany natywnie, obrazy jako inline_data."""
+    """Port geminiRecognize() z monolitu - PDF wysylany natywnie, obrazy jako inline_data.
+    Wiele plikow trafia jako wiele czesci `inline_data` w JEDNYM zapytaniu (Gemini wspiera to
+    natywnie) - prompt (patrz prompt.py) instruuje model, ze wtedy to kolejne strony jednego
+    dokumentu, nie osobne dokumenty."""
 
-    async def recognize(self, *, file_bytes: bytes, mime: str, model: str, api_key: str, prompt: str) -> str:
+    async def recognize(
+        self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
+    ) -> str:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model, safe='')}:generateContent"
+        file_parts = [
+            {"inline_data": {"mime_type": mime, "data": base64.b64encode(file_bytes).decode("ascii")}}
+            for file_bytes, mime in files
+        ]
         body = {
-            "contents": [{"parts": [
-                {"inline_data": {"mime_type": mime, "data": base64.b64encode(file_bytes).decode("ascii")}},
-                {"text": prompt},
-            ]}],
+            "contents": [{"parts": [*file_parts, {"text": prompt}]}],
             # thinkingLevel "low" wylacza gleboke rozumowanie - przy odczycie tabeli zbedne,
             # a skraca czas odpowiedzi nawet kilkukrotnie (komentarz z monolitu).
             "generationConfig": {"temperature": 0, "thinkingConfig": {"thinkingLevel": "low"}},

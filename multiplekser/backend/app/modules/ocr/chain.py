@@ -60,9 +60,10 @@ class OCRChainResult:
 
 
 async def run_ocr_chain(
-    file_bytes: bytes, mime: str, prompt: str, chain: Optional[list[OCRChainStep]] = None,
+    files: list[tuple[bytes, str]], prompt: str, chain: Optional[list[OCRChainStep]] = None,
 ) -> OCRChainResult:
-    """Przejscie po lancuchu: pierwszy dostawca z kluczem, ktory odpowie poprawnie, wygrywa."""
+    """Przejscie po lancuchu: pierwszy dostawca z kluczem, ktory odpowie poprawnie, wygrywa.
+    `files` - lista (bytes, mime), patrz OCRProvider.recognize."""
     steps = chain if chain is not None else default_ocr_chain()
     last_error: Optional[Exception] = None
     skipped: list[str] = []
@@ -73,7 +74,7 @@ async def run_ocr_chain(
             continue
         try:
             text = await step.provider.recognize(
-                file_bytes=file_bytes, mime=mime, model=step.model, api_key=step.api_key, prompt=prompt,
+                files=files, model=step.model, api_key=step.api_key, prompt=prompt,
             )
             return OCRChainResult(text=text, used_label=step.label)
         except OCRProviderError as exc:

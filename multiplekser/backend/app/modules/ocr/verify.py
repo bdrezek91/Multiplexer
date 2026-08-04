@@ -47,10 +47,10 @@ class VerifyResult:
         return self.ilosc_wydana is not None or self.ilosc_zuzyta is not None
 
 
-async def verify_ambiguous_quantity(file_bytes: bytes, mime: str, nazwa: str) -> VerifyResult:
+async def verify_ambiguous_quantity(files: list[tuple[bytes, str]], nazwa: str) -> VerifyResult:
     prompt = _VERIFY_PROMPT_TEMPLATE.format(nazwa=nazwa.replace('"', "'"))
     try:
-        chain_result = await run_ocr_chain(file_bytes, mime, prompt)
+        chain_result = await run_ocr_chain(files, prompt)
     except Exception:
         return VerifyResult(None, None)
 

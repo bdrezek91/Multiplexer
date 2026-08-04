@@ -6,7 +6,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
 
-from .models import DocumentItemModel, DocumentModel
+from .models import DocumentFileModel, DocumentItemModel, DocumentModel
 
 
 class DocumentNotFoundError(Exception):
@@ -32,12 +32,21 @@ def create_document(
     magazyn: Optional[str] = None,
     source_type: str = "ai_scan",
     document_id: Optional[uuid.UUID] = None,
+    extra_files: Optional[list[tuple[str, str]]] = None,
 ) -> DocumentModel:
+    """`extra_files` - lista (file_key, mime) dla strony 2+ dokumentu wieloplikowego (np. drugie
+    zdjecie z telefonu tej samej papierowej wydawki, patrz historia czatu) - pierwsza strona
+    zawsze idzie do file_key/mime powyzej, `extra_files` jest zwykle puste (pojedynczy
+    plik/PDF - dotychczasowy, najczestszy przypadek)."""
     kwargs = {"id": document_id} if document_id is not None else {}
     document = DocumentModel(
         **kwargs,
         user_id=user_id, file_key=file_key, mime=mime, original_filename=original_filename,
         magazyn=magazyn, source_type=source_type, status="queued",
+        extra_files=[
+            DocumentFileModel(sequence=i, file_key=fk, mime=fm)
+            for i, (fk, fm) in enumerate(extra_files or [])
+        ],
     )
     session.add(document)
     session.commit()
@@ -51,7 +60,7 @@ def get_document(session: Session, document_id) -> Optional[DocumentModel]:
         return None
     return (
         session.query(DocumentModel)
-        .options(selectinload(DocumentModel.items))
+        .options(selectinload(DocumentModel.items), selectinload(DocumentModel.extra_files))
         .filter(DocumentModel.id == uid)
         .first()
     )

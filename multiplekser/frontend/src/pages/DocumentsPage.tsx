@@ -34,7 +34,11 @@ export function DocumentsPage() {
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const [file, setFile] = useState<File | null>(null)
+  // Zwykle jeden plik (skan PDF albo jedno zdjecie), czasem dwa - papierowa wydawka
+  // rozlozona na dwoch osobnych zdjeciach z telefonu, bo nie zmiescila sie na jednym
+  // (w przeciwienstwie do wielostronicowego PDF-a) - patrz historia czatu. Backend laczy
+  // wszystkie pliki w jeden dokument/jedna rozpiske (patrz prompt.py, WIELE OBRAZOW).
+  const [files, setFiles] = useState<File[]>([])
   const [magazyn, setMagazyn] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -48,12 +52,12 @@ export function DocumentsPage() {
 
   const uploadMutation = useMutation({
     mutationFn: () => {
-      if (!file) throw new Error('Wybierz plik')
-      return uploadDocument(file, magazyn || undefined)
+      if (files.length === 0) throw new Error('Wybierz plik')
+      return uploadDocument(files, magazyn || undefined)
     },
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ['documents'] })
-      setFile(null)
+      setFiles([])
       if (fileInputRef.current) fileInputRef.current.value = ''
       navigate(`/documents/${created.id}`)
     },
@@ -86,16 +90,28 @@ export function DocumentsPage() {
           </Alert>
         )}
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Button variant="outlined" component="label" startIcon={<UploadFileIcon />}>
-            {file ? file.name : 'Wybierz plik'}
-            <input
-              ref={fileInputRef}
-              type="file"
-              hidden
-              accept="image/*,application/pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            />
-          </Button>
+          <Box>
+            <Button variant="outlined" component="label" startIcon={<UploadFileIcon />}>
+              {files.length === 0
+                ? 'Wybierz plik(i)'
+                : files.length === 1
+                  ? files[0].name
+                  : `Wybrano ${files.length} plików`}
+              <input
+                ref={fileInputRef}
+                type="file"
+                hidden
+                multiple
+                accept="image/*,application/pdf"
+                onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              />
+            </Button>
+            {files.length > 1 && (
+              <FormHelperText>
+                Kilka zdjęć = kolejne strony JEDNEJ wydawki (np. nie zmieściła się na jednym zdjęciu z telefonu)
+              </FormHelperText>
+            )}
+          </Box>
           {isAdmin ? (
             <Box>
               <ToggleButtonGroup
@@ -133,7 +149,7 @@ export function DocumentsPage() {
           <Button
             variant="contained"
             onClick={handleUpload}
-            disabled={!file || uploadMutation.isPending}
+            disabled={files.length === 0 || uploadMutation.isPending}
           >
             {uploadMutation.isPending ? 'Wysyłanie...' : 'Wyślij i rozpoznaj'}
           </Button>

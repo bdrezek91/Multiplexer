@@ -107,14 +107,13 @@ def _build_item(
 
 
 async def recognize_document(
-    file_bytes: bytes,
-    mime: str,
+    files: list[tuple[bytes, str]],
     catalog: Catalog,
     special_rules: list[SpecialRule],
     magazyn: Optional[str] = None,
     chain: Optional[list[OCRChainStep]] = None,
 ) -> OCRResult:
-    chain_result = await run_ocr_chain(file_bytes, mime, AI_OCR_PROMPT, chain=chain)
+    chain_result = await run_ocr_chain(files, AI_OCR_PROMPT, chain=chain)
     parsed: Any = extract_json(chain_result.text)
     if parsed is None:
         raise OCRUnparsableResponseError(chain_result.text)

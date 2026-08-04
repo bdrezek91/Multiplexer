@@ -38,6 +38,49 @@ def test_run_ocr_task_dokument_nieistniejacy_nic_nie_robi(db_session):
     run_ocr_task("00000000-0000-0000-0000-000000000000", db_session)  # nie rzuca wyjatku
 
 
+def test_run_ocr_task_dwa_pliki_wysyla_oba_w_jednym_zapytaniu(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Realna potrzeba (patrz historia czatu): papierowa wydawka nie zmiescila sie na jednym
+    zdjeciu z telefonu, wiec pracownik robi dwa osobne zdjecia (dwie strony jednego dokumentu).
+    Oba musza trafic do Gemini w JEDNYM zapytaniu (patrz prompt.py, WIELE OBRAZOW), zeby model
+    polaczyl pozycje z obu stron w jedna liste - nie dwa osobne wywolania/dwa osobne wyniki."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+
+    strona1 = _fake_jpeg_bytes()
+    strona2 = _fake_jpeg_bytes()
+    key1 = f"documents/test/{admin_user.id}-strona1.jpg"
+    key2 = f"documents/test/{admin_user.id}-strona2.jpg"
+    get_storage().upload(key1, strona1, "image/jpeg")
+    get_storage().upload(key2, strona2, "image/jpeg")
+    document = doc_repo.create_document(
+        db_session, user_id=admin_user.id, file_key=key1, mime="image/jpeg",
+        original_filename="strona1.jpg", extra_files=[(key2, "image/jpeg")],
+    )
+
+    ai_response = (
+        '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    )
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(return_value=ai_response),
+    ) as mock_recognize:
+        run_ocr_task(str(document.id), db_session)
+
+    # KAZDE wywolanie recognize() (klasyfikacja + pelny odczyt) musi dostac OBIE strony naraz.
+    assert mock_recognize.call_count == 2  # klasyfikacja + pelny odczyt
+    for call in mock_recognize.call_args_list:
+        files = call.kwargs["files"]
+        assert len(files) == 2
+        assert files[0][1] == "image/jpeg"
+        assert files[1][1] == "image/jpeg"
+
+    saved = doc_repo.get_document(db_session, str(document.id))
+    assert saved.status == "done"
+    assert len(saved.extra_files) == 1
+    assert saved.extra_files[0].file_key == key2
+
+
 def test_run_ocr_task_sukces_zapisuje_pozycje(
     db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
 ):

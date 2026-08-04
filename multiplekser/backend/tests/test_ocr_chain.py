@@ -15,7 +15,7 @@ class _FakeProvider(OCRProvider):
         self.behavior = behavior  # callable(model) -> str | raises OCRProviderError
         self.calls: list[str] = []
 
-    async def recognize(self, *, file_bytes, mime, model, api_key, prompt):
+    async def recognize(self, *, files, model, api_key, prompt):
         self.calls.append(model)
         return self.behavior(model)
 
@@ -34,13 +34,13 @@ async def test_default_chain_ma_5_krokow_jak_ai_chain_w_monolicie():
 async def test_brak_zadnego_klucza_rzuca_z_jasnym_komunikatem():
     steps = [OCRChainStep("Krok bez klucza", _FakeProvider(lambda m: "x"), "model-a", None)]
     with pytest.raises(AllProvidersFailedError, match="Nie podano"):
-        await run_ocr_chain(b"dane", "image/jpeg", "prompt", chain=steps)
+        await run_ocr_chain([(b"dane", "image/jpeg")], "prompt", chain=steps)
 
 
 async def test_pierwszy_dostawca_z_kluczem_wygrywa():
     provider = _FakeProvider(lambda m: '{"pozycje": []}')
     steps = [OCRChainStep("Krok 1", provider, "model-a", "klucz")]
-    result = await run_ocr_chain(b"dane", "image/jpeg", "prompt", chain=steps)
+    result = await run_ocr_chain([(b"dane", "image/jpeg")], "prompt", chain=steps)
     assert result.text == '{"pozycje": []}'
     assert result.used_label == "Krok 1"
 
@@ -56,7 +56,7 @@ async def test_blad_pierwszego_kroku_przelacza_na_kolejny():
         OCRChainStep("Krok 1", provider, "model-a", "klucz-1"),
         OCRChainStep("Krok 2", provider, "model-b", "klucz-2"),
     ]
-    result = await run_ocr_chain(b"dane", "image/jpeg", "prompt", chain=steps)
+    result = await run_ocr_chain([(b"dane", "image/jpeg")], "prompt", chain=steps)
     assert result.text == "OK z model-b"
     assert result.used_label == "Krok 2"
     assert provider.calls == ["model-a", "model-b"]
@@ -68,7 +68,7 @@ async def test_krok_bez_klucza_jest_pomijany_nie_liczy_sie_jako_blad():
         OCRChainStep("Krok bez klucza", provider, "model-a", None),
         OCRChainStep("Krok z kluczem", provider, "model-b", "klucz"),
     ]
-    result = await run_ocr_chain(b"dane", "image/jpeg", "prompt", chain=steps)
+    result = await run_ocr_chain([(b"dane", "image/jpeg")], "prompt", chain=steps)
     assert result.used_label == "Krok z kluczem"
     assert provider.calls == ["model-b"]  # pominiety krok wcale nie wywolal recognize()
 
@@ -80,6 +80,6 @@ async def test_wszyscy_dostawcy_zawiedli_zawiera_ostatni_blad_i_pominiete():
         OCRChainStep("Zawodzi", provider, "model-y", "klucz"),
     ]
     with pytest.raises(AllProvidersFailedError) as exc_info:
-        await run_ocr_chain(b"dane", "image/jpeg", "prompt", chain=steps)
+        await run_ocr_chain([(b"dane", "image/jpeg")], "prompt", chain=steps)
     assert "blad model-y" in str(exc_info.value)
     assert "Bez klucza" in str(exc_info.value)

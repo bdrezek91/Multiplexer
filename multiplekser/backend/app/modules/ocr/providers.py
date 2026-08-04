@@ -45,9 +45,14 @@ class GeminiProvider(OCRProvider):
         ]
         body = {
             "contents": [{"parts": [*file_parts, {"text": prompt}]}],
-            # thinkingLevel "low" wylacza gleboke rozumowanie - przy odczycie tabeli zbedne,
-            # a skraca czas odpowiedzi nawet kilkukrotnie (komentarz z monolitu).
-            "generationConfig": {"temperature": 0, "thinkingConfig": {"thinkingLevel": "low"}},
+            # thinkingLevel podniesiony z "low" na "medium" (2026-08-04, realny przypadek
+            # produkcyjny) - przy formularzach z grupami niemal identycznych wierszy pod rzad
+            # (np. "Rozdzielnica SRN 12/24/36/48") model przy "low" potrafil "zgubic wiersz" i
+            # zmyslic zaznaczenie na sasiedniej etykiecie mimo temperature=0 (ten sam obraz dawal
+            # rozne wyniki miedzy przebiegami). "low" bylo swiadomym portem z monolitu dla
+            # szybkosci - poprawnosc jest tu wyzszym priorytetem (patrz PRIORYTET w promptcie),
+            # wiec kosztem nieco dluzszej odpowiedzi wybieramy "medium".
+            "generationConfig": {"temperature": 0, "thinkingConfig": {"thinkingLevel": "medium"}},
         }
         try:
             async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:

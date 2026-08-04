@@ -2,7 +2,7 @@
 from scripts.import_catalog import import_catalog
 from scripts.import_special_rules import import_special_rules
 from app.modules.matcher.special_rules import DEFAULT_SPECIAL_RULES
-from tests.conftest import ADMIN_PASSWORD, ELEKTRYK_PASSWORD
+from tests.conftest import ADMIN_PASSWORD, MAGAZYNIER_PASSWORD
 
 
 def test_login_sukces(client, admin_user):
@@ -89,8 +89,8 @@ def test_refresh_odrzuca_access_token(client, admin_headers):
     assert r.status_code == 401
 
 
-def test_zapis_produktow_wymaga_roli_admin(client, elektryk_headers):
-    r = client.post("/products", json={"kod": "RBAC TEST", "nazwa": "X"}, headers=elektryk_headers)
+def test_zapis_produktow_wymaga_roli_admin(client, magazynier_headers):
+    r = client.post("/products", json={"kod": "RBAC TEST", "nazwa": "X"}, headers=magazynier_headers)
     assert r.status_code == 403
 
 
@@ -99,8 +99,8 @@ def test_zapis_produktow_dziala_dla_admina(client, admin_headers):
     assert r.status_code == 201
 
 
-def test_odczyt_produktow_dziala_dla_kazdej_roli(client, elektryk_headers):
-    r = client.get("/products", headers=elektryk_headers)
+def test_odczyt_produktow_dziala_dla_kazdej_roli(client, magazynier_headers):
+    r = client.get("/products", headers=magazynier_headers)
     assert r.status_code == 200
 
 
@@ -109,19 +109,19 @@ def test_match_bez_tokenu_zwraca_401(client):
     assert r.status_code == 401
 
 
-def test_elektryk_ograniczony_do_przypisanych_magazynow(client, elektryk_headers, db_session, baza_elektryka_json):
-    """elektryk_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py)."""
+def test_magazynier_ograniczony_do_przypisanych_magazynow(client, magazynier_headers, db_session, baza_elektryka_json):
+    """magazynier_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py)."""
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
 
     r_ok = client.post(
-        "/match", json={"query": "Bezpiecznik 25A Niemiecki", "magazyn": "Zabrze"}, headers=elektryk_headers
+        "/match", json={"query": "Bezpiecznik 25A Niemiecki", "magazyn": "Zabrze"}, headers=magazynier_headers
     )
     assert r_ok.status_code == 200
     assert r_ok.json()["kod"] == "BEZPIECZNIK 25A NIEMIECKI"
 
     r_forbidden = client.post(
-        "/match", json={"query": "Bezpiecznik 25A Niemiecki", "magazyn": "Czekanów"}, headers=elektryk_headers
+        "/match", json={"query": "Bezpiecznik 25A Niemiecki", "magazyn": "Czekanów"}, headers=magazynier_headers
     )
     assert r_forbidden.status_code == 403
 
@@ -137,10 +137,10 @@ def test_admin_ma_dostep_do_kazdego_magazynu(client, admin_headers, db_session, 
     assert r.json()["kod"] == "BEZPIECZNIK 25A NIEMIECKI 1P"
 
 
-def test_match_bez_magazynu_dziala_dla_kazdej_roli(client, elektryk_headers, db_session, baza_elektryka_json):
+def test_match_bez_magazynu_dziala_dla_kazdej_roli(client, magazynier_headers, db_session, baza_elektryka_json):
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
 
-    r = client.post("/match", json={"query": "Grzejnik 1800W"}, headers=elektryk_headers)
+    r = client.post("/match", json={"query": "Grzejnik 1800W"}, headers=magazynier_headers)
     assert r.status_code == 200
     assert r.json()["kod"] == "GRZEJNIK 2000W"

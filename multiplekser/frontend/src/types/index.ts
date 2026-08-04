@@ -2,7 +2,7 @@
 // Trzymane recznie w synchronizacji - backend nie generuje jeszcze klienta z OpenAPI (mozliwe
 // rozszerzenie w przyszlosci, patrz docs/RAPORT_ETAP_8.md).
 
-export type Rola = 'admin' | 'elektryk'
+export type Rola = 'admin' | 'magazynier'
 
 export type Dzial = 'elektryka' | 'hydraulika'
 

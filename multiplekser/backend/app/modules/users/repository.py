@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from .models import UserModel
 from .security import hash_password
 
-ROLES = ("admin", "elektryk")
+ROLES = ("admin", "magazynier")
 
 
 class DuplicateEmailError(Exception):
@@ -43,7 +43,7 @@ def create_user(
     session: Session,
     email: str,
     password: str,
-    rola: str = "elektryk",
+    rola: str = "magazynier",
     magazyny_dostepne: list[str] | None = None,
 ) -> UserModel:
     if get_user_by_email(session, email) is not None:

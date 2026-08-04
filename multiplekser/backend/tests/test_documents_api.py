@@ -66,31 +66,31 @@ def test_get_document_nieistniejacego_zwraca_404(client, admin_headers):
     assert r.status_code == 404
 
 
-def test_get_document_cudzy_zwraca_403_dla_nie_admina(client, admin_headers, elektryk_headers, mocked_storage):
+def test_get_document_cudzy_zwraca_403_dla_nie_admina(client, admin_headers, magazynier_headers, mocked_storage):
     files = {"plik": ("skan.jpg", _fake_jpeg(), "image/jpeg")}
     with _no_delay():
         created = client.post("/documents", files=files, headers=admin_headers).json()
 
-    r = client.get(f"/documents/{created['id']}", headers=elektryk_headers)
+    r = client.get(f"/documents/{created['id']}", headers=magazynier_headers)
     assert r.status_code == 403
 
 
-def test_get_document_admin_widzi_cudzy_dokument(client, admin_headers, elektryk_headers, mocked_storage):
+def test_get_document_admin_widzi_cudzy_dokument(client, admin_headers, magazynier_headers, mocked_storage):
     files = {"plik": ("skan.jpg", _fake_jpeg(), "image/jpeg")}
     with _no_delay():
-        created = client.post("/documents", files=files, headers=elektryk_headers).json()
+        created = client.post("/documents", files=files, headers=magazynier_headers).json()
 
     r = client.get(f"/documents/{created['id']}", headers=admin_headers)
     assert r.status_code == 200
 
 
-def test_list_documents_nieadmin_widzi_tylko_swoje(client, admin_headers, elektryk_headers, mocked_storage):
+def test_list_documents_nieadmin_widzi_tylko_swoje(client, admin_headers, magazynier_headers, mocked_storage):
     files = {"plik": ("skan.jpg", _fake_jpeg(), "image/jpeg")}
     with _no_delay():
         client.post("/documents", files=files, headers=admin_headers)
-        client.post("/documents", files=files, headers=elektryk_headers)
+        client.post("/documents", files=files, headers=magazynier_headers)
 
-    r = client.get("/documents", headers=elektryk_headers)
+    r = client.get("/documents", headers=magazynier_headers)
     assert r.status_code == 200
     assert len(r.json()) == 1
 
@@ -117,11 +117,11 @@ def test_create_document_dwa_pliki_tworzy_jeden_dokument_z_dodatkowa_strona(clie
     assert document.extra_files[0].mime == "image/jpeg"
 
 
-def test_create_document_elektryk_ograniczony_do_przypisanych_magazynow(client, elektryk_headers, mocked_storage):
-    """elektryk_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py) - ta sama regula RBAC co /match."""
+def test_create_document_magazynier_ograniczony_do_przypisanych_magazynow(client, magazynier_headers, mocked_storage):
+    """magazynier_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py) - ta sama regula RBAC co /match."""
     files = {"plik": ("skan.jpg", _fake_jpeg(), "image/jpeg")}
     with _no_delay():
-        r = client.post("/documents", files=files, data={"magazyn": "Czekanów"}, headers=elektryk_headers)
+        r = client.post("/documents", files=files, data={"magazyn": "Czekanów"}, headers=magazynier_headers)
     assert r.status_code == 403
 
 

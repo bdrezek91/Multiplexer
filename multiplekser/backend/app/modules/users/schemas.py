@@ -30,7 +30,7 @@ class RefreshRequest(BaseModel):
 class UserCreate(BaseModel):
     email: str
     password: str = Field(min_length=8)
-    rola: str = "elektryk"
+    rola: str = "magazynier"
     magazyny_dostepne: list[str] = Field(default_factory=list)
 
 

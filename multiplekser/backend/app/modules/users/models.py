@@ -21,6 +21,6 @@ class UserModel(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
-    rola: Mapped[str] = mapped_column(String, nullable=False, default="elektryk")
+    rola: Mapped[str] = mapped_column(String, nullable=False, default="magazynier")
     magazyny_dostepne: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

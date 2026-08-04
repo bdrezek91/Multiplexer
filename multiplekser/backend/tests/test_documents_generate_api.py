@@ -115,13 +115,13 @@ def test_patch_item_niepoprawny_kod_zwraca_400(client, db_session, admin_user, a
     assert r.status_code == 400
 
 
-def test_patch_item_cudzy_dokument_zwraca_403(client, db_session, admin_user, elektryk_headers, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
+def test_patch_item_cudzy_dokument_zwraca_403(client, db_session, admin_user, magazynier_headers, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
     _setup_catalog(db_session, baza_elektryka_json)
     ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
     doc_id = _create_done_document(db_session, admin_user, ai_response)
     item_id = doc_repo.get_document(db_session, doc_id).items[0].id
 
-    r = client.patch(f"/documents/{doc_id}/items/{item_id}", json={"ilosc_finalna": 5}, headers=elektryk_headers)
+    r = client.patch(f"/documents/{doc_id}/items/{item_id}", json={"ilosc_finalna": 5}, headers=magazynier_headers)
     assert r.status_code == 403
 
 
@@ -232,12 +232,12 @@ def test_generate_first_wydawka_dodaje_baze(client, db_session, admin_user, admi
     assert "KORYTKO 32X15;1;;M;" in text
 
 
-def test_generate_cudzy_dokument_zwraca_403(client, db_session, admin_user, elektryk_headers, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
+def test_generate_cudzy_dokument_zwraca_403(client, db_session, admin_user, magazynier_headers, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
     _setup_catalog(db_session, baza_elektryka_json)
     ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 90}]}'
     doc_id = _create_done_document(db_session, admin_user, ai_response)
 
-    r = client.post(f"/documents/{doc_id}/generate", json={}, headers=elektryk_headers)
+    r = client.post(f"/documents/{doc_id}/generate", json={}, headers=magazynier_headers)
     assert r.status_code == 403
 
 
@@ -369,14 +369,14 @@ def test_add_item_wymaga_statusu_done(client, db_session, admin_user, admin_head
     assert r.status_code == 409
 
 
-def test_add_item_cudzy_dokument_zwraca_403(client, db_session, admin_user, elektryk_headers, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
+def test_add_item_cudzy_dokument_zwraca_403(client, db_session, admin_user, magazynier_headers, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
     _setup_catalog(db_session, baza_elektryka_json)
     ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
     doc_id = _create_done_document(db_session, admin_user, ai_response)
 
     r = client.post(
         f"/documents/{doc_id}/items", json={"match_kod": "KORYTKO 32X15", "ilosc_finalna": 1},
-        headers=elektryk_headers,
+        headers=magazynier_headers,
     )
     assert r.status_code == 403
 

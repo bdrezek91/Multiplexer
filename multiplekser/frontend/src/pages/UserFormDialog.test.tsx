@@ -42,7 +42,7 @@ describe('UserFormDialog', () => {
     expect(usersApi.createUser).toHaveBeenCalledWith({
       email: 'nowy@test.local',
       password: 'haslo12345',
-      rola: 'elektryk',
+      rola: 'magazynier',
       magazyny_dostepne: ['Mag m-y Zabrze', 'MAGAZYN Czekanów'],
     })
   })
@@ -51,7 +51,7 @@ describe('UserFormDialog', () => {
     const user = userEvent.setup()
     vi.mocked(usersApi.updateUser).mockResolvedValue({} as CurrentUser)
     const existing: CurrentUser = {
-      id: 'u1', email: 'istniejacy@test.local', rola: 'elektryk',
+      id: 'u1', email: 'istniejacy@test.local', rola: 'magazynier',
       magazyny_dostepne: ['Mag m-y Zabrze'], active: true,
     }
 
@@ -67,7 +67,7 @@ describe('UserFormDialog', () => {
     await waitFor(() => expect(usersApi.updateUser).toHaveBeenCalledTimes(1))
     expect(usersApi.updateUser).toHaveBeenCalledWith('u1', {
       email: 'istniejacy@test.local',
-      rola: 'elektryk',
+      rola: 'magazynier',
       magazyny_dostepne: ['Mag m-y Zabrze'],
       active: true,
     })

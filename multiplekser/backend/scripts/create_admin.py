@@ -2,7 +2,7 @@
 
 Uzycie:
     python -m scripts.create_admin --email admin@example.com --password tajne-haslo
-    python -m scripts.create_admin --email elektryk@example.com --password ... --rola elektryk --magazyn Zabrze --magazyn Czekanów
+    python -m scripts.create_admin --email magazynier@example.com --password ... --rola magazynier --magazyn Zabrze --magazyn Czekanów
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--email", required=True)
     parser.add_argument("--password", required=True)
-    parser.add_argument("--rola", default="admin", choices=["admin", "elektryk"])
+    parser.add_argument("--rola", default="admin", choices=["admin", "magazynier"])
     parser.add_argument(
         "--magazyn", action="append", default=[],
         help="Powtarzalny - magazyn dostepny dla uzytkownika (ignorowane dla roli admin, ma dostep do wszystkich)",

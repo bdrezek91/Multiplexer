@@ -36,7 +36,7 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
 
   const [email, setEmail] = useState(user?.email ?? '')
   const [password, setPassword] = useState('')
-  const [rola, setRola] = useState<Rola>(user?.rola ?? 'elektryk')
+  const [rola, setRola] = useState<Rola>(user?.rola ?? 'magazynier')
   const [magazynyDostepne, setMagazynyDostepne] = useState<string[]>(user?.magazyny_dostepne ?? [])
   const [active, setActive] = useState(user?.active ?? true)
   const [error, setError] = useState<string | null>(null)
@@ -93,7 +93,7 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
               onChange={(e) => setRola(e.target.value as Rola)}
               disabled={isSelf}
             >
-              <MenuItem value="elektryk">elektryk</MenuItem>
+              <MenuItem value="magazynier">magazynier</MenuItem>
               <MenuItem value="admin">admin</MenuItem>
             </TextField>
             <Box>

@@ -73,10 +73,10 @@ class GeminiProvider(OCRProvider):
 
 
 class OpenAIProvider(OCRProvider):
-    """Uzywany WYLACZNIE jako niezalezny drugi odczyt do cross-checku wyniku Gemini (patrz
-    ocr/crosscheck.py) - NIGDY jako glowny/jedyny dostawca w default_ocr_chain(). Responses API
-    (nie starsze Chat Completions) - obsluguje natywnie zarowno obrazy (input_image) jak i PDF
-    (input_file) w jednym zapytaniu, tak samo jak Gemini w GeminiProvider powyzej."""
+    """Ostatni krok w default_ocr_chain() (patrz chain.py) - uzywany WYLACZNIE gdy wszystkie
+    kroki Gemini zawioda. Responses API (nie starsze Chat Completions) - obsluguje natywnie
+    zarowno obrazy (input_image) jak i PDF (input_file) w jednym zapytaniu, tak samo jak Gemini
+    w GeminiProvider powyzej."""
 
     async def recognize(
         self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,

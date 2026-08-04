@@ -1,11 +1,18 @@
 """Lancuch dostawcow z automatycznym fallbackiem - port AI_CHAIN + petli prob w runAI() z monolitu.
 
-Kolejnosc prob: cztery modele Gemini na kluczu darmowym (limity RPM/RPD liczone osobno na model
-w obrebie projektu Google, wiec to cztery niezalezne dzienne pule) -> Gemini 3.6 Flash na kluczu
-platnym. Blad dowolnego kroku (429/401/403/timeout/5xx/brak sieci) automatycznie przelacza na
-kolejny krok. Krok bez skonfigurowanego klucza jest pomijany (nie liczy sie jako "blad" -
-odpowiednik `skipped.push(...)` w monolicie). Lancuch jest bezstanowy - kazde wywolanie startuje
-od poczatku (bez pamieci ktory dostawca ostatnio zadzialal).
+Kolejnosc prob (2026-08-04, uproszczona na zyczenie uzytkownika - patrz historia czatu): dwa
+modele Gemini na kluczu darmowym (limity RPM/RPD liczone osobno na model w obrebie projektu
+Google, wiec to dwie niezalezne dzienne pule) -> Gemini 3.6 Flash na kluczu platnym -> OpenAI na
+kluczu platnym (ostatni krok, uzywany WYLACZNIE gdy wszystkie kroki Gemini zawioda - nie przy
+kazdym dokumencie). Wczesniejsza wersja probowala tez 3.5/3.1 Flash-Lite na kluczu darmowym oraz
+osobny mechanizm cross-checku OpenAI (rownolegly drugi odczyt przy KAZDYM dokumencie, patrz git
+historia ocr/crosscheck.py) - porzucony, bo w praktyce dawal duzo szumu (falszywe "nie znaleziono
+pozycji") i byl bardziej kosztowny niz prosty fallback na koncu tego samego lancucha.
+
+Blad dowolnego kroku (429/401/403/timeout/5xx/brak sieci) automatycznie przelacza na kolejny
+krok. Krok bez skonfigurowanego klucza jest pomijany (nie liczy sie jako "blad" - odpowiednik
+`skipped.push(...)` w monolicie). Lancuch jest bezstanowy - kazde wywolanie startuje od poczatku
+(bez pamieci ktory dostawca ostatnio zadzialal).
 """
 from __future__ import annotations
 
@@ -14,7 +21,7 @@ from typing import Optional
 
 from app.core.config import settings
 
-from .providers import GeminiProvider, OCRProvider, OCRProviderError
+from .providers import GeminiProvider, OCRProvider, OCRProviderError, OpenAIProvider
 
 
 @dataclass
@@ -34,9 +41,11 @@ def default_ocr_chain() -> list[OCRChainStep]:
     return [
         OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key),
         OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key),
-        OCRChainStep("Gemini 3.5 Flash-Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key),
-        OCRChainStep("Gemini 3.1 Flash-Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key),
         OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key),
+        OCRChainStep(
+            f"OpenAI {settings.openai_model} (klucz platny)",
+            OpenAIProvider(), settings.openai_model, settings.openai_api_key,
+        ),
     ]
 
 

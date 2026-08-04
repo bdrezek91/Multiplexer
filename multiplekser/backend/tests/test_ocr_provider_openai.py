@@ -1,6 +1,7 @@
-"""Testy OpenAIProvider - uzywany WYLACZNIE do niezaleznego cross-checku wyniku Gemini (patrz
-ocr/crosscheck.py). HTTP zamockowany (bez sieci, bez kosztow) - odpowiedz w formacie Responses API
-(nie starsze Chat Completions), bo ta obsluguje natywnie zarowno obrazy jak i PDF."""
+"""Testy OpenAIProvider - ostatni krok w default_ocr_chain() (patrz ocr/chain.py), uzywany
+WYLACZNIE gdy wszystkie kroki Gemini zawioda. HTTP zamockowany (bez sieci, bez kosztow) -
+odpowiedz w formacie Responses API (nie starsze Chat Completions), bo ta obsluguje natywnie
+zarowno obrazy jak i PDF."""
 from unittest.mock import AsyncMock, patch
 
 import httpx

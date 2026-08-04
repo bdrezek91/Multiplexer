@@ -7,7 +7,7 @@ from app.modules.ocr.chain import (
     default_ocr_chain,
     run_ocr_chain,
 )
-from app.modules.ocr.providers import GeminiProvider, OCRProvider, OCRProviderError
+from app.modules.ocr.providers import GeminiProvider, OCRProvider, OCRProviderError, OpenAIProvider
 
 
 class _FakeProvider(OCRProvider):
@@ -20,15 +20,22 @@ class _FakeProvider(OCRProvider):
         return self.behavior(model)
 
 
-async def test_default_chain_ma_5_krokow_jak_ai_chain_w_monolicie():
+async def test_default_chain_ma_gemini_x2_darmowy_gemini_platny_openai_platny():
+    """Uproszczone na zyczenie uzytkownika (2026-08-04, patrz historia czatu) - porzucono 3.5/3.1
+    Flash-Lite na kluczu darmowym oraz osobny cross-check OpenAI (rownolegly drugi odczyt przy
+    KAZDYM dokumencie) na rzecz prostego, 4-krokowego lancucha z OpenAI jako ostatnim fallbackiem."""
     chain = default_ocr_chain()
-    assert len(chain) == 5
-    assert all(isinstance(step.provider, GeminiProvider) for step in chain)
-    # 4 kroki na kluczu darmowym + 1 na platnym (dokladnie jak AI_CHAIN)
+    assert len(chain) == 4
+    gemini_steps = [s for s in chain if isinstance(s.provider, GeminiProvider)]
+    openai_steps = [s for s in chain if isinstance(s.provider, OpenAIProvider)]
+    assert len(gemini_steps) == 3
+    assert len(openai_steps) == 1
+    assert openai_steps[0] is chain[-1]  # OpenAI zawsze na koncu - ostatni fallback
+
     free_steps = [s for s in chain if "darmowy" in s.label]
     paid_steps = [s for s in chain if "platny" in s.label]
-    assert len(free_steps) == 4
-    assert len(paid_steps) == 1
+    assert len(free_steps) == 2
+    assert len(paid_steps) == 2  # Gemini platny + OpenAI platny
 
 
 async def test_brak_zadnego_klucza_rzuca_z_jasnym_komunikatem():

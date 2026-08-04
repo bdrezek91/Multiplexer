@@ -34,15 +34,16 @@ class Settings(BaseSettings):
     gemini_api_key_paid: str | None = None
     ocr_timeout_seconds: int = 90
 
-    # Klucz OpenAI - WYLACZNIE do niezaleznego cross-checku wyniku Gemini (patrz
-    # ocr/crosscheck.py), nigdy jako glowny/jedyny dostawca. Opcjonalny - brak klucza po prostu
-    # wylacza cross-check (dokument i tak przechodzi normalnie na samym Gemini).
+    # Klucz OpenAI - OSTATNI krok w default_ocr_chain() (patrz ocr/chain.py), uzywany WYLACZNIE
+    # gdy wszystkie kroki Gemini zawioda (429/timeout/limit) - nie przy kazdym dokumencie.
+    # Opcjonalny - brak klucza po prostu pomija ten krok, tak jak brak klucza Gemini platnego.
+    #
+    # Historia (2026-08-04): pierwsza wersja probowala OpenAI jako niezalezny cross-check
+    # (rownolegly drugi odczyt przy KAZDYM dokumencie, flagujacy rozbieznosci) - porzucone na
+    # zyczenie uzytkownika po tym, jak "gpt-4o-mini" w tej roli znajdowal ulamek pozycji Gemini
+    # (1 z kilkunastu), przez co prawie wszystko bylo falszywie oznaczane "do weryfikacji".
+    # Prosty fallback na koncu tego samego lancucha okazal sie skuteczniejszy i tanszy.
     openai_api_key: str | None = None
-    # "gpt-4o-mini" (pierwsza wersja cross-checku, 2026-08-04) okazal sie na produkcji zbyt slaby
-    # na gestych, odrecznych formularzach - w realnym tescie znalazl 1 pozycje z kilkunastu,
-    # przez co PRAWIE WSZYSTKO bylo oznaczane "do weryfikacji" (falszywe "OpenAI nie znalazl tej
-    # pozycji"), czyniac flagowanie bezuzytecznym. Podniesione na pelne "gpt-4o" (drozsze, ale
-    # znacznie lepsze OCR/vision) - nadpisywalne przez OPENAI_MODEL w .env bez zmian w kodzie.
     openai_model: str = "gpt-4o"
 
     # Skalowanie zdjec (nie-PDF) przed wyslaniem do AI - mniejszy upload = szybsza odpowiedz.

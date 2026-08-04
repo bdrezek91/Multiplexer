@@ -136,8 +136,9 @@ def gemini_key_configured():
 
 @pytest.fixture()
 def openai_key_configured():
-    """Wlacza cross-check OpenAI (patrz ocr/crosscheck.py) - domyslnie WYLACZONY w testach
-    (settings.openai_api_key=None), tak jak w produkcji bez skonfigurowanego klucza."""
+    """Wlacza krok OpenAI - ostatni w default_ocr_chain() (patrz ocr/chain.py) - domyslnie
+    WYLACZONY w testach (settings.openai_api_key=None), tak jak w produkcji bez skonfigurowanego
+    klucza (ten krok jest wtedy po prostu pomijany)."""
     original = settings.openai_api_key
     settings.openai_api_key = "test-openai-key"
     yield

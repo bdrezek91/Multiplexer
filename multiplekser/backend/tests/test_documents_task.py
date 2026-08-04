@@ -112,55 +112,26 @@ def test_run_ocr_task_sukces_zapisuje_pozycje(
     assert item.off_form is True
 
 
-def test_run_ocr_task_cross_check_openai_flaguje_niezgodna_ilosc(
+def test_run_ocr_task_uzywa_openai_jako_ostatniego_fallbacku_lancucha(
     db_session, admin_user, mocked_storage, gemini_key_configured, openai_key_configured, baza_elektryka_json,
 ):
-    """Realny przypadek produkcyjny (2026-08-04): to samo zdjecie dawalo rozne ilosci miedzy
-    przebiegami Gemini (np. przestawione ilosci miedzy dwoma kinkietami) - niezalezny drugi
-    odczyt OpenAI wykrywa taka niezgodnosc i oznacza pozycje jako "do weryfikacji", NIE zmienia
-    zapisanej ilosci (Gemini zostaje zrodlem prawdy dla wygenerowanego pliku)."""
+    """OpenAI jest ostatnim ogniwem default_ocr_chain() (patrz ocr/chain.py) - uzywany WYLACZNIE
+    gdy wszystkie kroki Gemini (darmowy x2 + platny) zawioda, nigdy rownolegle do Gemini."""
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
     document_id = _create_document(db_session, admin_user)
 
-    gemini_response = (
-        '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
-    )
-    openai_response = (
-        '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "3", "confidence": 98}]}'
-    )
+    openai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
     with (
-        patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(return_value=gemini_response)),
+        patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=OCRProviderError("timeout"))),
         patch("app.modules.ocr.providers.OpenAIProvider.recognize", new=AsyncMock(return_value=openai_response)),
     ):
         run_ocr_task(document_id, db_session)
 
     document = doc_repo.get_document(db_session, document_id)
     assert document.status == "done"
-    item = document.items[0]
-    # Ilosc zapisana pozostaje ta z Gemini (1), niezaleznie od tego co zwrocil OpenAI (3).
-    assert item.ilosc_wydana == 1.0
-    assert item.needs_review is True
-    assert "Niezgodność" in item.form_note
-
-
-def test_run_ocr_task_cross_check_openai_pominiety_bez_klucza(
-    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
-):
-    """Bez skonfigurowanego klucza OpenAI (domyslny stan testow) cross-check jest cicho pomijany -
-    dokument konczy sie normalnie na samym Gemini, tak jak przed dodaniem cross-checku."""
-    import_catalog(db_session, baza_elektryka_json)
-    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
-    document_id = _create_document(db_session, admin_user)
-
-    ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
-    with _mock_recognize(ai_response):
-        run_ocr_task(document_id, db_session)
-
-    document = doc_repo.get_document(db_session, document_id)
-    assert document.status == "done"
-    assert document.items[0].needs_review is True  # off_form=True (fuzzy match), nie od cross-checku
-    assert "Niezgodność" not in document.items[0].form_note
+    assert "OpenAI" in document.used_provider
+    assert document.items[0].ilosc_wydana == 1.0
 
 
 def test_run_ocr_task_odrzuca_niepoprawne_pozycje(
@@ -297,11 +268,10 @@ def test_run_ocr_task_ponawia_po_przejsciowym_bledzie_i_konczy_sukcesem(
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
-    # 4 kroki lancucha na kluczu darmowym (patrz default_ocr_chain) zawodza w pierwszej probie
-    # klasyfikacji - dopiero druga proba (attempt 1) dochodzi do sukcesu.
-    responses = [OCRProviderError("timeout"), OCRProviderError("timeout"),
-                 OCRProviderError("timeout"), OCRProviderError("timeout"),
-                 classify_response, ocr_response]
+    # Tylko oba kroki Gemini na kluczu darmowym maja klucz skonfigurowany (gemini_key_configured)
+    # - kroki platne (Gemini/OpenAI) sa pomijane (brak klucza), wiec 2 kroki lancucha zawodza w
+    # pierwszej probie klasyfikacji - dopiero druga proba (attempt 1) dochodzi do sukcesu.
+    responses = [OCRProviderError("timeout"), OCRProviderError("timeout"), classify_response, ocr_response]
     with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=responses)), \
          patch("app.modules.documents.tasks.time.sleep") as fake_sleep:
         run_ocr_task(document_id, db_session)

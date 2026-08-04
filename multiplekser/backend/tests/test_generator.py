@@ -37,6 +37,32 @@ def test_physical_order_fallback_dla_calkowicie_niedopasowanego_tekstu():
     assert physical_order_for("zupelnie nieznana pozycja spoza formularza xyz", fallback=12345) == 12345
 
 
+def test_physical_order_pozycje_polskie_nie_wypadaja_na_koniec():
+    """Regresja (2026-08-04, zgloszona przez Bartka jako "mega pojebana kolejnosc"): stara
+    FORM_PHYSICAL_ORDER opisywala wariant formularza z pozycjami "niemieckimi" (dawno nieaktualny),
+    wiec dzisiejsze "polskie" pozycje z realnej kartki nie mialy dokladnego dopasowania i czesto
+    ladowaly sie na koniec listy (fallback) zamiast we wlasciwym miejscu - np. "Wskaźnik zasilania
+    jednomodułowy (FAZ)" (fizycznie wiersz 9. na kartce) trafial na SAM KONIEC wygenerowanego pliku
+    zamiast blisko poczatku, bo w starej liscie w ogole nie bylo takiej pozycji."""
+    order = physical_order_for("Wskaźnik zasilania jednomodułowy (FAZ)")
+    assert order < 10000  # nie fallback - musi byc realnie dopasowany, nie zgadywany
+    assert order < physical_order_for("Rozdzielnica SRN 24 biała")
+    assert order < physical_order_for("Wyłącznik nadprądowy MBN316E polska 3P 16A")
+    assert order < physical_order_for("Szyna grzebieniowa trójfazowa")
+    assert order < physical_order_for("Wkręt ocynk 4,2x16")
+
+
+def test_physical_order_rozdzielnica_polska_w_kolejnosci_numerow():
+    """Kolejny realny przypadek z tego samego zgloszenia: "Rozdzielnica SRN 24 biała" musi byc
+    miedzy SRN 12 a SRN 36, nie przypadkowo dopasowana do innej, podobnej etykiety."""
+    assert (
+        physical_order_for("Rozdzielnica SRN 12 biała")
+        < physical_order_for("Rozdzielnica SRN 24 biała")
+        < physical_order_for("Rozdzielnica SRN 36 biała")
+        < physical_order_for("Rozdzielnica SRN 48 biała")
+    )
+
+
 def test_generate_output_sortuje_wg_fizycznej_kolejnosci_nie_kolejnosci_wejscia(catalog):
     # Celowo w odwrotnej kolejnosci fizycznej: wkret ocynk (blisko konca formularza) przed
     # gniazdem (blisko poczatku).

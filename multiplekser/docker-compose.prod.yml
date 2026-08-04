@@ -97,6 +97,7 @@ services:
       # Opcjonalny - wylacznie do niezaleznego cross-checku wyniku Gemini (patrz ocr/crosscheck.py).
       # Brak klucza = cross-check jest po prostu pomijany, dokument dziala normalnie na Gemini.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
     depends_on:
       postgres:
         condition: service_healthy

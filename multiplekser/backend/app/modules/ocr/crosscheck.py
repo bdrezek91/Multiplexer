@@ -98,4 +98,13 @@ async def run_cross_check(
     except Exception as exc:  # best-effort - awaria/koszt OpenAI NIE moze zepsuc calego dokumentu
         logger.warning("Cross-check OpenAI pominięty - błąd: %s", exc, extra={"dzial": dzial})
         return
+
+    # Log diagnostyczny (2026-08-04: gpt-4o-mini na produkcji znajdowal ulamek pozycji Gemini,
+    # co bez tego logu bylo niemozliwe odroznic od realnych rozbieznosci ilosci - patrz komentarz
+    # przy settings.openai_model) - liczba pozycji po obu stronach, PRZED probą dopasowania.
+    logger.info(
+        "Cross-check OpenAI zakończony", extra={
+            "dzial": dzial, "pozycje_gemini": len(items), "pozycje_openai": len(result.pozycje),
+        },
+    )
     flag_mismatches(items, result.pozycje)

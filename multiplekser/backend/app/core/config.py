@@ -38,7 +38,12 @@ class Settings(BaseSettings):
     # ocr/crosscheck.py), nigdy jako glowny/jedyny dostawca. Opcjonalny - brak klucza po prostu
     # wylacza cross-check (dokument i tak przechodzi normalnie na samym Gemini).
     openai_api_key: str | None = None
-    openai_model: str = "gpt-4o-mini"
+    # "gpt-4o-mini" (pierwsza wersja cross-checku, 2026-08-04) okazal sie na produkcji zbyt slaby
+    # na gestych, odrecznych formularzach - w realnym tescie znalazl 1 pozycje z kilkunastu,
+    # przez co PRAWIE WSZYSTKO bylo oznaczane "do weryfikacji" (falszywe "OpenAI nie znalazl tej
+    # pozycji"), czyniac flagowanie bezuzytecznym. Podniesione na pelne "gpt-4o" (drozsze, ale
+    # znacznie lepsze OCR/vision) - nadpisywalne przez OPENAI_MODEL w .env bez zmian w kodzie.
+    openai_model: str = "gpt-4o"
 
     # Skalowanie zdjec (nie-PDF) przed wyslaniem do AI - mniejszy upload = szybsza odpowiedz.
     # Podniesione z 1800/85 (port 1:1 z monolitu) - realny przypadek z produkcji (patrz

@@ -54,6 +54,16 @@ class DocumentItemUpdateIn(BaseModel):
     match_kod: str | None = None
 
 
+class DocumentItemAddIn(BaseModel):
+    """Reczne dodanie pozycji spoza OCR (np. cos pominietego na papierowej wydawce) - patrz
+    historia czatu. W przeciwienstwie do PATCH .../items/{id} (poprawka JUZ istniejacej pozycji),
+    to tworzy NOWA pozycje, od razu z potwierdzonym dopasowaniem - uzytkownik wybiera produkt
+    wprost z katalogu (tego samego dzialu co dokument), wiec nie ma tu niejednoznacznosci do
+    rozstrzygniecia jak przy OCR."""
+    match_kod: str
+    ilosc_finalna: float
+
+
 class GenerateRequest(BaseModel):
     qty_mode: str = "real"  # "real" | "ones"
     first_wydawka: bool = False

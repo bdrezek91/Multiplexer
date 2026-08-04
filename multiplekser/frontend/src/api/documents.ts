@@ -1,5 +1,5 @@
 import { apiRequest, apiRequestBlob } from './client'
-import type { DocumentCreated, DocumentDetail, DocumentItem, DocumentItemUpdate, GenerateRequest } from '../types'
+import type { DocumentCreated, DocumentDetail, DocumentItem, DocumentItemAdd, DocumentItemUpdate, GenerateRequest } from '../types'
 
 export function listDocuments(): Promise<DocumentDetail[]> {
   return apiRequest<DocumentDetail[]>('/documents')
@@ -32,6 +32,13 @@ export function updateDocumentItem(
     `/documents/${encodeURIComponent(documentId)}/items/${encodeURIComponent(itemId)}`,
     { method: 'PATCH', body },
   )
+}
+
+export function addDocumentItem(documentId: string, body: DocumentItemAdd): Promise<DocumentItem> {
+  return apiRequest<DocumentItem>(`/documents/${encodeURIComponent(documentId)}/items`, {
+    method: 'POST',
+    body,
+  })
 }
 
 export async function generateDocument(

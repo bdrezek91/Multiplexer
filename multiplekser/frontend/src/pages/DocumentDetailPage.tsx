@@ -6,6 +6,7 @@ import {
   Checkbox,
   Chip,
   FormControlLabel,
+  IconButton,
   MenuItem,
   Paper,
   Stack,
@@ -20,13 +21,14 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DownloadIcon from '@mui/icons-material/Download'
 import { alpha } from '@mui/material/styles'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type FocusEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { generateDocument, getDocument, updateDocumentItem, updateDocumentMagazyn } from '../api/documents'
+import { addDocumentItem, generateDocument, getDocument, updateDocumentItem, updateDocumentMagazyn } from '../api/documents'
 import { listProducts } from '../api/products'
 import { StatusChip } from '../components/StatusChip'
 import { DzialChip } from '../components/DzialChip'
@@ -141,6 +143,115 @@ function MatchKodCell({ documentId, item, dzial }: { documentId: string; item: D
       )}
       renderInput={(params) => <TextField {...params} placeholder="Brak dopasowania" />}
     />
+  )
+}
+
+// Reczne dodanie pozycji spoza OCR (np. cos pominietego na papierowej wydawce) - patrz historia
+// czatu. Ten sam wzorzec wyszukiwania co MatchKodCell (search po stronie serwera, debounce), ale
+// dla PUSTEGO, jeszcze nieistniejacego wiersza - stad kontrolowany `value`/`inputValue` (nie ma
+// tu problemu z remountem przy kazdej zmianie, bo caly stan i tak resetuje sie po dodaniu).
+function AddItemRow({ documentId, dzial }: { documentId: string; dzial: Dzial }) {
+  const queryClient = useQueryClient()
+  const [inputValue, setInputValue] = useState('')
+  const [selected, setSelected] = useState<Product | null>(null)
+  const [qty, setQty] = useState('')
+  const [options, setOptions] = useState<Product[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: (payload: { match_kod: string; ilosc_finalna: number }) => addDocumentItem(documentId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents', documentId] })
+      setSelected(null)
+      setInputValue('')
+      setQty('')
+    },
+  })
+
+  useEffect(() => {
+    if (inputValue.trim().length < 2) {
+      setOptions([])
+      return
+    }
+    let active = true
+    setLoading(true)
+    const timeout = setTimeout(() => {
+      listProducts({ dzial, search: inputValue, limit: 20 })
+        .then((results) => active && setOptions(results))
+        .finally(() => active && setLoading(false))
+    }, 300)
+    return () => {
+      active = false
+      clearTimeout(timeout)
+    }
+  }, [inputValue, dzial])
+
+  const qtyNumber = Number(qty.trim().replace(',', '.'))
+  const canSubmit = Boolean(selected) && qty.trim() !== '' && !Number.isNaN(qtyNumber) && qtyNumber > 0
+
+  const handleSubmit = () => {
+    if (!selected || !canSubmit) return
+    mutation.mutate({ match_kod: selected.kod, ilosc_finalna: qtyNumber })
+  }
+
+  return (
+    <TableRow>
+      <TableCell colSpan={2}>
+        <Typography variant="body2" color="text.secondary">
+          Nowa pozycja
+        </Typography>
+      </TableCell>
+      <TableCell>-</TableCell>
+      <TableCell>
+        <TextField
+          size="small"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          placeholder="Ilość"
+          sx={{ width: 90 }}
+        />
+      </TableCell>
+      <TableCell>
+        <Autocomplete
+          size="small"
+          sx={{ minWidth: 480 }}
+          options={options}
+          loading={loading}
+          value={selected}
+          inputValue={inputValue}
+          isOptionEqualToValue={(option, val) => option.kod === val.kod}
+          getOptionLabel={(option) => option.kod}
+          filterOptions={(opts) => opts}
+          onInputChange={(_, newInput) => setInputValue(newInput)}
+          onChange={(_, newValue) => setSelected(newValue)}
+          disabled={mutation.isPending}
+          noOptionsText={inputValue.trim().length < 2 ? 'Wpisz co najmniej 2 znaki' : 'Brak wyników'}
+          renderOption={(props, option) => (
+            <li {...props} key={option.kod}>
+              {option.kod} — {option.nazwa}
+            </li>
+          )}
+          renderInput={(params) => <TextField {...params} placeholder="Wybierz produkt z katalogu..." />}
+        />
+      </TableCell>
+      <TableCell>
+        <IconButton
+          color="primary"
+          aria-label="Dodaj pozycję"
+          disabled={!canSubmit || mutation.isPending}
+          onClick={handleSubmit}
+        >
+          <AddIcon />
+        </IconButton>
+      </TableCell>
+      <TableCell>
+        {mutation.isError && (
+          <Typography variant="caption" color="error">
+            {mutation.error instanceof ApiError ? mutation.error.detail : 'Nie udało się dodać pozycji'}
+          </Typography>
+        )}
+      </TableCell>
+    </TableRow>
   )
 }
 
@@ -401,6 +512,7 @@ export function DocumentDetailPage() {
                         <TableCell>{item.uwagi || '-'}</TableCell>
                       </TableRow>
                     ))}
+                    <AddItemRow documentId={documentId} dzial={document.dzial || 'elektryka'} />
                   </TableBody>
                 </Table>
               </TableContainer>

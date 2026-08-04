@@ -147,3 +147,45 @@ def update_item(
 def set_magazyn(session: Session, document: DocumentModel, magazyn: Optional[str]) -> None:
     document.magazyn = magazyn
     session.commit()
+
+
+def add_manual_item(
+    session: Session,
+    document: DocumentModel,
+    *,
+    rozpoznana_nazwa: str,
+    match_kod: str,
+    match_nazwa: str,
+    match_jm: str,
+    matched_product_id,
+    ilosc_finalna: float,
+) -> DocumentItemModel:
+    """Reczne dodanie pozycji spoza OCR (patrz DocumentItemAddIn) - `sequence` na koncu
+    istniejacych pozycji (uzywane wprost jako kolejnosc wyniku dla Hydrauliki, patrz
+    generator/core_hydraulika.py; Elektryka i tak sortuje fizycznie przy generowaniu/podgladzie,
+    patrz router._items_in_physical_order). Dopasowanie od razu "ok" (uzytkownik wybral wprost
+    z katalogu, nie ma tu niepewnosci automatycznego dopasowania do rozstrzygniecia)."""
+    next_sequence = max((it.sequence for it in document.items), default=-1) + 1
+    item = DocumentItemModel(
+        document_id=document.id,
+        sequence=next_sequence,
+        rozpoznana_nazwa=rozpoznana_nazwa,
+        ilosc_wydana=None,
+        ilosc_zuzyta=None,
+        ilosc_finalna=ilosc_finalna,
+        matched_product_id=matched_product_id,
+        match_kod=match_kod,
+        match_nazwa=match_nazwa,
+        match_jm=match_jm,
+        match_quality="ok",
+        match_score=1.0,
+        off_form=False,
+        needs_review=False,
+        form_note="",
+        uwagi="Dodano ręcznie",
+        confidence=None,
+    )
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return item

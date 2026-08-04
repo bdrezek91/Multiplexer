@@ -78,6 +78,11 @@ export interface DocumentItemUpdate {
   match_kod?: string | null
 }
 
+export interface DocumentItemAdd {
+  match_kod: string
+  ilosc_finalna: number
+}
+
 export interface UserInput {
   email: string
   rola: Rola

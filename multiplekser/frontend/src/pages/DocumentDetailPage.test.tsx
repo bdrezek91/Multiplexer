@@ -10,7 +10,7 @@ import type { DocumentDetail, Product } from '../types'
 
 vi.mock('../api/documents', async () => {
   const actual = await vi.importActual<typeof import('../api/documents')>('../api/documents')
-  return { ...actual, getDocument: vi.fn(), updateDocumentItem: vi.fn() }
+  return { ...actual, getDocument: vi.fn(), updateDocumentItem: vi.fn(), addDocumentItem: vi.fn() }
 })
 vi.mock('../api/products', async () => {
   const actual = await vi.importActual<typeof import('../api/products')>('../api/products')
@@ -78,6 +78,7 @@ describe('DocumentDetailPage - MatchKodCell', () => {
   beforeEach(() => {
     vi.mocked(documentsApi.getDocument).mockReset()
     vi.mocked(documentsApi.updateDocumentItem).mockReset()
+    vi.mocked(documentsApi.addDocumentItem).mockReset()
     vi.mocked(productsApi.listProducts).mockReset()
     vi.mocked(documentsApi.getDocument).mockResolvedValue(documentDetail)
   })
@@ -113,5 +114,54 @@ describe('DocumentDetailPage - MatchKodCell', () => {
       ),
     )
     expect(await screen.findByText(/RURA FI 32 100 CM/)).toBeInTheDocument()
+  })
+})
+
+describe('DocumentDetailPage - AddItemRow', () => {
+  beforeEach(() => {
+    vi.mocked(documentsApi.getDocument).mockReset()
+    vi.mocked(documentsApi.addDocumentItem).mockReset()
+    vi.mocked(productsApi.listProducts).mockReset()
+    vi.mocked(documentsApi.getDocument).mockResolvedValue(documentDetail)
+  })
+
+  it('pozwala dodac nowa pozycje spoza OCR wybrana z katalogu wlasciwego dzialu', async () => {
+    const user = userEvent.setup()
+    const searchResults: Product[] = [
+      { kod: 'BOJLER 80 L', nazwa: 'Bojler 80 L', jm: 'SZT', grupa: 'Grzejniki', status: 'generyczny', atrybuty: {}, kolor_domniemany: false, aliasy: [], warianty_magazynowe: null, dzial: 'hydraulika' },
+    ]
+    vi.mocked(productsApi.listProducts).mockResolvedValue(searchResults)
+    vi.mocked(documentsApi.addDocumentItem).mockResolvedValue({
+      id: 'item2', rozpoznana_nazwa: 'Bojler 80 L', ilosc_wydana: null, ilosc_zuzyta: null,
+      ilosc_finalna: 2, match_kod: 'BOJLER 80 L', match_nazwa: 'Bojler 80 L', match_jm: 'SZT',
+      match_quality: 'ok', match_score: 1, off_form: false, needs_review: false, form_note: '',
+      uwagi: 'Dodano ręcznie', confidence: null,
+    })
+
+    renderPage()
+    await screen.findByDisplayValue('RURA FI 32 50 CM')
+
+    const searchInput = screen.getByPlaceholderText('Wybierz produkt z katalogu...')
+    await user.type(searchInput, 'bojler')
+
+    await waitFor(() =>
+      expect(productsApi.listProducts).toHaveBeenCalledWith(
+        expect.objectContaining({ dzial: 'hydraulika', search: 'bojler' }),
+      ),
+    )
+    await user.click(await screen.findByText(/BOJLER 80 L/))
+
+    const qtyInput = screen.getByPlaceholderText('Ilość')
+    await user.type(qtyInput, '2')
+
+    const addButton = screen.getByRole('button', { name: 'Dodaj pozycję' })
+    await user.click(addButton)
+
+    await waitFor(() =>
+      expect(documentsApi.addDocumentItem).toHaveBeenCalledWith('doc1', {
+        match_kod: 'BOJLER 80 L',
+        ilosc_finalna: 2,
+      }),
+    )
   })
 })

@@ -320,3 +320,106 @@ def test_generate_hydraulika_uzywa_recznie_poprawionego_kodu(
     r = client.post(f"/documents/{document.id}/generate", json={}, headers=admin_headers)
     assert r.status_code == 200, r.text
     assert r.content.decode("cp1250").strip() == "BOJLER 80 L;2;;SZT;"
+
+
+# ---- POST /documents/{id}/items (dodanie pozycji recznie, spoza OCR) ----
+
+def test_add_item_dodaje_nowa_pozycje(client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
+    _setup_catalog(db_session, baza_elektryka_json)
+    ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    doc_id = _create_done_document(db_session, admin_user, ai_response)
+
+    r = client.post(
+        f"/documents/{doc_id}/items", json={"match_kod": "KORYTKO 32X15", "ilosc_finalna": 3},
+        headers=admin_headers,
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["match_kod"] == "KORYTKO 32X15"
+    assert body["match_jm"] == "M"
+    assert body["match_quality"] == "ok"
+    assert body["ilosc_finalna"] == 3.0
+    assert body["ilosc_wydana"] is None
+
+    document = doc_repo.get_document(db_session, doc_id)
+    assert len(document.items) == 2
+
+
+def test_add_item_niepoprawny_kod_zwraca_400(client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
+    _setup_catalog(db_session, baza_elektryka_json)
+    ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    doc_id = _create_done_document(db_session, admin_user, ai_response)
+
+    r = client.post(
+        f"/documents/{doc_id}/items", json={"match_kod": "NIE MA TAKIEGO KODU", "ilosc_finalna": 1},
+        headers=admin_headers,
+    )
+    assert r.status_code == 400
+
+
+def test_add_item_wymaga_statusu_done(client, db_session, admin_user, admin_headers, mocked_storage):
+    document = doc_repo.create_document(
+        db_session, user_id=admin_user.id, file_key="documents/test/queued.jpg", mime="image/jpeg",
+        original_filename="skan.jpg",
+    )
+    r = client.post(
+        f"/documents/{document.id}/items", json={"match_kod": "KORYTKO 32X15", "ilosc_finalna": 1},
+        headers=admin_headers,
+    )
+    assert r.status_code == 409
+
+
+def test_add_item_cudzy_dokument_zwraca_403(client, db_session, admin_user, elektryk_headers, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
+    _setup_catalog(db_session, baza_elektryka_json)
+    ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    doc_id = _create_done_document(db_session, admin_user, ai_response)
+
+    r = client.post(
+        f"/documents/{doc_id}/items", json={"match_kod": "KORYTKO 32X15", "ilosc_finalna": 1},
+        headers=elektryk_headers,
+    )
+    assert r.status_code == 403
+
+
+def test_add_item_trafia_do_wygenerowanego_pliku(client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
+    """Reczne dodanie ma dzialac dokladnie jak reczna korekta istniejacej pozycji (patrz
+    test_generate_uzywa_recznie_poprawionego_kodu) - trafia do wygenerowanego pliku, nie tylko
+    do widoku weryfikacji."""
+    _setup_catalog(db_session, baza_elektryka_json)
+    ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    doc_id = _create_done_document(db_session, admin_user, ai_response)
+
+    client.post(
+        f"/documents/{doc_id}/items", json={"match_kod": "KORYTKO 32X15", "ilosc_finalna": 5},
+        headers=admin_headers,
+    )
+    r = client.post(f"/documents/{doc_id}/generate", json={}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    text = r.content.decode("cp1250")
+    assert "KORYTKO 32X15;5;;M;" in text
+    assert "GRZEJNIK 2000W;1;;SZT;" in text
+
+
+def test_add_item_hydraulika_dziala_na_katalogu_wlasciwego_dzialu(
+    client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_hydraulika_json,
+):
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+    key = f"documents/test/{admin_user.id}-hydraulika-add.jpg"
+    get_storage().upload(key, _fake_jpeg_bytes(), "image/jpeg")
+    document = doc_repo.create_document(
+        db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
+    )
+    classify_response = '{"dzial":"hydraulika","confidence":95.0}'
+    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+    ):
+        run_ocr_task(str(document.id), db_session)
+
+    r = client.post(
+        f"/documents/{document.id}/items", json={"match_kod": "ZAWÓR KĄTOWY 1/2X3/4", "ilosc_finalna": 2},
+        headers=admin_headers,
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["match_kod"] == "ZAWÓR KĄTOWY 1/2X3/4"

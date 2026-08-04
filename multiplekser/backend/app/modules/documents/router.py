@@ -40,6 +40,7 @@ from .models import DocumentItemModel, DocumentModel
 from .schemas import (
     DocumentCreatedOut,
     DocumentItemOut,
+    DocumentItemAddIn,
     DocumentItemUpdateIn,
     DocumentOut,
     GenerateRequest,
@@ -213,6 +214,41 @@ def update_document_item(
             )
 
     item = repository.update_item(session, item, **update_kwargs)
+    return _item_to_schema(item)
+
+
+@router.post("/{document_id}/items", response_model=DocumentItemOut, status_code=201)
+def add_document_item(
+    document_id: str,
+    body: DocumentItemAddIn,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+):
+    """Reczne dodanie pozycji spoza OCR (np. cos pominietego na papierowej wydawce) - patrz
+    historia czatu. Kod musi istniec w katalogu WLASCIWEGO dzialu dokumentu (tak samo jak
+    walidacja w update_document_item). Nowa pozycja trafia do generowania od razu z quality
+    "ok"."""
+    document = repository.get_document(session, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
+    _check_owner_or_admin(document, user)
+    if document.status != "done":
+        raise HTTPException(status_code=409, detail=f"Dokument ma status {document.status!r}, oczekiwano 'done'")
+
+    dzial = document.dzial or "elektryka"
+    catalog = Catalog.from_db(session, dzial=dzial)
+    cand = catalog.find_by_kod(body.match_kod)
+    if cand is None:
+        raise HTTPException(status_code=400, detail=f"Nieznany kod Optima: {body.match_kod!r}")
+    product_row = session.query(ProductModel.id).filter(
+        ProductModel.kod == cand.kod, ProductModel.dzial == dzial,
+    ).first()
+
+    item = repository.add_manual_item(
+        session, document,
+        rozpoznana_nazwa=cand.nazwa, match_kod=cand.kod, match_nazwa=cand.nazwa, match_jm=cand.jm,
+        matched_product_id=product_row[0] if product_row else None, ilosc_finalna=body.ilosc_finalna,
+    )
     return _item_to_schema(item)
 
 

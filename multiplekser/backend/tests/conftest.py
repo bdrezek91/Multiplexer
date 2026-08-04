@@ -135,6 +135,16 @@ def gemini_key_configured():
 
 
 @pytest.fixture()
+def openai_key_configured():
+    """Wlacza cross-check OpenAI (patrz ocr/crosscheck.py) - domyslnie WYLACZONY w testach
+    (settings.openai_api_key=None), tak jak w produkcji bez skonfigurowanego klucza."""
+    original = settings.openai_api_key
+    settings.openai_api_key = "test-openai-key"
+    yield
+    settings.openai_api_key = original
+
+
+@pytest.fixture()
 def mocked_storage():
     """S3/MinIO zamockowane przez moto - endpoint_url musi byc None (moto przechwytuje tylko
     ruch do rozpoznawanych endpointow AWS, nie do dowolnego custom URL jak prawdziwy MinIO)."""

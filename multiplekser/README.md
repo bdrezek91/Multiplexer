@@ -94,6 +94,11 @@ dokumenty koncza sie statusem `error`. **Nigdy nie wpisuj tych kluczy do kodu/re
 `docs/RAPORT_ETAP_6.md`, zastrzezenie bezpieczenstwa (klucze zaszyte w starym `index.html`).
 Plik `.env` jest w `.gitignore` (sekrety) - `.env.prod.example` to tylko szablon bez wartosci.
 
+Opcjonalnie ustaw tez `OPENAI_API_KEY` (platform.openai.com) - wylacznie do niezaleznego
+cross-checku wyniku Gemini (patrz `backend/app/modules/ocr/crosscheck.py`): rozbiezne pozycje
+miedzy dwoma dostawcami sa oznaczane w tabeli jako "do weryfikacji". Bez tego klucza cross-check
+jest po prostu pomijany, dokumenty dzialaja normalnie na samym Gemini.
+
 **Wlasny VPS (serwer w chmurze)** — skrocona sciezka od zera do dzialajacej, publicznej strony:
 
 1. Zaloz serwer (Ubuntu 22.04/24.04) u dowolnego dostawcy (np. Hetzner CX22, DigitalOcean) - zapisz

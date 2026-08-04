@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     gemini_api_key_paid: str | None = None
     ocr_timeout_seconds: int = 90
 
+    # Klucz OpenAI - WYLACZNIE do niezaleznego cross-checku wyniku Gemini (patrz
+    # ocr/crosscheck.py), nigdy jako glowny/jedyny dostawca. Opcjonalny - brak klucza po prostu
+    # wylacza cross-check (dokument i tak przechodzi normalnie na samym Gemini).
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
+
     # Skalowanie zdjec (nie-PDF) przed wyslaniem do AI - mniejszy upload = szybsza odpowiedz.
     # Podniesione z 1800/85 (port 1:1 z monolitu) - realny przypadek z produkcji (patrz
     # docs/RAPORT_OCR_NIEZAWODNOSC_1.md): drobne odreczne znaki (np. cyfra "1" tuz obok ptaszka

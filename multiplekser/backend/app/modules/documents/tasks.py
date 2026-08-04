@@ -23,6 +23,7 @@ from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
 from app.modules.ocr.chain import AllProvidersFailedError
 from app.modules.ocr.classify import classify_document
+from app.modules.ocr.crosscheck import run_cross_check
 from app.modules.ocr.image import downscale_image
 from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
@@ -67,7 +68,9 @@ def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, do
     dla zwyklego skanu/PDF, wiecej gdy dokument sklada sie z kilku osobnych plikow (np. dwa
     zdjecia z telefonu = dwie strony jednej papierowej wydawki, patrz historia czatu) - wszystkie
     trafiaja do Gemini w JEDNYM zapytaniu (patrz ocr/providers.py), prompt uczy model laczyc je
-    w jeden wynik."""
+    w jeden wynik. Zwraca tez `catalog`/`special_rules` (special_rules=None dla Hydrauliki) -
+    potrzebne ponownie w run_ocr_task() do niezaleznego cross-checku OpenAI (patrz ocr/crosscheck.py),
+    zeby uzyc DOKLADNIE tego samego katalogu/regul co przebieg Gemini."""
     last_exc: Exception | None = None
     for attempt in range(_MAX_ATTEMPTS):
         if attempt > 0:
@@ -78,6 +81,7 @@ def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, do
 
             catalog = Catalog.from_db(session, dzial=dzial)
             if dzial == "hydraulika":
+                special_rules = None
                 result = asyncio.run(
                     recognize_document_hydraulika(files, catalog, magazyn=document.magazyn)
                 )
@@ -86,7 +90,7 @@ def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, do
                 result = asyncio.run(
                     recognize_document(files, catalog, special_rules, magazyn=document.magazyn)
                 )
-            return classify_result, dzial, result
+            return classify_result, dzial, result, catalog, special_rules
         except (AllProvidersFailedError, OCRProviderError) as exc:
             last_exc = exc
             logger.warning(
@@ -154,7 +158,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
         # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
-        classify_result, dzial, result = _classify_and_recognize(files, session, document)
+        classify_result, dzial, result, catalog, special_rules = _classify_and_recognize(files, session, document)
 
         items = []
         for it in result.pozycje:
@@ -182,6 +186,12 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             })
 
         asyncio.run(_verify_ambiguous_items(files, items))
+
+        # Niezalezny drugi odczyt (OpenAI) - flaguje pozycje niezgodne z Gemini jako "do
+        # weryfikacji", nigdy nie nadpisuje danych (patrz ocr/crosscheck.py). Cicho pomijany gdy
+        # klucz OpenAI nie jest skonfigurowany albo zapytanie zawiedzie - best-effort, nie moze
+        # zepsuc dokumentu, ktory i tak konczy sie normalnie na samym Gemini.
+        asyncio.run(run_cross_check(files, dzial, catalog, document.magazyn, special_rules, items))
 
         repository.mark_done(
             session, document,

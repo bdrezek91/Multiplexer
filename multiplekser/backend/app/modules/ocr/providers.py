@@ -70,3 +70,49 @@ class GeminiProvider(OCRProvider):
         cand = candidates[0] if candidates else {}
         parts = (cand.get("content") or {}).get("parts") or []
         return "\n".join(p.get("text") or "" for p in parts)
+
+
+class OpenAIProvider(OCRProvider):
+    """Uzywany WYLACZNIE jako niezalezny drugi odczyt do cross-checku wyniku Gemini (patrz
+    ocr/crosscheck.py) - NIGDY jako glowny/jedyny dostawca w default_ocr_chain(). Responses API
+    (nie starsze Chat Completions) - obsluguje natywnie zarowno obrazy (input_image) jak i PDF
+    (input_file) w jednym zapytaniu, tak samo jak Gemini w GeminiProvider powyzej."""
+
+    async def recognize(
+        self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
+    ) -> str:
+        url = "https://api.openai.com/v1/responses"
+        content_parts = []
+        for file_bytes, mime in files:
+            b64 = base64.b64encode(file_bytes).decode("ascii")
+            if mime == "application/pdf":
+                content_parts.append({
+                    "type": "input_file", "filename": "dokument.pdf",
+                    "file_data": f"data:{mime};base64,{b64}",
+                })
+            else:
+                content_parts.append({"type": "input_image", "image_url": f"data:{mime};base64,{b64}"})
+        content_parts.append({"type": "input_text", "text": prompt})
+
+        body = {"model": model, "input": [{"role": "user", "content": content_parts}], "temperature": 0}
+        headers = {"Authorization": f"Bearer {api_key}"}
+        try:
+            async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
+                resp = await client.post(url, headers=headers, json=body)
+        except httpx.TimeoutException as exc:
+            raise OCRProviderError(f"Timeout po {settings.ocr_timeout_seconds} s bez odpowiedzi") from exc
+        except httpx.HTTPError as exc:
+            raise OCRProviderError(f"Błąd połączenia: {exc}") from exc
+
+        if resp.status_code >= 400:
+            raise OCRProviderError(f"API {resp.status_code}: {resp.text[:300]}")
+
+        data = resp.json()
+        texts = []
+        for item in data.get("output") or []:
+            if item.get("type") != "message":
+                continue
+            for part in item.get("content") or []:
+                if part.get("type") == "output_text":
+                    texts.append(part.get("text") or "")
+        return "\n".join(texts)

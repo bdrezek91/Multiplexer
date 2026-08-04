@@ -94,6 +94,9 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       GEMINI_API_KEY_FREE: ${GEMINI_API_KEY_FREE:-}
       GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
+      # Opcjonalny - wylacznie do niezaleznego cross-checku wyniku Gemini (patrz ocr/crosscheck.py).
+      # Brak klucza = cross-check jest po prostu pomijany, dokument dziala normalnie na Gemini.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

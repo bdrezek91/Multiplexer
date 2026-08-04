@@ -116,7 +116,7 @@ def test_run_ocr_task_uzywa_openai_jako_ostatniego_fallbacku_lancucha(
     db_session, admin_user, mocked_storage, gemini_key_configured, openai_key_configured, baza_elektryka_json,
 ):
     """OpenAI jest ostatnim ogniwem default_ocr_chain() (patrz ocr/chain.py) - uzywany WYLACZNIE
-    gdy wszystkie kroki Gemini (darmowy x2 + platny) zawioda, nigdy rownolegle do Gemini."""
+    gdy wszystkie kroki Gemini (darmowy x4 + platny) zawioda, nigdy rownolegle do Gemini."""
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
     document_id = _create_document(db_session, admin_user)
@@ -268,10 +268,11 @@ def test_run_ocr_task_ponawia_po_przejsciowym_bledzie_i_konczy_sukcesem(
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
-    # Tylko oba kroki Gemini na kluczu darmowym maja klucz skonfigurowany (gemini_key_configured)
-    # - kroki platne (Gemini/OpenAI) sa pomijane (brak klucza), wiec 2 kroki lancucha zawodza w
-    # pierwszej probie klasyfikacji - dopiero druga proba (attempt 1) dochodzi do sukcesu.
-    responses = [OCRProviderError("timeout"), OCRProviderError("timeout"), classify_response, ocr_response]
+    # Tylko cztery kroki Gemini na kluczu darmowym maja klucz skonfigurowany
+    # (gemini_key_configured) - kroki platne (Gemini/OpenAI) sa pomijane (brak klucza), wiec
+    # wszystkie 4 darmowe kroki musza zawiesc w pierwszej probie klasyfikacji. Dopiero druga
+    # proba (attempt 1) dochodzi do sukcesu.
+    responses = [OCRProviderError("timeout")] * 4 + [classify_response, ocr_response]
     with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=responses)), \
          patch("app.modules.documents.tasks.time.sleep") as fake_sleep:
         run_ocr_task(document_id, db_session)

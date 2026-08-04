@@ -20,21 +20,27 @@ class _FakeProvider(OCRProvider):
         return self.behavior(model)
 
 
-async def test_default_chain_ma_gemini_x2_darmowy_gemini_platny_openai_platny():
-    """Uproszczone na zyczenie uzytkownika (2026-08-04, patrz historia czatu) - porzucono 3.5/3.1
-    Flash-Lite na kluczu darmowym oraz osobny cross-check OpenAI (rownolegly drugi odczyt przy
-    KAZDYM dokumencie) na rzecz prostego, 4-krokowego lancucha z OpenAI jako ostatnim fallbackiem."""
+async def test_default_chain_ma_gemini_x4_darmowy_gemini_platny_openai_platny():
+    """Cztery modele Gemini na kluczu darmowym, potem platny Gemini i OpenAI jako ostatni fallback."""
     chain = default_ocr_chain()
-    assert len(chain) == 4
+    assert len(chain) == 6
     gemini_steps = [s for s in chain if isinstance(s.provider, GeminiProvider)]
     openai_steps = [s for s in chain if isinstance(s.provider, OpenAIProvider)]
-    assert len(gemini_steps) == 3
+    assert len(gemini_steps) == 5
     assert len(openai_steps) == 1
     assert openai_steps[0] is chain[-1]  # OpenAI zawsze na koncu - ostatni fallback
 
+    assert [s.model for s in gemini_steps] == [
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+        "gemini-3.6-flash",
+    ]
+
     free_steps = [s for s in chain if "darmowy" in s.label]
     paid_steps = [s for s in chain if "platny" in s.label]
-    assert len(free_steps) == 2
+    assert len(free_steps) == 4
     assert len(paid_steps) == 2  # Gemini platny + OpenAI platny
 
 

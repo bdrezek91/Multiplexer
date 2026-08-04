@@ -1,13 +1,12 @@
 """Lancuch dostawcow z automatycznym fallbackiem - port AI_CHAIN + petli prob w runAI() z monolitu.
 
-Kolejnosc prob (2026-08-04, uproszczona na zyczenie uzytkownika - patrz historia czatu): dwa
-modele Gemini na kluczu darmowym (limity RPM/RPD liczone osobno na model w obrebie projektu
-Google, wiec to dwie niezalezne dzienne pule) -> Gemini 3.6 Flash na kluczu platnym -> OpenAI na
-kluczu platnym (ostatni krok, uzywany WYLACZNIE gdy wszystkie kroki Gemini zawioda - nie przy
-kazdym dokumencie). Wczesniejsza wersja probowala tez 3.5/3.1 Flash-Lite na kluczu darmowym oraz
-osobny mechanizm cross-checku OpenAI (rownolegly drugi odczyt przy KAZDYM dokumencie, patrz git
-historia ocr/crosscheck.py) - porzucony, bo w praktyce dawal duzo szumu (falszywe "nie znaleziono
-pozycji") i byl bardziej kosztowny niz prosty fallback na koncu tego samego lancucha.
+Kolejnosc prob (2026-08-04): cztery modele Gemini na kluczu darmowym (3.6 Flash, 3.5 Flash,
+3.5 Flash Lite i 3.1 Flash Lite) -> Gemini 3.6 Flash na kluczu platnym -> OpenAI na kluczu
+platnym (ostatni krok, uzywany WYLACZNIE gdy wszystkie kroki Gemini zawioda - nie przy kazdym
+dokumencie). Osobny mechanizm cross-checku OpenAI (rownolegly drugi odczyt przy KAZDYM
+dokumencie, patrz git historia ocr/crosscheck.py) zostal porzucony, bo w praktyce dawal duzo
+szumu (falszywe "nie znaleziono pozycji") i byl bardziej kosztowny niz prosty fallback na koncu
+tego samego lancucha.
 
 Blad dowolnego kroku (429/401/403/timeout/5xx/brak sieci) automatycznie przelacza na kolejny
 krok. Krok bez skonfigurowanego klucza jest pomijany (nie liczy sie jako "blad" - odpowiednik

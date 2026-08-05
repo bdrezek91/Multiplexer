@@ -5,7 +5,10 @@ from PIL import Image, ImageDraw
 
 from app.modules.ocr.chain import OCRChainStep
 from app.modules.ocr.providers import OCRProvider
-from app.modules.ocr.verification_image import prepare_verification_files
+from app.modules.ocr.verification_image import (
+    discover_marked_hydraulika_rows,
+    prepare_verification_files,
+)
 from app.modules.ocr.verify import VerifyResult, verify_ambiguous_quantities
 
 
@@ -134,6 +137,31 @@ def test_formularz_elektryczny_jest_zamieniany_na_jeden_obraz_z_wycinkiem():
         assert result.width <= image.width + 20
 
 
+def test_hydraulika_wykrywa_niebieski_znak_i_wycina_tylko_docelowy_wiersz():
+    width, row_height, first_line, row_count = 1000, 30, 100, 44
+    image = Image.new("RGB", (width, first_line + row_height * row_count + 100), "white")
+    draw = ImageDraw.Draw(image)
+    for row in range(row_count + 1):
+        y = first_line + row * row_height
+        draw.line((80, y, 850, y), fill="black", width=3)
+    for x in (80, 390, 600, 720, 850):
+        draw.line((x, first_line, x, first_line + row_height * row_count), fill="black", width=3)
+    # Bateria umywalkowa jest szostym wierszem po pieciu wierszach naglowka.
+    draw.text((430, first_line + 6 * row_height + 7), "1 V", fill=(20, 40, 210))
+    source = BytesIO()
+    image.save(source, format="JPEG", quality=95)
+    input_files = [(source.getvalue(), "image/jpeg")]
+
+    assert "Bateria umywalkowa" in discover_marked_hydraulika_rows(input_files)
+    files, cropped = prepare_verification_files(
+        input_files, [("1", "Bateria umywalkowa")], "hydraulika",
+    )
+
+    assert cropped is True
+    with Image.open(BytesIO(files[0][0])) as result:
+        assert result.height < 120
+
+
 async def test_task_wysyla_wszystkie_braki_jednym_wywolaniem_i_uzupelnia_items(monkeypatch):
     from app.modules.documents.tasks import _verify_ambiguous_items
 
@@ -164,3 +192,24 @@ async def test_task_wysyla_wszystkie_braki_jednym_wywolaniem_i_uzupelnia_items(m
         [(b"pdf", "application/pdf")], ["Pozycja A", "Pozycja B"], "elektryka",
     )
     assert [item["ilosc_finalna"] for item in items] == [2, 1]
+
+
+async def test_task_nie_ucina_kontroli_po_pierwszych_osmiu_pozycjach(monkeypatch):
+    from app.modules.documents.tasks import _verify_ambiguous_items
+
+    items = [{
+        "rozpoznana_nazwa": f"Pozycja {index}",
+        "ilosc_wydana": None,
+        "ilosc_zuzyta": None,
+        "ilosc_finalna": None,
+    } for index in range(10)]
+    batch = AsyncMock(return_value=[VerifyResult(index + 1, None) for index in range(10)])
+    monkeypatch.setattr("app.modules.documents.tasks.verify_ambiguous_quantities", batch)
+
+    await _verify_ambiguous_items(
+        [(b"pdf", "application/pdf")], items, "doc-1", lambda event: None,
+        cooldown_store=object(), dzial="hydraulika",
+    )
+
+    assert len(batch.await_args.args[1]) == 10
+    assert [item["ilosc_finalna"] for item in items] == list(range(1, 11))

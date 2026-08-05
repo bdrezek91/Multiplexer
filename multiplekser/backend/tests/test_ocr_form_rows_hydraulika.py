@@ -44,6 +44,13 @@ def test_snap_pozycja_tylko_z_bazy_dodatkowej_jest_additional():
     assert r.name == "Grzejnik 1000W"
 
 
+def test_dokladny_waz_20_cm_z_bazy_dodatkowej_nie_zmienia_sie_na_30_cm():
+    r = snap_to_known_item_hydraulika("Wąż 1/2x1/2 cala 20 cm")
+    assert r.status == "additional"
+    assert r.ratio == 1.0
+    assert r.name == "Wąż 1/2x1/2 cala 20 cm"
+
+
 def test_snap_zupelnie_obcy_tekst_jest_off():
     r = snap_to_known_item_hydraulika("Zupelnie inny obcy tekst spoza obu list XYZ123")
     assert r.status == "off"

@@ -92,6 +92,39 @@ async def test_pusty_wiersz_jest_pomijany_a_nieczytelny_oznaczony_zostaje(catalo
     assert result.pozycje[0].ilosc_zuzyta is None
 
 
+async def test_lokalnie_wykryty_trojnik_pominiety_przez_ai_trafia_do_kontroli(
+    catalog, gemini_key_configured, monkeypatch,
+):
+    ai_response = '{"pozycje":[{"nazwa":"Bateria umywalkowa","ilosc_wydana":1}]}'
+    monkeypatch.setattr(
+        "app.modules.ocr.pipeline_hydraulika.discover_marked_hydraulika_rows",
+        lambda files: ["Bateria umywalkowa", "Trójnik PP 20"],
+    )
+    with _mock_recognize(ai_response):
+        result = await recognize_document_hydraulika([(b"dane", "image/jpeg")], catalog)
+
+    assert [item.rozpoznana_nazwa for item in result.pozycje] == [
+        "Bateria umywalkowa", "Trójnik PP 20",
+    ]
+    assert result.pozycje[1].ilosc_wydana is None
+    assert result.pozycje[1].ilosc_zuzyta is None
+
+
+async def test_waz_20_i_30_cm_pozostaja_dwoma_roznymi_pozycjami(catalog, gemini_key_configured):
+    ai_response = (
+        '{"pozycje":['
+        '{"nazwa":"Wąż 1/2x1/2 cala 20 cm","ilosc_wydana":1},'
+        '{"nazwa":"Wąż 1/2x1/2 cala 30 cm","ilosc_wydana":2}'
+        ']}'
+    )
+    with _mock_recognize(ai_response):
+        result = await recognize_document_hydraulika([(b"dane", "image/jpeg")], catalog)
+
+    assert [item.rozpoznana_nazwa for item in result.pozycje] == [
+        "Wąż 1/2x1/2 cala 20 cm", "Wąż 1/2x1/2 cala 30 cm",
+    ]
+
+
 async def test_niepoprawny_json_pierwszego_modelu_uruchamia_drugi(catalog):
     mock_recognize = AsyncMock(side_effect=[
         "to nie jest JSON",

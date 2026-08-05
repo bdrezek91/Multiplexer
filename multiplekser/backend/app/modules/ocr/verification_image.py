@@ -1,7 +1,7 @@
 """Przygotowanie jednego, malego obrazu do dodatkowej kontroli ilosci.
 
 Gemini radzi sobie znacznie lepiej, gdy zamiast calego wielostronicowego skanu dostaje kilka
-wycietych wierszy tabeli. Formularz Elektryka ma staly uklad: wykrywamy poziome linie tabeli,
+wycietych wierszy tabeli. Formularze maja staly uklad: wykrywamy poziome linie tabeli,
 mapujemy nazwe na fizyczny numer wiersza i skladamy wszystkie niejasne pozycje w jeden obraz.
 Jesli dokument ma inny uklad albo renderowanie sie nie powiedzie, wolajacy bezpiecznie pozostaje
 przy oryginalnych plikach - dodatkowa kontrola nadal jest zbiorcza, a nie per-wiersz.
@@ -102,16 +102,122 @@ _ELEKTRYKA_PAGES: tuple[tuple[str, ...], ...] = (
     ),
 )
 
+# Fizyczny uklad pierwszych dwoch stron aktualnego formularza Hydrauliki. Obejmuje drukowane
+# wiersze (takze pozycje z bazy dodatkowej) i naprawia m.in. trójniki oraz węże z drugiej strony.
+# Trzecia strona ma kilka scalonych, dwuwierszowych komórek; dla niej pozostaje bezpieczny
+# fallback do oryginalnego PDF zamiast ryzykownego wycinka przesunietego o jeden wiersz.
+_HYDRAULIKA_PAGES: tuple[tuple[str, ...], ...] = (
+    (
+        "__naglowek_hydraulika_pracownik__",
+        "__naglowek_hydraulika_projekt__",
+        "__naglowek_hydraulika_wymiar__",
+        "__naglowek_hydraulika_kraj__",
+        "__naglowek_hydraulika_kolumny__",
+        "Bateria prysznicowa",
+        "Bateria umywalkowa",
+        "Bateria zlewozmywakowa",
+        "Blat kuchenny 1200x600",
+        "Blat kuchenny 1250x600",
+        "Blat kuchenny 825x600",
+        "Bojler 50 L",
+        "Czwórnik 110x50 90 st",
+        "Kabina prysznicowa 80 cm",
+        "Kabina prysznicowa 90 cm",
+        "Kolanko fi 20 45 st",
+        "Kolanko kanalizacyjne fi 32 15 st",
+        "Kolanko kanalizacyjne fi 32 30 st",
+        "Kolanko kanalizacyjne fi 32 45 st",
+        "Kolanko kanalizacyjne fi 32 67 st",
+        "Kolanko kanalizacyjne fi 32 90 st",
+        "Kolanko kanalizacyjne fi 40 15 st",
+        "Kolanko kanalizacyjne fi 40 30 st",
+        "Kolanko kanalizacyjne fi 40 45 st",
+        "Kolanko kanalizacyjne fi 40 67 st",
+        "Kolanko kanalizacyjne fi 40 90 st",
+        "Kolanko kanalizacyjne fi 50 15 st",
+        "Kolanko kanalizacyjne fi 50 30 st",
+        "Kolanko kanalizacyjne fi 50 45 st",
+        "Kolanko kanalizacyjne fi 50 90 st",
+        "Kolanko PP fi 20 90 st",
+        "Kolanko redukcyjne 50x32",
+        "Kolanko ścienne GW",
+        "Kompakt WC",
+        "Końcówka beżowa",
+        "Końcówka srebrna",
+        "Kratka wentylacyjna 140x140 biała",
+        "Kratka wentylacyjna 140x140 grafit",
+        "Listwa boczna aluminiowa",
+        "Mijanka PP fi 20",
+        "Mufa dwukielichowa",
+        "Mufa GW",
+        "Mufa GZ",
+        "Nakrętka M12",
+    ),
+    (
+        "Narożnik wewnętrzny beżowy",
+        "Narożnik wewnętrzny srebrny",
+        "Podgrzewacz nadumywalkowy 10 L",
+        "Podgrzewacz podumywalkowy 10 L",
+        "Podkładka M12",
+        "Pręt 12x1000",
+        "Przyblatówka sonoma",
+        "Przyblatówka srebrna",
+        "Redukcja kanalizacyjna fi 40x32",
+        "Redukcja kanalizacyjna fi 50x32",
+        "Redukcja kanalizacyjna fi 50x40",
+        "Rura fi 32 30 cm",
+        "Rura fi 32 50 cm",
+        "Rura fi 40 25 cm",
+        "Rura fi 40 30 cm",
+        "Rura fi 40 50 cm",
+        "Rura fi 50 100 cm",
+        "Rura fi 50 30 cm",
+        "Rura fi 50 50 cm",
+        "Rura kanalizacyjna 110x2,7x315",
+        "Rura PP fi 20",
+        "Syfon prysznicowy",
+        "Syfon umywalkowy",
+        "Szafka z umywalką 50 cm",
+        "Szyna do montażu szafek",
+        "Śruba do łączenia szafek",
+        "Trójnik kanalizacyjny 100x50 90 st",
+        "Trójnik kanalizacyjny fi 32 45 st",
+        "Trójnik kanalizacyjny fi 32 67 st",
+        "Trójnik kanalizacyjny fi 40 45 st",
+        "Trójnik kanalizacyjny fi 50 45 st",
+        "Trójnik kanalizacyjny fi 50 67 st",
+        "Trójnik PP 20",
+        "Uchwyt do rur fi 32",
+        "Uchwyt do rur fi 40",
+        "Uchwyt do rur fi 50",
+        "Uchwyt rur podwójny fi 20",
+        "Uchwyt rur pojedynczy fi 20",
+        "Wąż 1/2x1/2 cala 20 cm",
+        "Wąż 1/2x1/2 cala 30 cm",
+        "Wąż 1/2x1/2 cala 40 cm",
+        "Wąż 3/8x3/8 cala 40 cm",
+        "Wąż 3/8x3/8 cala 30 cm",
+        "Zaślepka fi 13 antracyt",
+    ),
+)
+
 
 def _norm(value: str) -> str:
     value = strip_diacritics((value or "").lower())
     return re.sub(r"[^a-z0-9]", "", value)
 
 
-_ELEKTRYKA_LOCATIONS = {
-    _norm(name): (page_index, row_index)
-    for page_index, rows in enumerate(_ELEKTRYKA_PAGES)
-    for row_index, name in enumerate(rows)
+_FORM_LAYOUTS = {
+    "elektryka": _ELEKTRYKA_PAGES,
+    "hydraulika": _HYDRAULIKA_PAGES,
+}
+_FORM_LOCATIONS = {
+    dzial: {
+        _norm(name): (page_index, row_index)
+        for page_index, rows in enumerate(pages)
+        for row_index, name in enumerate(rows)
+    }
+    for dzial, pages in _FORM_LAYOUTS.items()
 }
 
 
@@ -141,19 +247,23 @@ def _render_pages(files: list[tuple[bytes, str]]) -> list[Image.Image]:
     return pages
 
 
-def _horizontal_line_centers(image: Image.Image) -> list[tuple[int, int]]:
+def _horizontal_line_centers(
+    image: Image.Image, dark_level: int = 210, min_width_fraction: float = 0.24,
+) -> list[tuple[int, int]]:
     """Zwraca (y, sila_linii) dla dlugich poziomych linii tabeli.
 
     Prog jest celowo wzgledny do szerokosci - dziala zarowno dla renderu PDF, jak i zdjecia po
     przeskalowaniu. Grupowanie laczy kilkupikselowa grubosc jednej linii w jeden punkt.
     """
-    gray = image.convert("L")
+    # Skan Hydrauliki jest wyraznie bledszy na dole 2. i 3. strony. Autokontrast wzmacnia
+    # szare linie siatki, zanim policzymy ciemne piksele w kazdym poziomym przekroju.
+    gray = ImageOps.autocontrast(image.convert("L"), cutoff=1)
     width, height = gray.size
     candidates: list[tuple[int, int]] = []
     for y in range(height):
         histogram = gray.crop((0, y, width, y + 1)).histogram()
-        dark = sum(histogram[:210])
-        if dark >= width * 0.24:
+        dark = sum(histogram[:dark_level])
+        if dark >= width * min_width_fraction:
             candidates.append((y, dark))
 
     groups: list[list[tuple[int, int]]] = []
@@ -172,7 +282,12 @@ def _find_row_lines(image: Image.Image, row_count: int) -> list[int] | None:
     centers = _horizontal_line_centers(image)
     required = row_count + 1
     if len(centers) < required:
-        return None
+        # Ostatnia strona Hydrauliki jest bardzo blada. Drugi prog dopuszcza jasniejsze linie,
+        # a ponizsza kontrola regularnego rozstawu nadal odrzuca tekst i przypadkowe zabrudzenia.
+        centers = _horizontal_line_centers(image, dark_level=225, min_width_fraction=0.18)
+        if len(centers) < required:
+            return None
+        return _interpolate_faint_table_lines(centers, row_count, image.height)
 
     best: tuple[float, list[int]] | None = None
     width = image.width
@@ -191,6 +306,34 @@ def _find_row_lines(image: Image.Image, row_count: int) -> list[int] | None:
         if best is None or score < best[0]:
             best = (score, ys)
     return best[1] if best else None
+
+
+def _interpolate_faint_table_lines(
+    centers: list[tuple[int, int]], row_count: int, image_height: int,
+) -> list[int] | None:
+    """Odtwarza regularna siatke, gdy czesc bardzo bladych linii nie przekroczyla progu.
+
+    Skan 3. strony Hydrauliki ma brakujace fragmenty linii, ale gorna i dolna krawedz oraz
+    rozstaw pozostaja stale. Wybieramy pare krawedzi, ktorej interpolacja trafia w najwiecej
+    rzeczywiscie wykrytych linii; tekst pomiedzy wierszami nie tworzy tak regularnego ukladu.
+    """
+    ys = [y for y, _ in centers]
+    best: tuple[int, float, list[int]] | None = None
+    for start_index, start in enumerate(ys):
+        for end in ys[start_index + 1:]:
+            gap = (end - start) / row_count
+            if gap < 25 or gap > 55 or end > image_height:
+                continue
+            expected = [round(start + index * gap) for index in range(row_count + 1)]
+            distances = [min(abs(y - actual) for actual in ys) for y in expected]
+            hits = sum(distance <= 6 for distance in distances)
+            mean_distance = sum(min(distance, 20) for distance in distances) / len(distances)
+            candidate = (hits, -mean_distance, expected)
+            if best is None or candidate[:2] > best[:2]:
+                best = candidate
+    if best is None or best[0] < max(4, (row_count + 1) // 3):
+        return None
+    return best[2]
 
 
 def _row_crop(image: Image.Image, lines: list[int], row_index: int) -> Image.Image:
@@ -229,6 +372,39 @@ def _compose_crops(crops: list[tuple[str, str, Image.Image]]) -> bytes:
     return output.getvalue()
 
 
+def discover_marked_hydraulika_rows(files: list[tuple[bytes, str]]) -> list[str]:
+    """Wykrywa wiersze z niebieskim odrecznym oznaczeniem, nawet gdy glowny OCR je pominal.
+
+    Formularz ma czarny/szary druk, a pracownicy wypelniaja go niebieskim dlugopisem. Analiza
+    dotyczy tylko srodkowych kolumn ilosci, wiec poprawki nazw i notatki na marginesie nie sa
+    mylone z iloscia. To bezpieczna siatka dla trójników i węży z dolu drugiej strony.
+    """
+    pages = _render_pages(files)
+    marked: list[str] = []
+    for page_index, rows in enumerate(_HYDRAULIKA_PAGES):
+        if page_index >= len(pages):
+            break
+        image = pages[page_index]
+        lines = _find_row_lines(image, len(rows))
+        if lines is None:
+            continue
+        left = round(image.width * 0.39)
+        right = round(image.width * 0.72)
+        for row_index, name in enumerate(rows):
+            if name.startswith("__"):
+                continue
+            top = min(image.height, lines[row_index] + 3)
+            bottom = max(top, min(image.height, lines[row_index + 1] - 3))
+            cell = image.crop((left, top, right, bottom)).convert("RGB")
+            blue_pixels = sum(
+                1 for red, green, blue in cell.getdata()
+                if blue >= red + 18 and blue >= green + 10 and blue < 245
+            )
+            if blue_pixels >= 12:
+                marked.append(name)
+    return marked
+
+
 def prepare_verification_files(
     files: list[tuple[bytes, str]], targets: list[tuple[str, str]], dzial: str,
 ) -> tuple[list[tuple[bytes, str]], bool]:
@@ -237,10 +413,12 @@ def prepare_verification_files(
     `targets` to pary (stabilne_id, rozpoznana_nazwa). Flaga informuje prompt, czy dostal
     wycinki opisane etykietami "Cel ID", czy nadal oryginalny dokument.
     """
-    if dzial != "elektryka" or not targets:
+    layout = _FORM_LAYOUTS.get(dzial)
+    locations_by_name = _FORM_LOCATIONS.get(dzial)
+    if layout is None or locations_by_name is None or not targets:
         return files, False
 
-    locations = [_ELEKTRYKA_LOCATIONS.get(_norm(name)) for _, name in targets]
+    locations = [locations_by_name.get(_norm(name)) for _, name in targets]
     if any(location is None for location in locations):
         return files, False
 
@@ -257,7 +435,7 @@ def prepare_verification_files(
             return files, False
         if page_index not in line_cache:
             line_cache[page_index] = _find_row_lines(
-                pages[page_index], len(_ELEKTRYKA_PAGES[page_index]),
+                pages[page_index], len(layout[page_index]),
             )
         lines = line_cache[page_index]
         if lines is None or row_index + 1 >= len(lines):

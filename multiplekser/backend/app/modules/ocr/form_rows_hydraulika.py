@@ -309,6 +309,8 @@ _ADDITIONAL_PARSED = [
     {"name": n, "key": _normalize_key(n), "bg": bigrams(_normalize_key(n))}
     for n in ADDITIONAL_ROWS
 ]
+_FORM_EXACT = {row["key"]: row["name"] for row in _FORM_PARSED}
+_ADDITIONAL_EXACT = {row["key"]: row["name"] for row in _ADDITIONAL_PARSED}
 
 
 @dataclass
@@ -332,9 +334,15 @@ def snap_to_known_item_hydraulika(name: str) -> SnapResultHydraulika:
     if not key:
         return SnapResultHydraulika(name=name, ratio=0.0, status="off")
 
+    # Najpierw dokladne dopasowanie w OBU bazach. Wczesniej pozycja dodatkowa
+    # "Waz 1/2x1/2 cala 20 cm" przegrywala z niedokladnym (86,7%) wierszem formularza 30 cm,
+    # bo fuzzy FORM_ROWS bylo sprawdzane przed dokladnym ADDITIONAL_ROWS.
+    if key in _FORM_EXACT:
+        return SnapResultHydraulika(name=_FORM_EXACT[key], ratio=1.0, status="exact")
+    if key in _ADDITIONAL_EXACT:
+        return SnapResultHydraulika(name=_ADDITIONAL_EXACT[key], ratio=1.0, status="additional")
+
     form_name, form_ratio = _best_match(key, _FORM_PARSED)
-    if form_name is not None and form_ratio >= 0.95:
-        return SnapResultHydraulika(name=form_name, ratio=form_ratio, status="exact")
     if form_name is not None and form_ratio >= 0.70:
         return SnapResultHydraulika(name=form_name, ratio=form_ratio, status="fixed")
 

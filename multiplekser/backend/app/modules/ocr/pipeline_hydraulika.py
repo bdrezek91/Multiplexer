@@ -25,6 +25,7 @@ from .form_rows_hydraulika import snap_to_known_item_hydraulika
 from .parsing import extract_json, is_actionable_item, is_valid_ocr_response, validate_item
 from .pipeline_elektryka import OCRUnparsableResponseError, normalize_project_number
 from .prompt import AI_OCR_PROMPT_HYDRAULIKA
+from .verification_image import discover_marked_hydraulika_rows
 
 
 @dataclass
@@ -121,6 +122,22 @@ async def recognize_document_hydraulika(
     rejected_count = len(raw_items) - len(schema_items)
 
     pozycje = [_build_item_hydraulika(it, catalog, magazyn) for it in valid_items]
+
+    # Glowny model czasem pomija caly zaznaczony wiersz (szczegolnie trójniki i węże na dole
+    # drugiej strony). Niebieski znacznik wykryty lokalnie dodaje brakujaca pozycje z pustymi
+    # ilosciami; zbiorcza kontrola w tasks.py odczyta potem liczby z waskiego wycinka.
+    existing_names = {item.rozpoznana_nazwa for item in pozycje}
+    for name in discover_marked_hydraulika_rows(files):
+        snapped_name = snap_to_known_item_hydraulika(name).name
+        if snapped_name in existing_names:
+            continue
+        pozycje.append(_build_item_hydraulika({
+            "nazwa": name,
+            "ilosc_wydana": None,
+            "ilosc_zuzyta": None,
+            "ma_oznaczenie": True,
+        }, catalog, magazyn))
+        existing_names.add(snapped_name)
 
     return OCRResultHydraulika(
         numer_projektu=numer_projektu, pozycje=pozycje,

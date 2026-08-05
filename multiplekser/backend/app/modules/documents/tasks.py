@@ -47,12 +47,6 @@ _PDF_MIME = "application/pdf"
 _MAX_ATTEMPTS = 3
 _RETRY_DELAYS_S = (5, 15)
 
-# Druga, waska proba odczytu ilosci (patrz app/modules/ocr/verify.py) - ograniczona do
-# rozsadnej liczby pozycji na dokument, zeby pojedynczy, mocno uszkodzony skan (duzo pustych
-# wierszy) nie wygenerowal lawiny dodatkowych zapytan do AI.
-_MAX_VERIFY_ITEMS = 8
-
-
 def _resolve_product_id(session: Session, kod):
     if not kod:
         return None
@@ -126,7 +120,7 @@ async def _verify_ambiguous_items(
     targets = [
         i for i, it in enumerate(items)
         if it["ilosc_wydana"] is None and it["ilosc_zuzyta"] is None
-    ][:_MAX_VERIFY_ITEMS]
+    ]
     if not targets:
         return
 

@@ -75,6 +75,23 @@ async def test_niepoprawna_pozycja_jest_odrzucana(catalog, gemini_key_configured
     assert result.pozycje[0].match.kod == "BOJLER 80 L"
 
 
+async def test_pusty_wiersz_jest_pomijany_a_nieczytelny_oznaczony_zostaje(catalog, gemini_key_configured):
+    ai_response = (
+        '{"pozycje": ['
+        '{"nazwa":"Rozdzielacz 2 sekcje","ilosc_wydana":null,"ilosc_zuzyta":null},'
+        '{"nazwa":"Bojler 80 L","ilosc_wydana":null,"ilosc_zuzyta":null,'
+        '"ma_oznaczenie":true},'
+        '{"nazwa":"Grzejnik 1000W","ilosc_wydana":1,"ilosc_zuzyta":null}'
+        ']}'
+    )
+    with _mock_recognize(ai_response):
+        result = await recognize_document_hydraulika([(b"dane", "image/jpeg")], catalog)
+
+    assert [item.rozpoznana_nazwa for item in result.pozycje] == ["Bojler 80 L", "Grzejnik 1000W"]
+    assert result.pozycje[0].ilosc_wydana is None
+    assert result.pozycje[0].ilosc_zuzyta is None
+
+
 async def test_niepoprawny_json_pierwszego_modelu_uruchamia_drugi(catalog):
     mock_recognize = AsyncMock(side_effect=[
         "to nie jest JSON",

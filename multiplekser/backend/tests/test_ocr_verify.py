@@ -129,6 +129,8 @@ def test_formularz_elektryczny_jest_zamieniany_na_jeden_obraz_z_wycinkiem():
     assert files[0][1] == "image/jpeg"
     with Image.open(BytesIO(files[0][0])) as result:
         assert result.height < image.height
+        # Naglowek celu + tylko jeden wiersz tabeli; sasiednie wiersze nie moga wejsc do obrazu.
+        assert result.height < 120
         assert result.width <= image.width + 20
 
 

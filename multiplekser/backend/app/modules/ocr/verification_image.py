@@ -194,10 +194,10 @@ def _find_row_lines(image: Image.Image, row_count: int) -> list[int] | None:
 
 
 def _row_crop(image: Image.Image, lines: list[int], row_index: int) -> Image.Image:
-    first_row = max(0, row_index - 1)
-    last_boundary = min(len(lines) - 1, row_index + 2)
-    top = max(0, lines[first_row] - 4)
-    bottom = min(image.height, lines[last_boundary] + 4)
+    # Pokazujemy wylacznie docelowy wiersz. Sasiednie wiersze pomagaly w orientacji, ale przy
+    # pustej komorce model potrafil skopiowac z nich ilosc do celu.
+    top = max(0, lines[row_index] - 4)
+    bottom = min(image.height, lines[row_index + 1] + 4)
     strip = image.crop((0, top, image.width, bottom)).convert("RGB")
 
     # Usuwamy biale marginesy, ale zostawiamy cala szerokosc tabeli: nazwa i obie kolumny

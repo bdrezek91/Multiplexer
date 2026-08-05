@@ -67,8 +67,8 @@ def _build_prompt(targets: list[tuple[str, str]], cropped: bool) -> str:
     target_lines = "\n".join(f'- ID {item_id}: "{name.replace(chr(34), chr(39))}"' for item_id, name in targets)
     source_hint = (
         "Otrzymujesz jeden obraz z osobnymi wycinkami. Kazdy wycinek ma etykiete 'Cel ID'. "
-        "Odczytuj ilosc z wiersza bezposrednio pod ta etykieta, korzystajac z wierszy sasiednich "
-        "wylacznie jako orientacji."
+        "Kazdy wycinek zawiera WYLACZNIE jeden docelowy wiersz: jego nazwe i komorki ilosci. "
+        "Nie ma na nim wierszy sasiednich."
         if cropped else
         "Otrzymujesz oryginalny dokument. Znajdz ponizsze wiersze po pelnej nazwie; podobne "
         "wiersze obok nie sa tym samym materialem."

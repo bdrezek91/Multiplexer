@@ -66,3 +66,19 @@ def validate_item(item: Any) -> bool:
         if value is not None and value != "" and parse_float_loose(value) is None:
             return False
     return True
+
+
+def is_actionable_item(item: Any) -> bool:
+    """Pomija puste wiersze szablonu, zachowujac nieczytelne wiersze z widocznym oznaczeniem.
+
+    Glowny OCR moze zwrocic ``ma_oznaczenie=true``, gdy widzi odreczny znak w komorce ilosci,
+    ale nie potrafi jeszcze pewnie odczytac cyfry. Tylko takie rekordy z dwiema pustymi
+    ilosciami kwalifikuja sie do dodatkowej kontroli. Sam wydrukowany wiersz formularza nie.
+    """
+    if not isinstance(item, dict):
+        return False
+    for field in ("ilosc_wydana", "ilosc_zuzyta", "ilosc"):
+        value = item.get(field)
+        if value is not None and value != "" and parse_float_loose(value) is not None:
+            return True
+    return item.get("ma_oznaczenie") is True

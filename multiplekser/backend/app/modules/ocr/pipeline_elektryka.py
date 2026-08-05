@@ -20,7 +20,7 @@ from app.modules.products import Catalog
 from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, run_ocr_chain
 from .cooldown import OCRCooldownStore
 from .form_rows_elektryka import reconcile_form_row, snap_to_form_row
-from .parsing import extract_json, is_valid_ocr_response, validate_item
+from .parsing import extract_json, is_actionable_item, is_valid_ocr_response, validate_item
 from .prompt import AI_OCR_PROMPT
 
 
@@ -139,8 +139,9 @@ async def recognize_document(
         pn = parsed.get("numer_projektu")
         numer_projektu = normalize_project_number(str(pn).strip()) if pn else None
 
-    valid_items = [it for it in raw_items if validate_item(it)]
-    rejected_count = len(raw_items) - len(valid_items)
+    schema_items = [it for it in raw_items if validate_item(it)]
+    valid_items = [it for it in schema_items if is_actionable_item(it)]
+    rejected_count = len(raw_items) - len(schema_items)
 
     pozycje = [_build_item(it, catalog, special_rules, magazyn) for it in valid_items]
 

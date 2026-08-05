@@ -75,7 +75,25 @@ def list_documents(session: Session, *, user_id=None, limit: int = 50, offset: i
 
 def mark_processing(session: Session, document: DocumentModel) -> None:
     document.status = "processing"
+    document.ai_trace = []
     session.commit()
+
+
+def append_ai_trace_event(
+    session: Session, document: DocumentModel, event: dict[str, object], *, max_events: int = 200,
+) -> None:
+    """Dopisuje zdarzenie widoczne w UI i od razu je zatwierdza, aby polling strony pokazal
+    postep jeszcze podczas trwajacego OCR. Lista ma limit, zeby uszkodzony dokument/retry nie
+    powiekszal rekordu bez konca. Przypisanie nowej listy zapewnia wykrycie zmiany JSONB przez
+    SQLAlchemy bez MutableList."""
+    trace = list(document.ai_trace or [])
+    trace.append(event)
+    document.ai_trace = trace[-max_events:]
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
 
 
 def mark_done(

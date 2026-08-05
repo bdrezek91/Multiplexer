@@ -73,6 +73,39 @@ def test_get_document_zwraca_status_i_wlasciciela_widzi_swoj_dokument(client, ad
     assert body["status"] == "queued"
     assert body["original_filename"] == "skan.jpg"
     assert body["items"] == []
+    assert body["ai_trace"] == []
+
+
+def test_get_document_zwraca_trwaly_przebieg_modeli_ai(
+    client, admin_headers, db_session, admin_user, mocked_storage,
+):
+    document = doc_repo.create_document(
+        db_session,
+        user_id=admin_user.id,
+        file_key="documents/trace/skan.jpg",
+        mime="image/jpeg",
+        original_filename="skan.jpg",
+    )
+    doc_repo.append_ai_trace_event(db_session, document, {
+        "status": "rejected",
+        "stage": "full_ocr_hydraulika",
+        "provider": "Gemini",
+        "model": "gemini-3.6-flash",
+        "label": "Gemini 3.6 Flash (klucz darmowy)",
+        "reason": "API 429: limit zapytan",
+        "step": 1,
+        "total_steps": 6,
+        "duration_ms": 420,
+        "attempt": 1,
+        "created_at": "2026-08-05T07:00:00+00:00",
+    })
+
+    r = client.get(f"/documents/{document.id}", headers=admin_headers)
+
+    assert r.status_code == 200
+    assert r.json()["ai_trace"][0]["status"] == "rejected"
+    assert r.json()["ai_trace"][0]["model"] == "gemini-3.6-flash"
+    assert r.json()["ai_trace"][0]["reason"] == "API 429: limit zapytan"
 
 
 def test_get_document_nieistniejacego_zwraca_404(client, admin_headers):

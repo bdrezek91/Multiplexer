@@ -21,7 +21,7 @@ from app.core.celery_app import celery_app
 from app.core.db import SessionLocal
 from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
-from app.modules.ocr.chain import AllProvidersFailedError
+from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback
 from app.modules.ocr.classify import classify_document
 from app.modules.ocr.image import downscale_image
 from app.modules.ocr.parsing import parse_float_loose
@@ -59,7 +59,10 @@ def _resolve_product_id(session: Session, kod):
     return row[0] if row else None
 
 
-def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, document):
+def _classify_and_recognize(
+    files: list[tuple[bytes, str]], session: Session, document,
+    event_callback: OCRChainEventCallback,
+):
     """Klasyfikacja dzialu + pelny odczyt, z automatycznym ponowieniem na przejsciowe bledy
     dostepnosci AI (patrz _MAX_ATTEMPTS/_RETRY_DELAYS_S wyzej). Klasyfikacja jest ponawiana
     razem z odczytem (nie osobno) - jest tania/szybka, a w praktyce oba kroki zawodza z tego
@@ -69,12 +72,14 @@ def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, do
     trafiaja do Gemini w JEDNYM zapytaniu (patrz ocr/providers.py), prompt uczy model laczyc je
     w jeden wynik."""
     last_exc: Exception | None = None
-    log_context = {"document_id": str(document.id)}
     for attempt in range(_MAX_ATTEMPTS):
+        log_context = {"document_id": str(document.id), "ocr_attempt": attempt + 1}
         if attempt > 0:
             time.sleep(_RETRY_DELAYS_S[attempt - 1])
         try:
-            classify_result = asyncio.run(classify_document(files, log_context=log_context))
+            classify_result = asyncio.run(classify_document(
+                files, log_context=log_context, event_callback=event_callback,
+            ))
             dzial = classify_result.dzial
 
             catalog = Catalog.from_db(session, dzial=dzial)
@@ -82,6 +87,7 @@ def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, do
                 result = asyncio.run(
                     recognize_document_hydraulika(
                         files, catalog, magazyn=document.magazyn, log_context=log_context,
+                        event_callback=event_callback,
                     )
                 )
             else:
@@ -89,7 +95,7 @@ def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, do
                 result = asyncio.run(
                     recognize_document(
                         files, catalog, special_rules, magazyn=document.magazyn,
-                        log_context=log_context,
+                        log_context=log_context, event_callback=event_callback,
                     )
                 )
             return classify_result, dzial, result
@@ -105,6 +111,7 @@ def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, do
 
 async def _verify_ambiguous_items(
     files: list[tuple[bytes, str]], items: list[dict], document_id: str,
+    event_callback: OCRChainEventCallback,
 ) -> None:
     """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
     ptaszka przy pierwszym przebiegu) - druga, waska proba per-wiersz, rownolegle. Modyfikuje
@@ -121,6 +128,7 @@ async def _verify_ambiguous_items(
         *(
             verify_ambiguous_quantity(
                 files, items[i]["rozpoznana_nazwa"], log_context={"document_id": document_id},
+                event_callback=event_callback,
             )
             for i in targets
         )
@@ -152,6 +160,9 @@ def run_ocr_task(document_id: str, session: Session) -> None:
     repository.mark_processing(session, document)
     logger.info("OCR - start przetwarzania", extra={"document_id": document_id})
 
+    def save_ai_event(event: dict[str, object]) -> None:
+        repository.append_ai_trace_event(session, document, event)
+
     try:
         # Wiele plikow = wiele osobnych stron TEGO SAMEGO dokumentu (np. dwa zdjecia z telefonu
         # jednej papierowej wydawki, ktorej nie da sie zmiescic na jednym zdjeciu tak jak wielo-
@@ -167,7 +178,9 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
         # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
-        classify_result, dzial, result = _classify_and_recognize(files, session, document)
+        classify_result, dzial, result = _classify_and_recognize(
+            files, session, document, save_ai_event,
+        )
 
         items = []
         for it in result.pozycje:
@@ -194,7 +207,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "match_jm": it.match.jm_override,
             })
 
-        asyncio.run(_verify_ambiguous_items(files, items, document_id))
+        asyncio.run(_verify_ambiguous_items(files, items, document_id, save_ai_event))
 
         repository.mark_done(
             session, document,

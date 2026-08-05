@@ -24,6 +24,20 @@ class DocumentItemOut(BaseModel):
     confidence: float | None
 
 
+class AITraceEventOut(BaseModel):
+    status: str
+    stage: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    label: str | None = None
+    reason: str | None = None
+    step: int | None = None
+    total_steps: int | None = None
+    duration_ms: int | None = None
+    attempt: int | None = None
+    created_at: datetime
+
+
 class DocumentOut(BaseModel):
     id: str
     status: str
@@ -36,6 +50,7 @@ class DocumentOut(BaseModel):
     used_provider: str | None
     rejected_count: int
     error_message: str | None
+    ai_trace: list[AITraceEventOut] = Field(default_factory=list)
     created_at: datetime
     items: list[DocumentItemOut]
 

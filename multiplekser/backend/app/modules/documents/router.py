@@ -110,6 +110,7 @@ def _to_schema(document: DocumentModel) -> DocumentOut:
         used_provider=document.used_provider,
         rejected_count=document.rejected_count,
         error_message=document.error_message,
+        ai_trace=document.ai_trace or [],
         created_at=document.created_at,
         items=[_item_to_schema(it) for it in _items_in_physical_order(document)],
     )

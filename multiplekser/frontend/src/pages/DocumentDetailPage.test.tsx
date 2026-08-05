@@ -39,6 +39,7 @@ const documentDetail: DocumentDetail = {
   used_provider: 'gemini',
   rejected_count: 0,
   error_message: null,
+  ai_trace: [],
   created_at: new Date().toISOString(),
   items: [
     {
@@ -60,6 +61,39 @@ const documentDetail: DocumentDetail = {
     },
   ],
 }
+
+describe('DocumentDetailPage - przebieg AI', () => {
+  beforeEach(() => {
+    vi.mocked(documentsApi.getDocument).mockReset()
+    vi.mocked(documentsApi.getDocument).mockResolvedValue({
+      ...documentDetail,
+      ai_trace: [
+        {
+          status: 'rejected', stage: 'full_ocr_hydraulika', provider: 'Gemini',
+          model: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (klucz darmowy)',
+          reason: 'API 429: limit zapytań', step: 1, total_steps: 6, duration_ms: 420,
+          attempt: 1, created_at: '2026-08-05T07:00:00Z',
+        },
+        {
+          status: 'selected', stage: 'full_ocr_hydraulika', provider: 'Gemini',
+          model: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite (klucz darmowy)',
+          reason: null, step: 3, total_steps: 6, duration_ms: 1840,
+          attempt: 1, created_at: '2026-08-05T07:00:02Z',
+        },
+      ],
+    })
+  })
+
+  it('pokazuje model odrzucony z powodem oraz model ostatecznie wybrany', async () => {
+    renderPage()
+
+    expect(await screen.findByText('Przebieg AI')).toBeInTheDocument()
+    expect(screen.getByText('Odrzucony')).toBeInTheDocument()
+    expect(screen.getByText(/Powód: API 429: limit zapytań/)).toBeInTheDocument()
+    expect(screen.getByText('Wybrany')).toBeInTheDocument()
+    expect(screen.getByText(/Gemini 3.5 Flash Lite/)).toBeInTheDocument()
+  })
+})
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })

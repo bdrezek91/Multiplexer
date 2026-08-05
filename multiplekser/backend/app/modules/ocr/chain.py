@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Callable, Mapping, Optional
 
 from app.core.config import settings
@@ -28,6 +29,8 @@ logger = logging.getLogger(__name__)
 
 _INVALID_RESPONSE_REASON = "odpowiedz nie spelnia wymagan formatu lub schematu"
 _MAX_LOGGED_REASON_LENGTH = 500
+
+OCRChainEventCallback = Callable[[dict[str, object]], None]
 
 
 @dataclass
@@ -108,17 +111,53 @@ def _step_log_context(
     return extra
 
 
+def _publish_event(
+    status: str,
+    extra: Mapping[str, object],
+    event_callback: Optional[OCRChainEventCallback],
+) -> None:
+    """Przekazuje bezpieczny podzbior danych do trwalego dziennika dokumentu.
+
+    Prompt, odpowiedz modelu, pliki i klucz API celowo nigdy nie trafiaja do payloadu.
+    Awaria opcjonalnego zapisu dziennika nie moze przerwac wlasciwego OCR.
+    """
+    if event_callback is None:
+        return
+    event = {
+        "status": status,
+        "stage": extra.get("ai_stage"),
+        "provider": extra.get("ai_provider"),
+        "model": extra.get("ai_model"),
+        "label": extra.get("ai_label"),
+        "reason": extra.get("reason") or extra.get("last_reason"),
+        "step": extra.get("chain_step"),
+        "total_steps": extra.get("chain_steps"),
+        "duration_ms": extra.get("duration_ms"),
+        "attempt": extra.get("ocr_attempt"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        event_callback(event)
+    except Exception:
+        logger.exception(
+            "OCR AI - nie udalo sie zapisac zdarzenia dla strony",
+            extra={"document_id": extra.get("document_id"), "event_status": status},
+        )
+
+
 async def run_ocr_chain(
     files: list[tuple[bytes, str]], prompt: str, chain: Optional[list[OCRChainStep]] = None,
     thinking_level: str = "medium", response_validator: Optional[Callable[[str], bool]] = None,
     log_context: Optional[Mapping[str, object]] = None,
+    event_callback: Optional[OCRChainEventCallback] = None,
 ) -> OCRChainResult:
     """Przejscie po lancuchu: pierwszy dostawca z kluczem, ktory odpowie poprawnie, wygrywa.
     `files` - lista (bytes, mime), patrz OCRProvider.recognize. `thinking_level` - patrz
     GeminiProvider.recognize(); wolacy przekazuje "low" dla prostszych zadan (np. klasyfikacja
     dzialu w classify.py), domyslnie "medium" dla pelnego odczytu tabeli.
     `response_validator` odrzuca odpowiedz HTTP 200 w zlym formacie i uruchamia kolejny krok.
-    `log_context` pozwala dopiac np. document_id i etap OCR bez logowania prompta/pliku/klucza."""
+    `log_context` pozwala dopiac np. document_id i etap OCR bez logowania prompta/pliku/klucza.
+    `event_callback` zapisuje ten sam bezpieczny slad do widoku dokumentu."""
     steps = chain if chain is not None else default_ocr_chain()
     last_error: Optional[Exception] = None
     last_invalid_text: Optional[str] = None
@@ -146,9 +185,15 @@ async def run_ocr_chain(
                 "OCR AI - model pominiety",
                 extra={**step_extra, "reason": "brak skonfigurowanego klucza API"},
             )
+            _publish_event(
+                "skipped",
+                {**step_extra, "reason": "brak skonfigurowanego klucza API"},
+                event_callback,
+            )
             continue
         started_at = time.monotonic()
         logger.info("OCR AI - proba modelu", extra=step_extra)
+        _publish_event("attempt", step_extra, event_callback)
         try:
             text = await step.provider.recognize(
                 files=files, model=step.model, api_key=step.api_key, prompt=prompt,
@@ -169,6 +214,15 @@ async def run_ocr_chain(
                         "duration_ms": round((time.monotonic() - started_at) * 1000),
                     },
                 )
+                _publish_event(
+                    "rejected",
+                    {
+                        **step_extra,
+                        "reason": _INVALID_RESPONSE_REASON,
+                        "duration_ms": round((time.monotonic() - started_at) * 1000),
+                    },
+                    event_callback,
+                )
                 continue
             logger.info(
                 "OCR AI - wybrano model",
@@ -176,6 +230,14 @@ async def run_ocr_chain(
                     **step_extra,
                     "duration_ms": round((time.monotonic() - started_at) * 1000),
                 },
+            )
+            _publish_event(
+                "selected",
+                {
+                    **step_extra,
+                    "duration_ms": round((time.monotonic() - started_at) * 1000),
+                },
+                event_callback,
             )
             return OCRChainResult(text=text, used_label=step.label)
         except OCRProviderError as exc:
@@ -189,6 +251,15 @@ async def run_ocr_chain(
                     "duration_ms": round((time.monotonic() - started_at) * 1000),
                 },
             )
+            _publish_event(
+                "rejected",
+                {
+                    **step_extra,
+                    "reason": _safe_reason(exc),
+                    "duration_ms": round((time.monotonic() - started_at) * 1000),
+                },
+                event_callback,
+            )
             continue
 
     failure_extra = dict(log_context or {})
@@ -198,6 +269,7 @@ async def run_ocr_chain(
         "last_reason": _safe_reason(last_error) if last_error else "brak skonfigurowanego klucza API",
     })
     logger.error("OCR AI - wszystkie modele zawiodly", extra=failure_extra)
+    _publish_event("failed", failure_extra, event_callback)
     raise AllProvidersFailedError(
         skipped=skipped, last_error=last_error,
         last_invalid_text=last_invalid_text, last_invalid_label=last_invalid_label,

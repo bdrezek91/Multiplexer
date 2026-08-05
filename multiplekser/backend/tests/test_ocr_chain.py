@@ -126,11 +126,13 @@ async def test_loguje_start_odrzucenie_powod_i_wybrany_model(caplog):
         OCRChainStep("Model pierwszy", provider, "model-a", "sekretny-klucz-a"),
         OCRChainStep("Model drugi", provider, "model-b", "sekretny-klucz-b"),
     ]
+    events: list[dict[str, object]] = []
 
     with caplog.at_level("INFO", logger="app.modules.ocr.chain"):
         await run_ocr_chain(
             [(b"dane", "image/jpeg")], "tajny prompt", chain=steps,
             log_context={"document_id": "doc-123", "ai_stage": "full_ocr_elektryka"},
+            event_callback=events.append,
         )
 
     start = next(record for record in caplog.records if record.message == "OCR AI - start lancucha modeli")
@@ -144,10 +146,14 @@ async def test_loguje_start_odrzucenie_powod_i_wybrany_model(caplog):
     assert selected.ai_model == "model-b"
     assert selected.ai_provider == "_Fake"
     assert selected.ai_stage == "full_ocr_elektryka"
+    assert [event["status"] for event in events] == ["attempt", "rejected", "attempt", "selected"]
+    assert events[1]["model"] == "model-a"
+    assert events[1]["reason"] == "API 429: limit zapytan"
+    assert events[3]["model"] == "model-b"
 
-    rendered_logs = repr([record.__dict__ for record in caplog.records])
-    assert "sekretny-klucz" not in rendered_logs
-    assert "tajny prompt" not in rendered_logs
+    rendered_data = repr([record.__dict__ for record in caplog.records]) + repr(events)
+    assert "sekretny-klucz" not in rendered_data
+    assert "tajny prompt" not in rendered_data
 
 
 async def test_loguje_odrzucenie_odpowiedzi_przez_walidator(caplog):

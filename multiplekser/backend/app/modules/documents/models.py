@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Uuid, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -42,6 +43,9 @@ class DocumentModel(Base):
     used_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     rejected_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Bezpieczny, uzytkowy dziennik decyzji lancucha AI wyswietlany na stronie dokumentu.
+    # Zawiera tylko model/status/powod/czas - nigdy prompt, odpowiedz, plik ani klucz API.
+    ai_trace: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 

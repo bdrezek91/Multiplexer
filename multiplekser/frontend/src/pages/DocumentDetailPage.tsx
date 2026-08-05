@@ -34,7 +34,81 @@ import { DzialChip } from '../components/DzialChip'
 import { MatchQualityChip } from '../components/MatchQualityChip'
 import { ApiError } from '../api/client'
 import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
-import type { Dzial, DocumentItem, Product } from '../types'
+import type { AITraceEvent, Dzial, DocumentItem, Product } from '../types'
+
+const AI_STAGE_LABELS: Record<string, string> = {
+  classification: 'Rozpoznanie działu',
+  full_ocr_elektryka: 'Odczyt wydawki — Elektryka',
+  full_ocr_hydraulika: 'Odczyt wydawki — Hydraulika',
+  quantity_verification: 'Dodatkowa kontrola ilości',
+}
+
+const AI_STATUS: Record<string, {
+  label: string
+  color: 'default' | 'info' | 'warning' | 'error' | 'success'
+}> = {
+  attempt: { label: 'Próba', color: 'info' },
+  skipped: { label: 'Pominięty', color: 'default' },
+  rejected: { label: 'Odrzucony', color: 'error' },
+  selected: { label: 'Wybrany', color: 'success' },
+  failed: { label: 'Niepowodzenie', color: 'error' },
+}
+
+function AITracePanel({ events }: { events: AITraceEvent[] }) {
+  if (events.length === 0) return null
+
+  return (
+    <Box
+      sx={{
+        mt: 2,
+        p: 1.5,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 1,
+        bgcolor: (theme) => alpha(theme.palette.background.default, 0.35),
+      }}
+    >
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+        Przebieg AI
+      </Typography>
+      <Stack spacing={0.75} sx={{ maxHeight: 240, overflowY: 'auto', pr: 0.5 }}>
+        {events.map((event, index) => {
+          const status = AI_STATUS[event.status] ?? AI_STATUS.failed
+          const stage = event.stage ? (AI_STAGE_LABELS[event.stage] ?? event.stage) : 'Łańcuch AI'
+          const model = event.label ?? event.model ?? 'Wszystkie modele'
+          const duration = event.duration_ms !== null
+            ? ` • ${(event.duration_ms / 1000).toFixed(1)} s`
+            : ''
+          const retry = event.attempt && event.attempt > 1 ? ` • podejście ${event.attempt}` : ''
+
+          return (
+            <Stack
+              key={`${event.created_at}-${index}`}
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1}
+              alignItems={{ xs: 'flex-start', sm: 'center' }}
+            >
+              <Chip label={status.label} color={status.color} size="small" sx={{ minWidth: 92 }} />
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2">
+                  <strong>{stage}:</strong> {model}
+                  <Typography component="span" variant="caption" color="text.secondary">
+                    {retry}{duration}
+                  </Typography>
+                </Typography>
+                {event.reason && (
+                  <Typography variant="caption" color={event.status === 'rejected' ? 'error' : 'text.secondary'}>
+                    Powód: {event.reason}
+                  </Typography>
+                )}
+              </Box>
+            </Stack>
+          )
+        })}
+      </Stack>
+    </Box>
+  )
+}
 
 function QtyFinalnaCell({ documentId, item }: { documentId: string; item: DocumentItem }) {
   const queryClient = useQueryClient()
@@ -376,6 +450,8 @@ export function DocumentDetailPage() {
                 <StatusChip status={document.status} />
               </Stack>
             </Stack>
+
+            <AITracePanel events={document.ai_trace} />
 
             {document.status === 'processing' || document.status === 'queued' ? (
               <Alert severity="info" sx={{ mt: 2 }}>

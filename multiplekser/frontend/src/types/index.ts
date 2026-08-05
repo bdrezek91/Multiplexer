@@ -52,6 +52,20 @@ export interface DocumentItem {
   confidence: number | null
 }
 
+export interface AITraceEvent {
+  status: 'attempt' | 'skipped' | 'rejected' | 'selected' | 'failed'
+  stage: string | null
+  provider: string | null
+  model: string | null
+  label: string | null
+  reason: string | null
+  step: number | null
+  total_steps: number | null
+  duration_ms: number | null
+  attempt: number | null
+  created_at: string
+}
+
 export interface DocumentDetail {
   id: string
   status: DocumentStatus
@@ -64,6 +78,7 @@ export interface DocumentDetail {
   used_provider: string | null
   rejected_count: number
   error_message: string | null
+  ai_trace: AITraceEvent[]
   created_at: string
   items: DocumentItem[]
 }

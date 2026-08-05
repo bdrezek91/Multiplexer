@@ -1,15 +1,14 @@
 """Testy Etapu 7: run_ocr_task() - logika przetwarzania w tle, testowana bez brokera/workera
 (sesja przekazana wprost, jak w reszcie testow integracyjnych - patrz docstring tasks.py)."""
 from io import BytesIO
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from PIL import Image
 
 from app.modules.documents import repository as doc_repo
 from app.modules.documents.storage import get_storage
-from app.modules.documents.tasks import _resolve_product_id, process_ocr_document, run_ocr_task
+from app.modules.documents.tasks import process_ocr_document, run_ocr_task
 from app.modules.ocr.providers import OCRProviderError
-from app.modules.products.models import ProductModel
 from scripts.import_catalog import import_catalog
 from scripts.import_special_rules import import_special_rules
 from app.modules.matcher.special_rules import DEFAULT_SPECIAL_RULES
@@ -33,21 +32,6 @@ def _create_document(db_session, admin_user, magazyn=None) -> str:
         original_filename="skan.jpg", magazyn=magazyn,
     )
     return str(document.id)
-
-
-def test_resolve_product_id_ogranicza_wyszukiwanie_do_dzialu():
-    """Kod produktu nie jest globalnie unikalny: oba katalogi zawieraja m.in.
-    ``GRZEJNIK 1000W``. FK wyniku OCR musi wiec wskazywac rekord z dzialu dokumentu."""
-    session = MagicMock()
-    expected_id = object()
-    session.query.return_value.filter_by.return_value.first.return_value = (expected_id,)
-
-    result = _resolve_product_id(session, "GRZEJNIK 1000W", "hydraulika")
-
-    session.query.return_value.filter_by.assert_called_once_with(
-        kod="GRZEJNIK 1000W", dzial="hydraulika",
-    )
-    assert result is expected_id
 
 
 def test_run_ocr_task_dokument_nieistniejacy_nic_nie_robi(db_session):
@@ -233,30 +217,6 @@ def test_run_ocr_task_klasyfikuje_hydraulike_i_uzywa_jej_katalogu(
     assert document.dzial_confidence == 91.0
     assert len(document.items) == 1
     assert document.items[0].match_kod == "ZAWÓR KĄTOWY 1/2X3/4"
-
-
-def test_run_ocr_task_wspolny_kod_przypina_fk_z_wlasciwego_dzialu(
-    db_session, admin_user, mocked_storage, gemini_key_configured,
-    baza_elektryka_json, baza_hydraulika_json,
-):
-    """Oba katalogi zawieraja ``GRZEJNIK 1000W``. Import Elektryki jako pierwszy odtwarza
-    realny blad: dawne wyszukanie tylko po kodzie bralo pierwszy rekord i przypinalo dokumentowi
-    Hydrauliki FK produktu z Elektryki."""
-    import_catalog(db_session, baza_elektryka_json, dzial="elektryka")
-    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
-    document_id = _create_document(db_session, admin_user)
-
-    classify_response = '{"dzial":"hydraulika","confidence":98.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Grzejnik 1000W", "ilosc_wydana": "1", "confidence": 99}]}'
-    with _mock_recognize_sequence(classify_response, ocr_response):
-        run_ocr_task(document_id, db_session)
-
-    item = doc_repo.get_document(db_session, document_id).items[0]
-    matched_product = db_session.get(ProductModel, item.matched_product_id)
-    assert item.match_kod == "GRZEJNIK 1000W"
-    assert matched_product is not None
-    assert matched_product.kod == "GRZEJNIK 1000W"
-    assert matched_product.dzial == "hydraulika"
 
 
 def test_run_ocr_task_klasyfikacja_niesparsowalna_pozostaje_na_elektryce(

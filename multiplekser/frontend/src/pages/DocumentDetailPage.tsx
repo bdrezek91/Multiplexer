@@ -51,6 +51,7 @@ const AI_STATUS: Record<string, {
   skipped: { label: 'Pominięty', color: 'default' },
   rejected: { label: 'Odrzucony', color: 'error' },
   selected: { label: 'Wybrany', color: 'success' },
+  no_result: { label: 'Bez wyniku', color: 'warning' },
   failed: { label: 'Niepowodzenie', color: 'error' },
 }
 
@@ -96,8 +97,16 @@ function AITracePanel({ events }: { events: AITraceEvent[] }) {
                     {retry}{duration}
                   </Typography>
                 </Typography>
+                {event.target && (
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    Pozycje: {event.target}
+                  </Typography>
+                )}
                 {event.reason && (
-                  <Typography variant="caption" color={event.status === 'rejected' ? 'error' : 'text.secondary'}>
+                  <Typography
+                    variant="caption"
+                    color={event.status === 'rejected' ? 'error' : 'text.secondary'}
+                  >
                     Powód: {event.reason}
                   </Typography>
                 )}

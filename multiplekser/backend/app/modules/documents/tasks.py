@@ -29,7 +29,7 @@ from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
 from app.modules.ocr.providers import OCRProviderError
-from app.modules.ocr.verify import verify_ambiguous_quantity
+from app.modules.ocr.verify import verify_ambiguous_quantities
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 
@@ -118,11 +118,11 @@ async def _verify_ambiguous_items(
     files: list[tuple[bytes, str]], items: list[dict], document_id: str,
     event_callback: OCRChainEventCallback,
     cooldown_store: OCRCooldownStore,
+    dzial: str,
 ) -> None:
     """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
-    ptaszka przy pierwszym przebiegu) - druga, waska proba per-wiersz, rownolegle. Modyfikuje
-    `items` w miejscu; kazdy blad pojedynczej proby jest juz pochloniety w verify_ambiguous_quantity
-    (best-effort), wiec tu nie ma juz obslugi wyjatkow do zrobienia."""
+    ptaszka przy pierwszym przebiegu) - jedna zbiorcza kontrola wszystkich wierszy. Nierozpoznane
+    pozycje przechodza razem do kolejnego modelu, bez rownoleglego zalewania darmowego API."""
     targets = [
         i for i, it in enumerate(items)
         if it["ilosc_wydana"] is None and it["ilosc_zuzyta"] is None
@@ -130,15 +130,13 @@ async def _verify_ambiguous_items(
     if not targets:
         return
 
-    results = await asyncio.gather(
-        *(
-            verify_ambiguous_quantity(
-                files, items[i]["rozpoznana_nazwa"], log_context={"document_id": document_id},
-                event_callback=event_callback,
-                cooldown_store=cooldown_store,
-            )
-            for i in targets
-        )
+    results = await verify_ambiguous_quantities(
+        files,
+        [items[i]["rozpoznana_nazwa"] for i in targets],
+        dzial,
+        log_context={"document_id": document_id},
+        event_callback=event_callback,
+        cooldown_store=cooldown_store,
     )
     for idx, result in zip(targets, results):
         if not result.found_anything:
@@ -217,7 +215,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             })
 
         asyncio.run(_verify_ambiguous_items(
-            files, items, document_id, save_ai_event, cooldown_store,
+            files, items, document_id, save_ai_event, cooldown_store, dzial,
         ))
 
         repository.mark_done(

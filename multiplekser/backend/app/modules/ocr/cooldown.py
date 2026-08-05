@@ -2,7 +2,8 @@
 
 Redis jest juz brokerem Celery, wiec ten sam stan widza wszystkie procesy workera oraz kolejne
 dokumenty. Czasy rosna przy kolejnych bledach danego kroku: 10, 15, 20 minut; nastepne pozostaja
-na 20 minut. Pierwsza poprawna odpowiedz zeruje licznik.
+na 20 minut. Poprawna odpowiedz po wygasnieciu blokady zeruje licznik; sukces requestu, ktory
+wystartowal jeszcze przed rownoleglym 429, nie kasuje aktywnej blokady.
 """
 from __future__ import annotations
 
@@ -65,6 +66,11 @@ class RedisOCRCooldownStore:
     def reset(self, step_label: str) -> None:
         blocked_key, strikes_key = self._keys(step_label)
         try:
+            # Kilka requestow moglo wystartowac tuz przed pierwszym 429. Ich pozniejszy sukces
+            # nie moze skasowac swiezo ustawionej blokady przez request, ktory dostal limit.
+            # Licznik zerujemy dopiero po wygasnieciu aktywnej blokady i nastepnym sukcesie.
+            if self.client.ttl(blocked_key) > 0:
+                return
             self.client.delete(blocked_key, strikes_key)
         except (RedisError, OSError):
             logger.warning("OCR AI - nie udalo sie wyzerowac cooldownu w Redis", exc_info=True)

@@ -35,6 +35,7 @@ class AITraceEventOut(BaseModel):
     total_steps: int | None = None
     duration_ms: int | None = None
     attempt: int | None = None
+    target: str | None = None
     created_at: datetime
 
 

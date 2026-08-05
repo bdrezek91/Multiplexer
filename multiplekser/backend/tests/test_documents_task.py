@@ -311,7 +311,7 @@ def test_run_ocr_task_druga_proba_uzupelnia_pomijeta_ilosc(
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "confidence": 90}]}'  # brak ilosci
-    verify_response = '{"ilosc_wydana": 1, "ilosc_zuzyta": null}'
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
         new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response]),
@@ -332,10 +332,12 @@ def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "confidence": 90}]}'
-    verify_response = '{"ilosc_wydana": null, "ilosc_zuzyta": null}'  # sam ptaszek, bez cyfry
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response]),
+        # Cztery modele darmowe dostaja ten sam semantyczny brak wyniku; dopiero wtedy kontrola
+        # konczy sie statusem "Bez wyniku" i pozostawia pole puste.
+        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 4),
     ):
         run_ocr_task(document_id, db_session)
 

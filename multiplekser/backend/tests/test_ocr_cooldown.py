@@ -33,10 +33,23 @@ def test_kolejne_429_blokuja_na_10_15_20_i_dalej_20_minut():
     assert [store.record_rate_limit("Gemini darmowy") for _ in range(4)] == [10, 15, 20, 20]
 
 
-def test_sukces_zeruje_licznik_cooldownu():
-    store = RedisOCRCooldownStore(_FakeRedis())
+def test_sukces_wczesniej_uruchomionego_requestu_nie_kasuje_aktywnej_blokady():
+    redis = _FakeRedis()
+    store = RedisOCRCooldownStore(redis)
     assert store.record_rate_limit("Gemini darmowy") == 10
     assert store.record_rate_limit("Gemini darmowy") == 15
+
+    store.reset("Gemini darmowy")
+
+    assert store.record_rate_limit("Gemini darmowy") == 20
+
+
+def test_sukces_po_wygasnieciu_blokady_zeruje_licznik():
+    redis = _FakeRedis()
+    store = RedisOCRCooldownStore(redis)
+    assert store.record_rate_limit("Gemini darmowy") == 10
+    blocked_key, _ = store._keys("Gemini darmowy")
+    redis.ttls[blocked_key] = 0
 
     store.reset("Gemini darmowy")
 

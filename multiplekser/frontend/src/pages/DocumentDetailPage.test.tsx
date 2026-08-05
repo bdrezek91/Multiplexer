@@ -80,6 +80,12 @@ describe('DocumentDetailPage - przebieg AI', () => {
           reason: null, step: 3, total_steps: 6, duration_ms: 1840,
           attempt: 1, created_at: '2026-08-05T07:00:02Z',
         },
+        {
+          status: 'no_result', stage: 'quantity_verification', provider: null,
+          model: null, label: null, reason: 'Nie znaleziono ilości dla wskazanej pozycji',
+          target: 'Gniazdo podwójne polskie białe', step: null, total_steps: null,
+          duration_ms: null, attempt: null, created_at: '2026-08-05T07:00:03Z',
+        },
       ],
     })
   })
@@ -92,6 +98,8 @@ describe('DocumentDetailPage - przebieg AI', () => {
     expect(screen.getByText(/Powód: API 429: limit zapytań/)).toBeInTheDocument()
     expect(screen.getByText('Wybrany')).toBeInTheDocument()
     expect(screen.getByText(/Gemini 3.5 Flash Lite/)).toBeInTheDocument()
+    expect(screen.getByText('Bez wyniku')).toBeInTheDocument()
+    expect(screen.getByText(/Pozycje: Gniazdo podwójne polskie białe/)).toBeInTheDocument()
   })
 })
 

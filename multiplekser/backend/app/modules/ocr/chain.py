@@ -136,6 +136,7 @@ def _publish_event(
         "total_steps": extra.get("chain_steps"),
         "duration_ms": extra.get("duration_ms"),
         "attempt": extra.get("ocr_attempt"),
+        "target": extra.get("ai_target"),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
@@ -153,6 +154,10 @@ async def run_ocr_chain(
     log_context: Optional[Mapping[str, object]] = None,
     event_callback: Optional[OCRChainEventCallback] = None,
     cooldown_store: Optional[OCRCooldownStore] = None,
+    invalid_response_reason: str = _INVALID_RESPONSE_REASON,
+    chain_position_offset: int = 0,
+    chain_total_steps: Optional[int] = None,
+    publish_terminal_failure: bool = True,
 ) -> OCRChainResult:
     """Przejscie po lancuchu: pierwszy dostawca z kluczem, ktory odpowie poprawnie, wygrywa.
     `files` - lista (bytes, mime), patrz OCRProvider.recognize. `thinking_level` - patrz
@@ -163,6 +168,7 @@ async def run_ocr_chain(
     `event_callback` zapisuje ten sam bezpieczny slad do widoku dokumentu. `cooldown_store`
     pomija modele czasowo zablokowane po API 429 (w produkcji wspolny Redis)."""
     steps = chain if chain is not None else default_ocr_chain()
+    total_steps = chain_total_steps if chain_total_steps is not None else len(steps)
     last_error: Optional[Exception] = None
     last_invalid_text: Optional[str] = None
     last_invalid_label: Optional[str] = None
@@ -174,15 +180,15 @@ async def run_ocr_chain(
         "first_ai_provider": _provider_name(first_active) if first_active else None,
         "first_ai_model": first_active.model if first_active else None,
         "first_ai_label": first_active.label if first_active else None,
-        "chain_steps": len(steps),
+        "chain_steps": total_steps,
         "configured_steps": sum(bool(step.api_key) for step in steps),
         "file_count": len(files),
         "thinking_level": thinking_level,
     })
     logger.info("OCR AI - start lancucha modeli", extra=start_extra)
 
-    for step_number, step in enumerate(steps, start=1):
-        step_extra = _step_log_context(step, step_number, len(steps), log_context)
+    for step_number, step in enumerate(steps, start=1 + chain_position_offset):
+        step_extra = _step_log_context(step, step_number, total_steps, log_context)
         if not step.api_key:
             skipped.append(f"{step.label} (brak klucza)")
             logger.info(
@@ -221,7 +227,7 @@ async def run_ocr_chain(
                     "OCR AI - odpowiedz modelu odrzucona",
                     extra={
                         **step_extra,
-                        "reason": _INVALID_RESPONSE_REASON,
+                        "reason": invalid_response_reason,
                         "error_type": "ResponseValidationError",
                         "duration_ms": round((time.monotonic() - started_at) * 1000),
                     },
@@ -230,7 +236,7 @@ async def run_ocr_chain(
                     "rejected",
                     {
                         **step_extra,
-                        "reason": _INVALID_RESPONSE_REASON,
+                        "reason": invalid_response_reason,
                         "duration_ms": round((time.monotonic() - started_at) * 1000),
                     },
                     event_callback,
@@ -292,7 +298,8 @@ async def run_ocr_chain(
         "last_reason": _safe_reason(last_error) if last_error else "brak skonfigurowanego klucza API",
     })
     logger.error("OCR AI - wszystkie modele zawiodly", extra=failure_extra)
-    _publish_event("failed", failure_extra, event_callback)
+    if publish_terminal_failure:
+        _publish_event("failed", failure_extra, event_callback)
     raise AllProvidersFailedError(
         skipped=skipped, last_error=last_error,
         last_invalid_text=last_invalid_text, last_invalid_label=last_invalid_label,

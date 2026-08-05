@@ -53,7 +53,7 @@ export interface DocumentItem {
 }
 
 export interface AITraceEvent {
-  status: 'attempt' | 'skipped' | 'rejected' | 'selected' | 'failed'
+  status: 'attempt' | 'skipped' | 'rejected' | 'selected' | 'failed' | 'no_result'
   stage: string | null
   provider: string | null
   model: string | null
@@ -63,6 +63,7 @@ export interface AITraceEvent {
   total_steps: number | null
   duration_ms: number | null
   attempt: number | null
+  target?: string | null
   created_at: string
 }
 

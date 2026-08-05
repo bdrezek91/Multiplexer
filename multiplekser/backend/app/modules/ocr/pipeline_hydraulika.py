@@ -14,7 +14,7 @@ Roznice wobec pipeline.py (Elektryka), wszystkie 1:1 ze zrodla:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from app.modules.matcher import MatchResult, match_against_catalog_hydraulika
 from app.modules.products import Catalog
@@ -88,11 +88,13 @@ async def recognize_document_hydraulika(
     catalog: Catalog,
     magazyn: Optional[str] = None,
     chain: Optional[list[OCRChainStep]] = None,
+    log_context: Optional[Mapping[str, object]] = None,
 ) -> OCRResultHydraulika:
     try:
         chain_result = await run_ocr_chain(
             files, AI_OCR_PROMPT_HYDRAULIKA, chain=chain,
             response_validator=is_valid_ocr_response,
+            log_context={**dict(log_context or {}), "ai_stage": "full_ocr_hydraulika"},
         )
     except AllProvidersFailedError as exc:
         if exc.last_invalid_text is not None:

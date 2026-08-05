@@ -69,22 +69,28 @@ def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, do
     trafiaja do Gemini w JEDNYM zapytaniu (patrz ocr/providers.py), prompt uczy model laczyc je
     w jeden wynik."""
     last_exc: Exception | None = None
+    log_context = {"document_id": str(document.id)}
     for attempt in range(_MAX_ATTEMPTS):
         if attempt > 0:
             time.sleep(_RETRY_DELAYS_S[attempt - 1])
         try:
-            classify_result = asyncio.run(classify_document(files))
+            classify_result = asyncio.run(classify_document(files, log_context=log_context))
             dzial = classify_result.dzial
 
             catalog = Catalog.from_db(session, dzial=dzial)
             if dzial == "hydraulika":
                 result = asyncio.run(
-                    recognize_document_hydraulika(files, catalog, magazyn=document.magazyn)
+                    recognize_document_hydraulika(
+                        files, catalog, magazyn=document.magazyn, log_context=log_context,
+                    )
                 )
             else:
                 special_rules = rules_from_db(session)
                 result = asyncio.run(
-                    recognize_document(files, catalog, special_rules, magazyn=document.magazyn)
+                    recognize_document(
+                        files, catalog, special_rules, magazyn=document.magazyn,
+                        log_context=log_context,
+                    )
                 )
             return classify_result, dzial, result
         except (AllProvidersFailedError, OCRProviderError) as exc:
@@ -97,7 +103,9 @@ def _classify_and_recognize(files: list[tuple[bytes, str]], session: Session, do
     raise last_exc  # wyczerpano proby - blad koncowy, jak dotad ida do Document.status="error"
 
 
-async def _verify_ambiguous_items(files: list[tuple[bytes, str]], items: list[dict]) -> None:
+async def _verify_ambiguous_items(
+    files: list[tuple[bytes, str]], items: list[dict], document_id: str,
+) -> None:
     """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
     ptaszka przy pierwszym przebiegu) - druga, waska proba per-wiersz, rownolegle. Modyfikuje
     `items` w miejscu; kazdy blad pojedynczej proby jest juz pochloniety w verify_ambiguous_quantity
@@ -110,7 +118,12 @@ async def _verify_ambiguous_items(files: list[tuple[bytes, str]], items: list[di
         return
 
     results = await asyncio.gather(
-        *(verify_ambiguous_quantity(files, items[i]["rozpoznana_nazwa"]) for i in targets)
+        *(
+            verify_ambiguous_quantity(
+                files, items[i]["rozpoznana_nazwa"], log_context={"document_id": document_id},
+            )
+            for i in targets
+        )
     )
     for idx, result in zip(targets, results):
         if not result.found_anything:
@@ -181,7 +194,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "match_jm": it.match.jm_override,
             })
 
-        asyncio.run(_verify_ambiguous_items(files, items))
+        asyncio.run(_verify_ambiguous_items(files, items, document_id))
 
         repository.mark_done(
             session, document,

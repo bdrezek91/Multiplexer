@@ -15,12 +15,19 @@ krok. Krok bez skonfigurowanego klucza jest pomijany (nie liczy sie jako "blad" 
 """
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Callable, Mapping, Optional
 
 from app.core.config import settings
 
 from .providers import GeminiProvider, OCRProvider, OCRProviderError, OpenAIProvider
+
+logger = logging.getLogger(__name__)
+
+_INVALID_RESPONSE_REASON = "odpowiedz nie spelnia wymagan formatu lub schematu"
+_MAX_LOGGED_REASON_LENGTH = 500
 
 
 @dataclass
@@ -74,25 +81,74 @@ class OCRChainResult:
     used_label: str
 
 
+def _provider_name(step: OCRChainStep) -> str:
+    return step.provider.__class__.__name__.removesuffix("Provider")
+
+
+def _safe_reason(exc: Exception) -> str:
+    """Krotki powod do logu, bez prompta ani pelnej odpowiedzi modelu."""
+    reason = " ".join(str(exc).split())
+    return reason[:_MAX_LOGGED_REASON_LENGTH]
+
+
+def _step_log_context(
+    step: OCRChainStep, step_number: int, total_steps: int,
+    log_context: Optional[Mapping[str, object]],
+) -> dict[str, object]:
+    extra = dict(log_context or {})
+    # Pola lancucha maja pierwszenstwo, zeby przypadkowy kontekst wolajacego nie mogl
+    # podmienic modelu/dostawcy widocznego w logu.
+    extra.update({
+        "ai_provider": _provider_name(step),
+        "ai_model": step.model,
+        "ai_label": step.label,
+        "chain_step": step_number,
+        "chain_steps": total_steps,
+    })
+    return extra
+
+
 async def run_ocr_chain(
     files: list[tuple[bytes, str]], prompt: str, chain: Optional[list[OCRChainStep]] = None,
     thinking_level: str = "medium", response_validator: Optional[Callable[[str], bool]] = None,
+    log_context: Optional[Mapping[str, object]] = None,
 ) -> OCRChainResult:
     """Przejscie po lancuchu: pierwszy dostawca z kluczem, ktory odpowie poprawnie, wygrywa.
     `files` - lista (bytes, mime), patrz OCRProvider.recognize. `thinking_level` - patrz
     GeminiProvider.recognize(); wolacy przekazuje "low" dla prostszych zadan (np. klasyfikacja
     dzialu w classify.py), domyslnie "medium" dla pelnego odczytu tabeli.
-    `response_validator` odrzuca odpowiedz HTTP 200 w zlym formacie i uruchamia kolejny krok."""
+    `response_validator` odrzuca odpowiedz HTTP 200 w zlym formacie i uruchamia kolejny krok.
+    `log_context` pozwala dopiac np. document_id i etap OCR bez logowania prompta/pliku/klucza."""
     steps = chain if chain is not None else default_ocr_chain()
     last_error: Optional[Exception] = None
     last_invalid_text: Optional[str] = None
     last_invalid_label: Optional[str] = None
     skipped: list[str] = []
 
-    for step in steps:
+    first_active = next((step for step in steps if step.api_key), None)
+    start_extra = dict(log_context or {})
+    start_extra.update({
+        "first_ai_provider": _provider_name(first_active) if first_active else None,
+        "first_ai_model": first_active.model if first_active else None,
+        "first_ai_label": first_active.label if first_active else None,
+        "chain_steps": len(steps),
+        "configured_steps": sum(bool(step.api_key) for step in steps),
+        "file_count": len(files),
+        "thinking_level": thinking_level,
+    })
+    logger.info("OCR AI - start lancucha modeli", extra=start_extra)
+
+    for step_number, step in enumerate(steps, start=1):
+        step_extra = _step_log_context(step, step_number, len(steps), log_context)
         if not step.api_key:
             skipped.append(f"{step.label} (brak klucza)")
+            logger.info(
+                "OCR AI - model pominiety",
+                extra={**step_extra, "reason": "brak skonfigurowanego klucza API"},
+            )
             continue
+        started_at = time.monotonic()
+        logger.info("OCR AI - proba modelu", extra=step_extra)
         try:
             text = await step.provider.recognize(
                 files=files, model=step.model, api_key=step.api_key, prompt=prompt,
@@ -104,12 +160,44 @@ async def run_ocr_chain(
                 last_error = OCRProviderError(
                     f"{step.label} zwrocil odpowiedz w niepoprawnym formacie"
                 )
+                logger.warning(
+                    "OCR AI - odpowiedz modelu odrzucona",
+                    extra={
+                        **step_extra,
+                        "reason": _INVALID_RESPONSE_REASON,
+                        "error_type": "ResponseValidationError",
+                        "duration_ms": round((time.monotonic() - started_at) * 1000),
+                    },
+                )
                 continue
+            logger.info(
+                "OCR AI - wybrano model",
+                extra={
+                    **step_extra,
+                    "duration_ms": round((time.monotonic() - started_at) * 1000),
+                },
+            )
             return OCRChainResult(text=text, used_label=step.label)
         except OCRProviderError as exc:
             last_error = exc
+            logger.warning(
+                "OCR AI - model odrzucony",
+                extra={
+                    **step_extra,
+                    "reason": _safe_reason(exc),
+                    "error_type": type(exc).__name__,
+                    "duration_ms": round((time.monotonic() - started_at) * 1000),
+                },
+            )
             continue
 
+    failure_extra = dict(log_context or {})
+    failure_extra.update({
+        "attempted_steps": len(steps) - len(skipped),
+        "skipped_steps": len(skipped),
+        "last_reason": _safe_reason(last_error) if last_error else "brak skonfigurowanego klucza API",
+    })
+    logger.error("OCR AI - wszystkie modele zawiodly", extra=failure_extra)
     raise AllProvidersFailedError(
         skipped=skipped, last_error=last_error,
         last_invalid_text=last_invalid_text, last_invalid_label=last_invalid_label,

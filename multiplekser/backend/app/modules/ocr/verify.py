@@ -18,7 +18,7 @@ to dodatkowa siatka bezpieczenstwa, nie krytyczna sciezka przetwarzania calego d
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Mapping, Optional
 
 from .chain import run_ocr_chain
 from .parsing import extract_json, parse_float_loose
@@ -47,10 +47,16 @@ class VerifyResult:
         return self.ilosc_wydana is not None or self.ilosc_zuzyta is not None
 
 
-async def verify_ambiguous_quantity(files: list[tuple[bytes, str]], nazwa: str) -> VerifyResult:
+async def verify_ambiguous_quantity(
+    files: list[tuple[bytes, str]], nazwa: str,
+    log_context: Optional[Mapping[str, object]] = None,
+) -> VerifyResult:
     prompt = _VERIFY_PROMPT_TEMPLATE.format(nazwa=nazwa.replace('"', "'"))
     try:
-        chain_result = await run_ocr_chain(files, prompt)
+        chain_result = await run_ocr_chain(
+            files, prompt,
+            log_context={**dict(log_context or {}), "ai_stage": "quantity_verification"},
+        )
     except Exception:
         return VerifyResult(None, None)
 

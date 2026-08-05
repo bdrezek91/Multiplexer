@@ -14,7 +14,7 @@ zachowanie zamiast losowo zgadywac nowy dzial.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Mapping, Optional
 
 from .chain import AllProvidersFailedError, OCRChainStep, run_ocr_chain
 from .parsing import extract_json
@@ -54,6 +54,7 @@ class ClassifyResult:
 
 async def classify_document(
     files: list[tuple[bytes, str]], chain: Optional[list[OCRChainStep]] = None,
+    log_context: Optional[Mapping[str, object]] = None,
 ) -> ClassifyResult:
     # thinking_level="low" (2026-08-04, na zyczenie uzytkownika - przetwarzanie calego dokumentu
     # trwalo 2-3 minuty) - to trywialna decyzja (jedno pole naglowka), nie potrzebuje glebszego
@@ -63,6 +64,7 @@ async def classify_document(
         chain_result = await run_ocr_chain(
             files, CLASSIFY_PROMPT, chain=chain, thinking_level="low",
             response_validator=_is_valid_classification_response,
+            log_context={**dict(log_context or {}), "ai_stage": "classification"},
         )
     except AllProvidersFailedError as exc:
         # Zachowujemy bezpieczny fallback, ale dopiero po sprawdzeniu pozostalych modeli.

@@ -113,3 +113,62 @@ async def test_wszyscy_dostawcy_zawiedli_zawiera_ostatni_blad_i_pominiete():
         await run_ocr_chain([(b"dane", "image/jpeg")], "prompt", chain=steps)
     assert "blad model-y" in str(exc_info.value)
     assert "Bez klucza" in str(exc_info.value)
+
+
+async def test_loguje_start_odrzucenie_powod_i_wybrany_model(caplog):
+    def behavior(model):
+        if model == "model-a":
+            raise OCRProviderError("API 429: limit zapytan")
+        return '{"pozycje": []}'
+
+    provider = _FakeProvider(behavior)
+    steps = [
+        OCRChainStep("Model pierwszy", provider, "model-a", "sekretny-klucz-a"),
+        OCRChainStep("Model drugi", provider, "model-b", "sekretny-klucz-b"),
+    ]
+
+    with caplog.at_level("INFO", logger="app.modules.ocr.chain"):
+        await run_ocr_chain(
+            [(b"dane", "image/jpeg")], "tajny prompt", chain=steps,
+            log_context={"document_id": "doc-123", "ai_stage": "full_ocr_elektryka"},
+        )
+
+    start = next(record for record in caplog.records if record.message == "OCR AI - start lancucha modeli")
+    rejected = next(record for record in caplog.records if record.message == "OCR AI - model odrzucony")
+    selected = next(record for record in caplog.records if record.message == "OCR AI - wybrano model")
+
+    assert start.first_ai_model == "model-a"
+    assert start.document_id == "doc-123"
+    assert rejected.ai_model == "model-a"
+    assert rejected.reason == "API 429: limit zapytan"
+    assert selected.ai_model == "model-b"
+    assert selected.ai_provider == "_Fake"
+    assert selected.ai_stage == "full_ocr_elektryka"
+
+    rendered_logs = repr([record.__dict__ for record in caplog.records])
+    assert "sekretny-klucz" not in rendered_logs
+    assert "tajny prompt" not in rendered_logs
+
+
+async def test_loguje_odrzucenie_odpowiedzi_przez_walidator(caplog):
+    provider = _FakeProvider(
+        lambda model: "niepoprawny tekst" if model == "model-a" else '{"pozycje": []}'
+    )
+    steps = [
+        OCRChainStep("Model pierwszy", provider, "model-a", "klucz-a"),
+        OCRChainStep("Model drugi", provider, "model-b", "klucz-b"),
+    ]
+
+    with caplog.at_level("INFO", logger="app.modules.ocr.chain"):
+        await run_ocr_chain(
+            [(b"dane", "image/jpeg")], "prompt", chain=steps,
+            response_validator=lambda text: text.startswith("{"),
+        )
+
+    rejected = next(
+        record for record in caplog.records
+        if record.message == "OCR AI - odpowiedz modelu odrzucona"
+    )
+    assert rejected.ai_model == "model-a"
+    assert rejected.reason == "odpowiedz nie spelnia wymagan formatu lub schematu"
+    assert rejected.error_type == "ResponseValidationError"

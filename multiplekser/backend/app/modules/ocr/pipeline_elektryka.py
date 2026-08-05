@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from app.modules.matcher import MatchResult, match_against_catalog
 from app.modules.matcher.special_rules import SpecialRule
@@ -112,10 +112,12 @@ async def recognize_document(
     special_rules: list[SpecialRule],
     magazyn: Optional[str] = None,
     chain: Optional[list[OCRChainStep]] = None,
+    log_context: Optional[Mapping[str, object]] = None,
 ) -> OCRResult:
     try:
         chain_result = await run_ocr_chain(
             files, AI_OCR_PROMPT, chain=chain, response_validator=is_valid_ocr_response,
+            log_context={**dict(log_context or {}), "ai_stage": "full_ocr_elektryka"},
         )
     except AllProvidersFailedError as exc:
         if exc.last_invalid_text is not None:

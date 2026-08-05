@@ -14,9 +14,11 @@ class _FakeProvider(OCRProvider):
     def __init__(self, behavior):
         self.behavior = behavior  # callable(model) -> str | raises OCRProviderError
         self.calls: list[str] = []
+        self.thinking_levels: list[str] = []
 
-    async def recognize(self, *, files, model, api_key, prompt, thinking_level="medium"):
+    async def recognize(self, *, files, model, api_key, prompt, thinking_level="low"):
         self.calls.append(model)
+        self.thinking_levels.append(thinking_level)
         return self.behavior(model)
 
 
@@ -74,6 +76,7 @@ async def test_pierwszy_dostawca_z_kluczem_wygrywa():
     result = await run_ocr_chain([(b"dane", "image/jpeg")], "prompt", chain=steps)
     assert result.text == '{"pozycje": []}'
     assert result.used_label == "Krok 1"
+    assert provider.thinking_levels == ["low"]
 
 
 async def test_blad_pierwszego_kroku_przelacza_na_kolejny():

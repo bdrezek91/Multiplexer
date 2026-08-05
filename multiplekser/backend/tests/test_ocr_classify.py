@@ -77,9 +77,7 @@ async def test_brak_pola_confidence_domyslnie_zero(gemini_key_configured):
 
 
 async def test_klasyfikacja_zada_thinking_level_low(gemini_key_configured):
-    """Realny problem produkcyjny (2026-08-04): przetwarzanie calego dokumentu trwalo 2-3 minuty -
-    klasyfikacja (trywialna decyzja, jedno pole naglowka) nie potrzebuje "medium" jak pelny odczyt
-    tabeli, a jest PIERWSZYM z dwoch sekwencyjnych zapytan do AI."""
+    """Klasyfikacja jawnie wymusza "low", zgodnie z ustawieniem wszystkich etapow OCR."""
     mock_recognize = AsyncMock(return_value='{"dzial":"elektryka","confidence":97.5}')
     with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=mock_recognize):
         await classify_document([(b"dane", "image/jpeg")])

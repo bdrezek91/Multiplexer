@@ -149,15 +149,15 @@ def _publish_event(
 
 async def run_ocr_chain(
     files: list[tuple[bytes, str]], prompt: str, chain: Optional[list[OCRChainStep]] = None,
-    thinking_level: str = "medium", response_validator: Optional[Callable[[str], bool]] = None,
+    thinking_level: str = "low", response_validator: Optional[Callable[[str], bool]] = None,
     log_context: Optional[Mapping[str, object]] = None,
     event_callback: Optional[OCRChainEventCallback] = None,
     cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> OCRChainResult:
     """Przejscie po lancuchu: pierwszy dostawca z kluczem, ktory odpowie poprawnie, wygrywa.
     `files` - lista (bytes, mime), patrz OCRProvider.recognize. `thinking_level` - patrz
-    GeminiProvider.recognize(); wolacy przekazuje "low" dla prostszych zadan (np. klasyfikacja
-    dzialu w classify.py), domyslnie "medium" dla pelnego odczytu tabeli.
+    GeminiProvider.recognize(); domyslnie "low" dla wszystkich etapow OCR, aby ograniczyc czas
+    odpowiedzi. Wolajacy nadal moze jawnie wybrac inny poziom dla pojedynczego zadania.
     `response_validator` odrzuca odpowiedz HTTP 200 w zlym formacie i uruchamia kolejny krok.
     `log_context` pozwala dopiac np. document_id i etap OCR bez logowania prompta/pliku/klucza.
     `event_callback` zapisuje ten sam bezpieczny slad do widoku dokumentu. `cooldown_store`

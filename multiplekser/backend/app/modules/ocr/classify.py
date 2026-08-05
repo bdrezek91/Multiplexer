@@ -60,9 +60,8 @@ async def classify_document(
     cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> ClassifyResult:
     # thinking_level="low" (2026-08-04, na zyczenie uzytkownika - przetwarzanie calego dokumentu
-    # trwalo 2-3 minuty) - to trywialna decyzja (jedno pole naglowka), nie potrzebuje glebszego
-    # rozumowania jak pelny odczyt tabeli (patrz GeminiProvider.recognize) - a jest PIERWSZYM z
-    # dwoch sekwencyjnych zapytan, wiec kazda sekunda tutaj przeklada sie wprost na czas calosci.
+    # trwalo 2-3 minuty). Jest to tez jawne zabezpieczenie ustawienia dla pierwszego z dwoch
+    # sekwencyjnych zapytan; pozostale etapy korzystaja z takiej samej wartosci domyslnej.
     try:
         chain_result = await run_ocr_chain(
             files, CLASSIFY_PROMPT, chain=chain, thinking_level="low",

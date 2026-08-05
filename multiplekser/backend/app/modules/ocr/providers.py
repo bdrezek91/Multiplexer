@@ -26,7 +26,7 @@ class OCRProvider(ABC):
     @abstractmethod
     async def recognize(
         self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
-        thinking_level: str = "medium",
+        thinking_level: str = "low",
     ) -> str:
         """Zwraca surowy tekst odpowiedzi modelu (do sparsowania przez ocr/parsing.py).
         `files` to lista (bytes, mime) - zwykle jeden element, ale wiecej niz jeden gdy
@@ -43,7 +43,7 @@ class GeminiProvider(OCRProvider):
 
     async def recognize(
         self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
-        thinking_level: str = "medium",
+        thinking_level: str = "low",
     ) -> str:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model, safe='')}:generateContent"
         file_parts = [
@@ -52,14 +52,9 @@ class GeminiProvider(OCRProvider):
         ]
         body = {
             "contents": [{"parts": [*file_parts, {"text": prompt}]}],
-            # thinkingLevel domyslnie "medium" (2026-08-04, realny przypadek produkcyjny) - przy
-            # formularzach z grupami niemal identycznych wierszy pod rzad (np. "Rozdzielnica SRN
-            # 12/24/36/48") model przy "low" potrafil "zgubic wiersz" i zmyslic zaznaczenie na
-            # sasiedniej etykiecie mimo temperature=0. Wywolujacy moze jednak zazadac "low" dla
-            # prostszych zadan (patrz classify.py - klasyfikacja dzialu to trywialna decyzja, nie
-            # potrzebuje glebszego rozumowania, a spowalniala CALY dokument, bo jest pierwszym z
-            # dwoch sekwencyjnych zapytan) - poprawnosc pozostaje priorytetem tam, gdzie faktycznie
-            # ma znaczenie (pelny odczyt tabeli), nie wszedzie na sile.
+            # thinkingLevel domyslnie "low" dla kazdego etapu Gemini (2026-08-05, test
+            # produkcyjny pod katem skrocenia czasu pelnego OCR). Wywolujacy moze nadal jawnie
+            # zazadac wyzszego poziomu dla konkretnego zadania.
             "generationConfig": {"temperature": 0, "thinkingConfig": {"thinkingLevel": thinking_level}},
         }
         try:
@@ -90,7 +85,7 @@ class OpenAIProvider(OCRProvider):
 
     async def recognize(
         self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
-        thinking_level: str = "medium",
+        thinking_level: str = "low",
     ) -> str:
         # thinking_level ignorowane - Responses API dla gpt-4o nie ma tego pojecia (parametr
         # istnieje tylko dla zgodnosci z interfejsem OCRProvider, patrz klasa bazowa wyzej).

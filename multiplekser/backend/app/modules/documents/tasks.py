@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from typing import Mapping, Optional
 
 from sqlalchemy.orm import Session
 
@@ -113,14 +114,22 @@ async def _verify_ambiguous_items(
     event_callback: OCRChainEventCallback,
     cooldown_store: OCRCooldownStore,
     dzial: str,
+    quantity_marks: Optional[Mapping[str, tuple[bool, bool]]] = None,
 ) -> None:
     """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
     ptaszka przy pierwszym przebiegu) - jedna zbiorcza kontrola wszystkich wierszy. Nierozpoznane
     pozycje przechodza razem do kolejnego modelu, bez rownoleglego zalewania darmowego API."""
-    targets = [
-        i for i, it in enumerate(items)
-        if it["ilosc_wydana"] is None and it["ilosc_zuzyta"] is None
-    ]
+    marks = quantity_marks or {}
+    targets = []
+    for index, item in enumerate(items):
+        has_wydana, has_zuzyta = marks.get(item["rozpoznana_nazwa"], (False, False))
+        both_missing = item["ilosc_wydana"] is None and item["ilosc_zuzyta"] is None
+        marked_column_missing = (
+            (item["ilosc_wydana"] is None and has_wydana)
+            or (item["ilosc_zuzyta"] is None and has_zuzyta)
+        )
+        if both_missing or marked_column_missing:
+            targets.append(index)
     if not targets:
         return
 
@@ -135,9 +144,15 @@ async def _verify_ambiguous_items(
     for idx, result in zip(targets, results):
         if not result.found_anything:
             continue
-        items[idx]["ilosc_wydana"] = result.ilosc_wydana
-        items[idx]["ilosc_zuzyta"] = result.ilosc_zuzyta
-        items[idx]["ilosc_finalna"] = pick_qty_razem(result.ilosc_wydana, result.ilosc_zuzyta)
+        # Kontrola uzupelnia tylko brakujaca kolumne. Poprawny wynik glownego OCR nie moze
+        # zostac wyzerowany, gdy model kontrolny odczyta tylko druga z dwoch wartosci.
+        if items[idx]["ilosc_wydana"] is None and result.ilosc_wydana is not None:
+            items[idx]["ilosc_wydana"] = result.ilosc_wydana
+        if items[idx]["ilosc_zuzyta"] is None and result.ilosc_zuzyta is not None:
+            items[idx]["ilosc_zuzyta"] = result.ilosc_zuzyta
+        items[idx]["ilosc_finalna"] = pick_qty_razem(
+            items[idx]["ilosc_wydana"], items[idx]["ilosc_zuzyta"],
+        )
 
 
 def _download_and_prepare(get_storage, file_key: str, mime: str) -> tuple[bytes, str]:
@@ -210,6 +225,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
 
         asyncio.run(_verify_ambiguous_items(
             files, items, document_id, save_ai_event, cooldown_store, dzial,
+            quantity_marks=getattr(result, "quantity_marks", None),
         ))
 
         repository.mark_done(

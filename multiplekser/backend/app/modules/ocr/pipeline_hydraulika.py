@@ -13,7 +13,7 @@ Roznice wobec pipeline.py (Elektryka), wszystkie 1:1 ze zrodla:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
 from app.modules.matcher import MatchResult, match_against_catalog_hydraulika
@@ -25,7 +25,7 @@ from .form_rows_hydraulika import snap_to_known_item_hydraulika
 from .parsing import extract_json, is_actionable_item, is_valid_ocr_response, validate_item
 from .pipeline_elektryka import OCRUnparsableResponseError, normalize_project_number
 from .prompt import AI_OCR_PROMPT_HYDRAULIKA
-from .verification_image import discover_marked_hydraulika_rows
+from .verification_image import discover_hydraulika_quantity_marks
 
 
 @dataclass
@@ -47,6 +47,7 @@ class OCRResultHydraulika:
     pozycje: list[OCRItemHydraulika]
     used_provider: str
     rejected_count: int
+    quantity_marks: dict[str, tuple[bool, bool]] = field(default_factory=dict)
 
 
 def _pick_raw_qty(item: dict, field_name: str) -> Optional[str]:
@@ -126,8 +127,9 @@ async def recognize_document_hydraulika(
     # Glowny model czasem pomija caly zaznaczony wiersz (szczegolnie trójniki i węże na dole
     # drugiej strony). Niebieski znacznik wykryty lokalnie dodaje brakujaca pozycje z pustymi
     # ilosciami; zbiorcza kontrola w tasks.py odczyta potem liczby z waskiego wycinka.
+    quantity_marks = discover_hydraulika_quantity_marks(files)
     existing_names = {item.rozpoznana_nazwa for item in pozycje}
-    for name in discover_marked_hydraulika_rows(files):
+    for name in quantity_marks:
         snapped_name = snap_to_known_item_hydraulika(name).name
         if snapped_name in existing_names:
             continue
@@ -142,4 +144,5 @@ async def recognize_document_hydraulika(
     return OCRResultHydraulika(
         numer_projektu=numer_projektu, pozycje=pozycje,
         used_provider=chain_result.used_label, rejected_count=rejected_count,
+        quantity_marks=quantity_marks,
     )

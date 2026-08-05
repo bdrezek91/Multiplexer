@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw
 from app.modules.ocr.chain import OCRChainStep
 from app.modules.ocr.providers import OCRProvider
 from app.modules.ocr.verification_image import (
+    discover_hydraulika_quantity_marks,
     discover_marked_hydraulika_rows,
     prepare_verification_files,
 )
@@ -153,6 +154,7 @@ def test_hydraulika_wykrywa_niebieski_znak_i_wycina_tylko_docelowy_wiersz():
     input_files = [(source.getvalue(), "image/jpeg")]
 
     assert "Bateria umywalkowa" in discover_marked_hydraulika_rows(input_files)
+    assert discover_hydraulika_quantity_marks(input_files)["Bateria umywalkowa"] == (True, False)
     files, cropped = prepare_verification_files(
         input_files, [("1", "Bateria umywalkowa")], "hydraulika",
     )
@@ -213,3 +215,36 @@ async def test_task_nie_ucina_kontroli_po_pierwszych_osmiu_pozycjach(monkeypatch
 
     assert len(batch.await_args.args[1]) == 10
     assert [item["ilosc_finalna"] for item in items] == list(range(1, 11))
+
+
+async def test_task_uzupelnia_jedna_brakujaca_kolumne_i_nie_nadpisuje_odczytanej(monkeypatch):
+    from app.modules.documents.tasks import _verify_ambiguous_items
+
+    items = [
+        {"rozpoznana_nazwa": "Pozycja A", "ilosc_wydana": None, "ilosc_zuzyta": 1,
+         "ilosc_finalna": 1},
+        {"rozpoznana_nazwa": "Pozycja B", "ilosc_wydana": 2, "ilosc_zuzyta": None,
+         "ilosc_finalna": 2},
+        {"rozpoznana_nazwa": "Pozycja C", "ilosc_wydana": None, "ilosc_zuzyta": 4,
+         "ilosc_finalna": 4},
+    ]
+    batch = AsyncMock(return_value=[VerifyResult(1, 99), VerifyResult(9, 3)])
+    monkeypatch.setattr("app.modules.documents.tasks.verify_ambiguous_quantities", batch)
+
+    await _verify_ambiguous_items(
+        [(b"pdf", "application/pdf")], items, "doc-1", lambda event: None,
+        cooldown_store=object(), dzial="hydraulika",
+        quantity_marks={
+            "Pozycja A": (True, True),
+            "Pozycja B": (True, True),
+            # Wydana jest pusta i nie ma w niej znaku - tej pozycji nie kontrolujemy.
+            "Pozycja C": (False, True),
+        },
+    )
+
+    assert batch.await_args.args[1] == ["Pozycja A", "Pozycja B"]
+    assert items[0]["ilosc_wydana"] == 1
+    assert items[0]["ilosc_zuzyta"] == 1  # nie 99 z kontrolnego modelu
+    assert items[1]["ilosc_wydana"] == 2  # nie 9 z kontrolnego modelu
+    assert items[1]["ilosc_zuzyta"] == 3
+    assert items[2]["ilosc_wydana"] is None

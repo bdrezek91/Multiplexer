@@ -75,6 +75,23 @@ async def test_blad_pierwszego_kroku_przelacza_na_kolejny():
     assert provider.calls == ["model-a", "model-b"]
 
 
+async def test_niepoprawna_odpowiedz_pierwszego_kroku_przelacza_na_kolejny():
+    provider = _FakeProvider(
+        lambda model: "to nie jest JSON" if model == "model-a" else '{"pozycje": []}'
+    )
+    steps = [
+        OCRChainStep("Krok 1", provider, "model-a", "klucz-1"),
+        OCRChainStep("Krok 2", provider, "model-b", "klucz-2"),
+    ]
+    result = await run_ocr_chain(
+        [(b"dane", "image/jpeg")], "prompt", chain=steps,
+        response_validator=lambda text: text.startswith("{"),
+    )
+    assert result.text == '{"pozycje": []}'
+    assert result.used_label == "Krok 2"
+    assert provider.calls == ["model-a", "model-b"]
+
+
 async def test_krok_bez_klucza_jest_pomijany_nie_liczy_sie_jako_blad():
     provider = _FakeProvider(lambda m: "OK")
     steps = [

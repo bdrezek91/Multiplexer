@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.modules.ocr.chain import OCRChainStep
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
+from app.modules.ocr.providers import GeminiProvider
 from app.modules.products import Catalog
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -71,3 +73,22 @@ async def test_niepoprawna_pozycja_jest_odrzucana(catalog, gemini_key_configured
     assert result.rejected_count == 1
     assert len(result.pozycje) == 1
     assert result.pozycje[0].match.kod == "BOJLER 80 L"
+
+
+async def test_niepoprawny_json_pierwszego_modelu_uruchamia_drugi(catalog):
+    mock_recognize = AsyncMock(side_effect=[
+        "to nie jest JSON",
+        '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1"}]}',
+    ])
+    provider = GeminiProvider()
+    chain = [
+        OCRChainStep("Pierwszy", provider, "model-a", "klucz-1"),
+        OCRChainStep("Drugi", provider, "model-b", "klucz-2"),
+    ]
+    with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=mock_recognize):
+        result = await recognize_document_hydraulika(
+            [(b"dane", "image/jpeg")], catalog, chain=chain,
+        )
+    assert result.used_provider == "Drugi"
+    assert result.pozycje[0].match.kod == "BOJLER 80 L"
+    assert mock_recognize.await_count == 2

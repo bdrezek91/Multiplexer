@@ -51,7 +51,10 @@ function QtyFinalnaCell({ documentId, item }: { documentId: string; item: Docume
   const handleBlur = (event: FocusEvent<HTMLInputElement>) => {
     const raw = event.target.value.trim()
     const parsed = raw === '' ? null : Number(raw.replace(',', '.'))
-    if (parsed !== null && Number.isNaN(parsed)) return
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed <= 0)) {
+      setValue(item.ilosc_finalna ?? '')
+      return
+    }
     if (parsed === (item.ilosc_finalna ?? null)) return
     mutation.mutate(parsed)
   }
@@ -59,6 +62,7 @@ function QtyFinalnaCell({ documentId, item }: { documentId: string; item: Docume
   return (
     <TextField
       size="small"
+      type="number"
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onBlur={handleBlur}
@@ -185,7 +189,7 @@ function AddItemRow({ documentId, dzial }: { documentId: string; dzial: Dzial })
   }, [inputValue, dzial])
 
   const qtyNumber = Number(qty.trim().replace(',', '.'))
-  const canSubmit = Boolean(selected) && qty.trim() !== '' && !Number.isNaN(qtyNumber) && qtyNumber > 0
+  const canSubmit = Boolean(selected) && qty.trim() !== '' && Number.isFinite(qtyNumber) && qtyNumber > 0
 
   const handleSubmit = () => {
     if (!selected || !canSubmit) return
@@ -203,6 +207,7 @@ function AddItemRow({ documentId, dzial }: { documentId: string; dzial: Dzial })
       <TableCell>
         <TextField
           size="small"
+          type="number"
           value={qty}
           onChange={(e) => setQty(e.target.value)}
           placeholder="Ilość"
@@ -285,11 +290,13 @@ export function DocumentDetailPage() {
     mutationFn: async (column: 'wydana' | 'zuzyta') => {
       const items = document?.items ?? []
       await Promise.all(
-        items.map((item) =>
-          updateDocumentItem(documentId, item.id, {
-            ilosc_finalna: (column === 'zuzyta' ? item.ilosc_zuzyta : item.ilosc_wydana) ?? null,
-          }),
-        ),
+        items.map((item) => {
+          const sourceQty = column === 'zuzyta' ? item.ilosc_zuzyta : item.ilosc_wydana
+          const validQty = sourceQty !== null && Number.isFinite(sourceQty) && sourceQty > 0
+            ? sourceQty
+            : null
+          return updateDocumentItem(documentId, item.id, { ilosc_finalna: validQty })
+        }),
       )
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', documentId] }),

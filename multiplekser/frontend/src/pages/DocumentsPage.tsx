@@ -46,13 +46,39 @@ export function DocumentsPage() {
   const [files, setFiles] = useState<File[]>([])
   const [magazyn, setMagazyn] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [compressionWarning, setCompressionWarning] = useState<string | null>(null)
+  const [preparingBatches, setPreparingBatches] = useState(0)
+  const compressionQueueRef = useRef<Promise<void>>(Promise.resolve())
+  const isPreparingFiles = preparingBatches > 0
 
-  const addFiles = async (newFiles: FileList | null) => {
+  const addFiles = (newFiles: FileList | null) => {
     if (!newFiles || newFiles.length === 0) return
-    // Kompresja PRZED dodaniem do listy - patrz utils/compressImage.ts (nie traci jakosci
-    // widzianej przez AI, tylko skraca czas przesylu z telefonu, zwlaszcza na wolnym LTE).
-    const compressed = await Promise.all(Array.from(newFiles).map((f) => compressImageForUpload(f)))
-    setFiles((prev) => [...prev, ...compressed])
+    const selectedFiles = Array.from(newFiles)
+    setPreparingBatches((count) => count + 1)
+
+    // Kolejne wywolania aparatu sa przetwarzane w kolejnosci wyboru. Bez kolejki mniejsze
+    // zdjecie nr 2 moglo skonczyc kompresje przed zdjeciem nr 1 i trafic do OCR jako pierwsze.
+    compressionQueueRef.current = compressionQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const fallbackNames: string[] = []
+        const compressed = await Promise.all(selectedFiles.map(async (file) => {
+          try {
+            return await compressImageForUpload(file, 2600, 0.9, () => fallbackNames.push(file.name))
+          } catch {
+            fallbackNames.push(file.name)
+            return file
+          }
+        }))
+        setFiles((prev) => [...prev, ...compressed])
+        if (fallbackNames.length > 0) {
+          const names = [...new Set(fallbackNames)].join(', ')
+          setCompressionWarning(
+            `Nie udało się skompresować: ${names}. Zostanie wysłany oryginalny plik.`,
+          )
+        }
+      })
+      .finally(() => setPreparingBatches((count) => Math.max(0, count - 1)))
   }
 
   const removeFile = (index: number) => {
@@ -75,6 +101,7 @@ export function DocumentsPage() {
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ['documents'] })
       setFiles([])
+      setCompressionWarning(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
       if (cameraInputRef.current) cameraInputRef.current.value = ''
       navigate(`/documents/${created.id}`)
@@ -85,6 +112,7 @@ export function DocumentsPage() {
   })
 
   const handleUpload = () => {
+    if (isPreparingFiles) return
     setError(null)
     uploadMutation.mutate()
   }
@@ -102,6 +130,11 @@ export function DocumentsPage() {
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
             {error}
+          </Alert>
+        )}
+        {compressionWarning && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {compressionWarning}
           </Alert>
         )}
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
@@ -151,9 +184,13 @@ export function DocumentsPage() {
           <Button
             variant="contained"
             onClick={handleUpload}
-            disabled={files.length === 0 || uploadMutation.isPending}
+            disabled={files.length === 0 || isPreparingFiles || uploadMutation.isPending}
           >
-            {uploadMutation.isPending ? 'Wysyłanie...' : 'Zatwierdź i wyślij do rozpoznania'}
+            {isPreparingFiles
+              ? 'Przygotowywanie plików...'
+              : uploadMutation.isPending
+                ? 'Wysyłanie...'
+                : 'Zatwierdź i wyślij do rozpoznania'}
           </Button>
         </Stack>
 

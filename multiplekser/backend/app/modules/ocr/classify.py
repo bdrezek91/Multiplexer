@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from .chain import OCRChainStep, run_ocr_chain
+from .chain import AllProvidersFailedError, OCRChainStep, run_ocr_chain
 from .parsing import extract_json
 
 CLASSIFY_PROMPT = (
@@ -37,6 +37,13 @@ _VALID_DZIALY = ("elektryka", "hydraulika")
 _FALLBACK_DZIAL = "elektryka"
 
 
+def _is_valid_classification_response(text: str) -> bool:
+    parsed = extract_json(text)
+    if not isinstance(parsed, dict):
+        return False
+    return str(parsed.get("dzial") or "").strip().lower() in _VALID_DZIALY
+
+
 @dataclass
 class ClassifyResult:
     dzial: str
@@ -52,7 +59,19 @@ async def classify_document(
     # trwalo 2-3 minuty) - to trywialna decyzja (jedno pole naglowka), nie potrzebuje glebszego
     # rozumowania jak pelny odczyt tabeli (patrz GeminiProvider.recognize) - a jest PIERWSZYM z
     # dwoch sekwencyjnych zapytan, wiec kazda sekunda tutaj przeklada sie wprost na czas calosci.
-    chain_result = await run_ocr_chain(files, CLASSIFY_PROMPT, chain=chain, thinking_level="low")
+    try:
+        chain_result = await run_ocr_chain(
+            files, CLASSIFY_PROMPT, chain=chain, thinking_level="low",
+            response_validator=_is_valid_classification_response,
+        )
+    except AllProvidersFailedError as exc:
+        # Zachowujemy bezpieczny fallback, ale dopiero po sprawdzeniu pozostalych modeli.
+        if exc.last_invalid_text is not None:
+            return ClassifyResult(
+                dzial=_FALLBACK_DZIAL, confidence=0.0,
+                used_provider=exc.last_invalid_label or "brak poprawnej odpowiedzi", fallback=True,
+            )
+        raise
     parsed = extract_json(chain_result.text)
 
     dzial = None

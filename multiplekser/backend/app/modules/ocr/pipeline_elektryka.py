@@ -17,9 +17,9 @@ from app.modules.matcher import MatchResult, match_against_catalog
 from app.modules.matcher.special_rules import SpecialRule
 from app.modules.products import Catalog
 
-from .chain import OCRChainStep, run_ocr_chain
+from .chain import AllProvidersFailedError, OCRChainStep, run_ocr_chain
 from .form_rows_elektryka import reconcile_form_row, snap_to_form_row
-from .parsing import extract_json, validate_item
+from .parsing import extract_json, is_valid_ocr_response, validate_item
 from .prompt import AI_OCR_PROMPT
 
 
@@ -113,7 +113,14 @@ async def recognize_document(
     magazyn: Optional[str] = None,
     chain: Optional[list[OCRChainStep]] = None,
 ) -> OCRResult:
-    chain_result = await run_ocr_chain(files, AI_OCR_PROMPT, chain=chain)
+    try:
+        chain_result = await run_ocr_chain(
+            files, AI_OCR_PROMPT, chain=chain, response_validator=is_valid_ocr_response,
+        )
+    except AllProvidersFailedError as exc:
+        if exc.last_invalid_text is not None:
+            raise OCRUnparsableResponseError(exc.last_invalid_text) from exc
+        raise
     parsed: Any = extract_json(chain_result.text)
     if parsed is None:
         raise OCRUnparsableResponseError(chain_result.text)

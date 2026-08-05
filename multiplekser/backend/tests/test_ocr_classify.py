@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.modules.ocr.classify import classify_document
+from app.modules.ocr.chain import OCRChainStep
+from app.modules.ocr.providers import GeminiProvider
 
 
 def _mock_recognize(response_text: str):
@@ -48,6 +50,23 @@ async def test_nieznana_wartosc_dzial_ma_fallback(gemini_key_configured):
         result = await classify_document([(b"dane", "image/jpeg")])
     assert result.dzial == "elektryka"
     assert result.fallback is True
+
+
+async def test_niepoprawna_klasyfikacja_pierwszego_modelu_uruchamia_drugi():
+    mock_recognize = AsyncMock(side_effect=[
+        "to nie jest JSON",
+        '{"dzial":"hydraulika","confidence":91}',
+    ])
+    provider = GeminiProvider()
+    chain = [
+        OCRChainStep("Pierwszy", provider, "model-a", "klucz-1"),
+        OCRChainStep("Drugi", provider, "model-b", "klucz-2"),
+    ]
+    with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=mock_recognize):
+        result = await classify_document([(b"dane", "image/jpeg")], chain=chain)
+    assert result.dzial == "hydraulika"
+    assert result.used_provider == "Drugi"
+    assert mock_recognize.await_count == 2
 
 
 async def test_brak_pola_confidence_domyslnie_zero(gemini_key_configured):

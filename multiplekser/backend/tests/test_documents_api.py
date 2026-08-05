@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 from PIL import Image
 
 from app.modules.documents import repository as doc_repo
+from app.modules.documents.router import _build_file_key
 from app.modules.documents.tasks import run_ocr_task
 from app.modules.matcher.special_rules import DEFAULT_SPECIAL_RULES
 from scripts.import_catalog import import_catalog
@@ -21,6 +22,19 @@ def _fake_jpeg() -> bytes:
 
 def _no_delay():
     return patch("app.modules.documents.router.dispatch_ocr_task")
+
+
+def test_klucze_dwoch_stron_o_tej_samej_nazwie_sa_unikalne():
+    import uuid
+
+    document_id = uuid.uuid4()
+    first_key = _build_file_key(document_id, 1, "skan.jpg")
+    second_key = _build_file_key(document_id, 2, "skan.jpg")
+    assert first_key != second_key
+    assert "/001-" in first_key
+    assert "/002-" in second_key
+    assert first_key.endswith("-skan.jpg")
+    assert second_key.endswith("-skan.jpg")
 
 
 def test_create_document_bez_tokenu_zwraca_401(client, mocked_storage):
@@ -115,6 +129,32 @@ def test_create_document_dwa_pliki_tworzy_jeden_dokument_z_dodatkowa_strona(clie
     assert document.original_filename == "strona1.jpg"
     assert len(document.extra_files) == 1
     assert document.extra_files[0].mime == "image/jpeg"
+
+
+def test_create_document_dwa_pliki_o_tej_samej_nazwie_maja_rozne_klucze(
+    client, admin_headers, db_session, mocked_storage,
+):
+    """Dwie strony z telefonu/skanera moga miec identyczna nazwe i nie moga sie nadpisac."""
+    first_page = _fake_jpeg()
+    second_page = first_page + b"-druga-strona"
+    files = [
+        ("plik", ("skan.jpg", first_page, "image/jpeg")),
+        ("plik", ("skan.jpg", second_page, "image/jpeg")),
+    ]
+    with _no_delay():
+        r = client.post("/documents", files=files, headers=admin_headers)
+    assert r.status_code == 202, r.text
+
+    document = doc_repo.get_document(db_session, r.json()["id"])
+    keys = [document.file_key, document.extra_files[0].file_key]
+    assert keys[0] != keys[1]
+    assert "/001-" in keys[0]
+    assert "/002-" in keys[1]
+
+    from app.modules.documents.storage import get_storage
+    storage = get_storage()
+    assert storage.download(keys[0]) == first_page
+    assert storage.download(keys[1]) == second_page
 
 
 def test_create_document_magazynier_ma_dostep_do_kazdego_magazynu(client, magazynier_headers, mocked_storage):

@@ -22,9 +22,10 @@ listą zużytych/wydanych materiałów. Ktoś musiał to później ręcznie prze
 5. **Generowanie** — jeden przycisk tworzy plik w formacie gotowym do importu w Optimie
    (`kod;ilość;;jm;magazyn`, kodowanie CP1250).
 
-Całość jest **wielodziałowa i wieloużytkownikowa**: role (admin/elektryk) z przypisanymi
-magazynami, osobne katalogi produktów per dział (Elektryka, Hydraulika — kolejne działy nie są
-planowane), pełna historia dokumentów, panel administracyjny katalogu i użytkowników.
+Całość jest **wielodziałowa i wieloużytkownikowa**: role `admin` i `magazynier`, osobne katalogi
+produktów per dział (Elektryka, Hydraulika — kolejne działy nie są planowane), pełna historia
+dokumentów oraz panel administracyjny katalogu i użytkowników. Obie role mogą pracować na obu
+magazynach; `magazyny_dostepne` pozostaje metadanym profilu i nie ogranicza dostępu.
 
 To migracja jednoplikowego prototypu HTML/JS (`Multiplekser_Elektryka.html`) do architektury
 webowej klasy produkcyjnej — logika biznesowa (parser/matcher/generator) przeniesiona 1:1,

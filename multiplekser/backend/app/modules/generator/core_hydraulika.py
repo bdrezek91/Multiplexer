@@ -59,7 +59,8 @@ def generate_output_hydraulika(
         # poprawki uzytkownika i eksportowal "BRAK DOPASOWANIA" mimo poprawionego kodu w UI.
         if it.match_quality == QUALITY_OK and it.match_kod:
             match = MatchResult(
-                kod=it.match_kod, nazwa=it.match_nazwa, quality=QUALITY_OK, ratio=1.0,
+                kod=it.match_kod, nazwa=it.match_nazwa, quality=QUALITY_OK,
+                ratio=it.match_score if it.match_score is not None else 1.0,
                 jm_override=it.match_jm,
             )
         else:

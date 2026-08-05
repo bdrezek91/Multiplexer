@@ -7,6 +7,7 @@ i (po zakonczeniu) wynik. Wlasciciel dokumentu lub admin - inni dostaja 403 (pat
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from urllib.parse import quote
 
@@ -50,8 +51,15 @@ from .storage import get_storage
 from .tasks import dispatch_ocr_task
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+logger = logging.getLogger(__name__)
 
 _PDF_MIME = "application/pdf"
+
+
+def _build_file_key(document_id: uuid.UUID, page_number: int, original_filename: str) -> str:
+    # Przegladarka zwykle wysyla sama nazwe, ale usuwamy tez ewentualna sciezke klienta.
+    safe_filename = original_filename.replace("\\", "/").rsplit("/", 1)[-1] or "plik"
+    return f"documents/{document_id}/{page_number:03d}-{uuid.uuid4().hex}-{safe_filename}"
 
 
 def _item_to_schema(it: DocumentItemModel) -> DocumentItemOut:
@@ -130,26 +138,56 @@ async def create_document(
         raise HTTPException(status_code=400, detail="Brak pliku")
 
     document_id = uuid.uuid4()
-    uploaded: list[tuple[str, str, str]] = []  # (file_key, mime, original_filename)
-    for upload in plik:
+    prepared: list[tuple[str, bytes, str, str]] = []  # (file_key, raw, mime, original_filename)
+    for page_number, upload in enumerate(plik, start=1):
         raw = await upload.read()
         if not raw:
             raise HTTPException(status_code=400, detail="Pusty plik")
         is_pdf = upload.content_type == _PDF_MIME or (upload.filename or "").lower().endswith(".pdf")
         mime = _PDF_MIME if is_pdf else (upload.content_type or "application/octet-stream")
-        file_key = f"documents/{document_id}/{upload.filename or 'plik'}"
-        get_storage().upload(file_key, raw, mime)
-        uploaded.append((file_key, mime, upload.filename or "plik"))
+        original_filename = upload.filename or "plik"
+        # Nazwa pliku nie jest unikalna (telefon/skaner czesto nadaje kazdej stronie np.
+        # "skan.jpg"). UUID zapobiega nadpisaniu poprzedniej strony, a numer zachowuje
+        # czytelna kolejnosc obiektow w storage.
+        file_key = _build_file_key(document_id, page_number, original_filename)
+        prepared.append((file_key, raw, mime, original_filename))
 
-    first_key, first_mime, first_name = uploaded[0]
-    document = repository.create_document(
-        session, document_id=document_id, user_id=user.id, file_key=first_key, mime=first_mime,
-        original_filename=first_name, magazyn=magazyn,
-        extra_files=[(fk, fm) for fk, fm, _ in uploaded[1:]],
-    )
+    storage = get_storage()
+    uploaded_keys: list[str] = []
+    document: DocumentModel | None = None
+    try:
+        for file_key, raw, mime, _original_filename in prepared:
+            storage.upload(file_key, raw, mime)
+            uploaded_keys.append(file_key)
 
-    dispatch_ocr_task(str(document.id))
+        first_key, _first_raw, first_mime, first_name = prepared[0]
+        document = repository.create_document(
+            session, document_id=document_id, user_id=user.id, file_key=first_key, mime=first_mime,
+            original_filename=first_name, magazyn=magazyn,
+            extra_files=[
+                (file_key, mime)
+                for file_key, _raw, mime, _original_filename in prepared[1:]
+            ],
+        )
 
+        dispatch_ocr_task(str(document.id))
+    except Exception:
+        session.rollback()
+        if document is not None:
+            try:
+                session.delete(document)
+                session.commit()
+            except Exception:
+                session.rollback()
+                logger.exception("Nie udalo sie usunac rekordu dokumentu %s po bledzie uploadu", document_id)
+        for file_key in reversed(uploaded_keys):
+            try:
+                storage.delete(file_key)
+            except Exception:
+                logger.exception("Nie udalo sie usunac osieroconego pliku %s", file_key)
+        raise
+
+    assert document is not None
     return DocumentCreatedOut(id=str(document.id), status=document.status)
 
 
@@ -335,7 +373,7 @@ def generate_document_output(
         GeneratorItem(
             name=it.rozpoznana_nazwa, qty=it.ilosc_finalna, off_form=it.off_form,
             match_kod=it.match_kod, match_nazwa=it.match_nazwa, match_jm=it.match_jm,
-            match_quality=it.match_quality,
+            match_quality=it.match_quality, match_score=it.match_score,
         )
         for it in _items_in_physical_order(document)
         if it.ilosc_finalna is not None and it.ilosc_finalna > 0

@@ -1,5 +1,10 @@
 # Raport — Krok Hydraulika-6: edycja magazynu z ponownym dopasowaniem, przełącznik ilość wydana/zużyta, katalog produktów z wyborem działu
 
+> **Aktualizacja 2026-08-04:** raport opisuje stan historyczny z momentu wdrożenia kroku.
+> Aktualne role to `admin` i `magazynier`; ograniczenie do `magazyny_dostepne` zostało usunięte
+> i obie role mogą obecnie wybrać dowolny magazyn. Źródłem prawdy jest
+> `app/modules/users/deps.py:check_magazyn_access` oraz główny `README.md`.
+
 Trzy niezależne żądania z jednej wiadomości, każde dotyczące innego miejsca w UI:
 
 1. Na stronie szczegółów dokumentu — możliwość wyboru/zmiany magazynu **po** zakończonym OCR

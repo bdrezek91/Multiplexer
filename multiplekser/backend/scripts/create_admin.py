@@ -19,7 +19,7 @@ def main() -> None:
     parser.add_argument("--rola", default="admin", choices=["admin", "magazynier"])
     parser.add_argument(
         "--magazyn", action="append", default=[],
-        help="Powtarzalny - magazyn dostepny dla uzytkownika (ignorowane dla roli admin, ma dostep do wszystkich)",
+        help="Powtarzalny - metadane profilu; obecnie nie ograniczaja dostepu zadnej roli",
     )
     args = parser.parse_args()
 

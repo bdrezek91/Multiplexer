@@ -46,6 +46,14 @@ def extract_json(text: Optional[str]) -> Any:
         return None
 
 
+def is_valid_ocr_response(text: str) -> bool:
+    """Czy odpowiedz ma minimalny kontrakt pelnego OCR, zanim wygra krok fallbacku."""
+    parsed = extract_json(text)
+    return isinstance(parsed, list) or (
+        isinstance(parsed, dict) and isinstance(parsed.get("pozycje"), list)
+    )
+
+
 def validate_item(item: Any) -> bool:
     """Wpisy niezgodne ze schematem sa odrzucane zamiast psuc tabele (patrz runAI() w monolicie)."""
     if not isinstance(item, dict):

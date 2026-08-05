@@ -22,6 +22,9 @@ class FileStorage(ABC):
     @abstractmethod
     def download(self, key: str) -> bytes: ...
 
+    @abstractmethod
+    def delete(self, key: str) -> None: ...
+
 
 class S3FileStorage(FileStorage):
     def __init__(self, endpoint_url: Optional[str], access_key: str, secret_key: str, bucket: str):
@@ -49,6 +52,9 @@ class S3FileStorage(FileStorage):
     def download(self, key: str) -> bytes:
         obj = self._client.get_object(Bucket=self._bucket, Key=key)
         return obj["Body"].read()
+
+    def delete(self, key: str) -> None:
+        self._client.delete_object(Bucket=self._bucket, Key=key)
 
 
 def get_storage() -> FileStorage:

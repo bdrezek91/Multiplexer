@@ -49,6 +49,7 @@ class GeneratorItem:
     match_nazwa: Optional[str] = None
     match_jm: Optional[str] = None
     match_quality: Optional[str] = None
+    match_score: Optional[float] = None
 
 
 @dataclass
@@ -154,7 +155,8 @@ def generate_output(
         # poprawki uzytkownika i eksportowal "BRAK DOPASOWANIA" mimo poprawionego kodu w UI.
         if it.match_quality == QUALITY_OK and it.match_kod:
             match = MatchResult(
-                kod=it.match_kod, nazwa=it.match_nazwa, quality=QUALITY_OK, ratio=1.0,
+                kod=it.match_kod, nazwa=it.match_nazwa, quality=QUALITY_OK,
+                ratio=it.match_score if it.match_score is not None else 1.0,
                 jm_override=it.match_jm,
             )
         else:

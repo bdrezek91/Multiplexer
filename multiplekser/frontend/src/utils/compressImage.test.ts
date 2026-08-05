@@ -72,7 +72,23 @@ describe('compressImageForUpload', () => {
   it('zwraca oryginal gdy createImageBitmap sie nie powiedzie (format nieobslugiwany)', async () => {
     vi.stubGlobal('createImageBitmap', vi.fn().mockRejectedValue(new Error('unsupported')))
     const file = fakeFile('dziwny.jpg', 'image/jpeg')
-    const result = await compressImageForUpload(file)
+    const onFallback = vi.fn()
+    const result = await compressImageForUpload(file, 2600, 0.9, onFallback)
     expect(result).toBe(file)
+    expect(onFallback).toHaveBeenCalledOnce()
+  })
+
+  it('zwraca oryginal i zglasza fallback gdy canvas rzuci blad', async () => {
+    vi.stubGlobal('createImageBitmap', vi.fn().mockResolvedValue({ width: 4000, height: 3000, close: vi.fn() }))
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+      throw new Error('canvas failure')
+    })
+    const file = fakeFile('blad-canvas.jpg', 'image/jpeg')
+    const onFallback = vi.fn()
+
+    const result = await compressImageForUpload(file, 2600, 0.9, onFallback)
+
+    expect(result).toBe(file)
+    expect(onFallback).toHaveBeenCalledOnce()
   })
 })

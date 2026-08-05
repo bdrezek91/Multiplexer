@@ -8,6 +8,19 @@ def test_upload_download_roundtrip(mocked_storage):
     assert storage.download("documents/test/plik.jpg") == b"zawartosc testowa"
 
 
+def test_delete_usuwa_obiekt(mocked_storage):
+    from botocore.exceptions import ClientError
+    import pytest
+
+    storage = get_storage()
+    key = "documents/test/do-usuniecia.jpg"
+    storage.upload(key, b"tymczasowy plik", "image/jpeg")
+    storage.delete(key)
+
+    with pytest.raises(ClientError):
+        storage.download(key)
+
+
 def test_bucket_tworzony_automatycznie_gdy_nie_istnieje(mocked_storage):
     # get_storage() samo tworzy bucket przy pierwszym uzyciu (_ensure_bucket) - jesli sie nie
     # udalo, kolejny upload rzucilby wyjatek. Test przechodzi = bucket istnieje.

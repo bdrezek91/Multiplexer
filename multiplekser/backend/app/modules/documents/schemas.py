@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DocumentItemOut(BaseModel):
@@ -50,7 +50,7 @@ class DocumentItemUpdateIn(BaseModel):
     docs/RAPORT_ETAP_9.md, "Ilosc finalna". Pola nieustawione (None w requescie) NIE sa
     nadpisywane innymi polami - ilosc_finalna=null jawnie kasuje ilosc (wyklucza pozycje z
     generowania), ale brak pola w JSON w ogole zostawia je bez zmian (patrz `exclude_unset`)."""
-    ilosc_finalna: float | None = None
+    ilosc_finalna: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     match_kod: str | None = None
 
 
@@ -61,7 +61,7 @@ class DocumentItemAddIn(BaseModel):
     wprost z katalogu (tego samego dzialu co dokument), wiec nie ma tu niejednoznacznosci do
     rozstrzygniecia jak przy OCR."""
     match_kod: str
-    ilosc_finalna: float
+    ilosc_finalna: float = Field(gt=0, allow_inf_nan=False)
 
 
 class GenerateRequest(BaseModel):

@@ -16,7 +16,7 @@ krok. Krok bez skonfigurowanego klucza jest pomijany (nie liczy sie jako "blad" 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 from app.core.config import settings
 
@@ -51,9 +51,14 @@ def default_ocr_chain() -> list[OCRChainStep]:
 
 
 class AllProvidersFailedError(Exception):
-    def __init__(self, skipped: list[str], last_error: Optional[Exception]):
+    def __init__(
+        self, skipped: list[str], last_error: Optional[Exception],
+        last_invalid_text: Optional[str] = None, last_invalid_label: Optional[str] = None,
+    ):
         self.skipped = skipped
         self.last_error = last_error
+        self.last_invalid_text = last_invalid_text
+        self.last_invalid_label = last_invalid_label
         if last_error is None:
             msg = "Nie podano zadnego klucza API - uzupelnij co najmniej jeden klucz Gemini."
         else:
@@ -71,14 +76,17 @@ class OCRChainResult:
 
 async def run_ocr_chain(
     files: list[tuple[bytes, str]], prompt: str, chain: Optional[list[OCRChainStep]] = None,
-    thinking_level: str = "medium",
+    thinking_level: str = "medium", response_validator: Optional[Callable[[str], bool]] = None,
 ) -> OCRChainResult:
     """Przejscie po lancuchu: pierwszy dostawca z kluczem, ktory odpowie poprawnie, wygrywa.
     `files` - lista (bytes, mime), patrz OCRProvider.recognize. `thinking_level` - patrz
     GeminiProvider.recognize(); wolacy przekazuje "low" dla prostszych zadan (np. klasyfikacja
-    dzialu w classify.py), domyslnie "medium" dla pelnego odczytu tabeli."""
+    dzialu w classify.py), domyslnie "medium" dla pelnego odczytu tabeli.
+    `response_validator` odrzuca odpowiedz HTTP 200 w zlym formacie i uruchamia kolejny krok."""
     steps = chain if chain is not None else default_ocr_chain()
     last_error: Optional[Exception] = None
+    last_invalid_text: Optional[str] = None
+    last_invalid_label: Optional[str] = None
     skipped: list[str] = []
 
     for step in steps:
@@ -90,9 +98,19 @@ async def run_ocr_chain(
                 files=files, model=step.model, api_key=step.api_key, prompt=prompt,
                 thinking_level=thinking_level,
             )
+            if response_validator is not None and not response_validator(text):
+                last_invalid_text = text
+                last_invalid_label = step.label
+                last_error = OCRProviderError(
+                    f"{step.label} zwrocil odpowiedz w niepoprawnym formacie"
+                )
+                continue
             return OCRChainResult(text=text, used_label=step.label)
         except OCRProviderError as exc:
             last_error = exc
             continue
 
-    raise AllProvidersFailedError(skipped=skipped, last_error=last_error)
+    raise AllProvidersFailedError(
+        skipped=skipped, last_error=last_error,
+        last_invalid_text=last_invalid_text, last_invalid_label=last_invalid_label,
+    )

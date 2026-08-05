@@ -163,6 +163,21 @@ def test_offform_z_niskim_ratio_dostaje_fallback_elektryka(catalog):
     assert "ilosc na kartce: 2" in result.lines[0]
 
 
+def test_offform_zapisany_automatyczny_match_z_niskim_score_nadal_dostaje_fallback(catalog):
+    """Regresja: zapisanie wyniku OCR nie moze zamieniac score 0.5625 na pewnosc 1.0."""
+    items = [GeneratorItem(
+        name="Przełącznik LAN", qty=1, off_form=True,
+        match_kod="ŁĄCZNIK SZYNOPRZEWODU BIAŁY", match_nazwa="Łącznik szynoprzewodu biały",
+        match_jm="SZT", match_quality="ok", match_score=0.5625,
+    )]
+    result = generate_output(items, catalog, magazyn="Zabrze")
+    assert len(result.lines) == 1
+    assert result.lines[0].startswith(
+        'Elektryka;1;DOPISEK SPOZA FORMULARZA - oryginal: "Przełącznik LAN"'
+    )
+    assert not any(line.startswith("ŁĄCZNIK SZYNOPRZEWODU BIAŁY;") for line in result.lines)
+
+
 # ---- qty_mode "ones" ----
 
 def test_qty_mode_ones_ustawia_wszystko_na_1(catalog):

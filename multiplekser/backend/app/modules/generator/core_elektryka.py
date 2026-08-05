@@ -106,15 +106,24 @@ def generate_output(
     szyno_index = {"czarny": -1, "biały": -1}
     szyno = {"czarny": 0.0, "biały": 0.0}
 
-    def add_kod(kod: str, qty: float, jm: str) -> None:
+    def add_kod(kod: str, qty: float, jm: str, physical_order: int) -> None:
         if kod in kod_index:
-            seq[kod_index[kod]]["qty"] += qty
+            existing = seq[kod_index[kod]]
+            existing["qty"] += qty
+            existing["physical_order"] = min(existing["physical_order"], physical_order)
             return
         kod_index[kod] = len(seq)
-        seq.append({"type": "kod", "kod": kod, "qty": qty, "jm": jm})
+        seq.append({
+            "type": "kod", "kod": kod, "qty": qty, "jm": jm,
+            "physical_order": physical_order,
+        })
 
-    for it in sorted_items:
+    for sorted_index, it in enumerate(sorted_items):
         name = it.name.lower()
+        # Zachowujemy pozycje Wiersza ZRODLOWEGO. Kod z Optimy moze miec zupelnie inna nazwe
+        # (np. formularz "Kinkiet LED HANA" -> kod "KINKIET ARCHITEKTONICZNY IP65 CZARNY").
+        # Pierwsza wydawka musi byc wstawiana wzgledem kartki, nie nazwy kodu wynikowego.
+        item_order = physical_order_for(it.name, 10000 + sorted_index)
 
         if _OSB_RE.search(name):
             continue
@@ -124,6 +133,7 @@ def generate_output(
                 "type": "excluded",
                 "text": f"### POMINIETE CELOWO (lampa na szynoprzewód - juz w zestawie): "
                         f"{it.name};{format_qty(it.qty)};;SZT;{magazyn or ''}",
+                "physical_order": item_order,
             })
             continue
 
@@ -134,7 +144,10 @@ def generate_output(
             if szyno_index[color] < 0:
                 szyno_index[color] = len(seq)
                 kod_index[_ZESTAW_KODY[color]] = szyno_index[color]
-                seq.append({"type": "kod", "kod": _ZESTAW_KODY[color], "qty": 0.0, "jm": "SZT"})
+                seq.append({
+                    "type": "kod", "kod": _ZESTAW_KODY[color], "qty": 0.0, "jm": "SZT",
+                    "physical_order": item_order,
+                })
             continue
 
         tray = _tray_kod_for(it.name, current_color)
@@ -144,10 +157,11 @@ def generate_output(
                 "text0": f"### BRAK DOPASOWANIA (korytko czarne 90x60 nie istnieje w Optimie - "
                          f"sprawdz recznie): {it.name}",
                 "qty": it.qty, "jm": "M",
+                "physical_order": item_order,
             })
             continue
         if isinstance(tray, str):
-            add_kod(tray, it.qty, "M")
+            add_kod(tray, it.qty, "M", item_order)
             continue
 
         # Reczna korekta (PATCH .../items/{item_id}) albo juz-dobre dopasowanie z pierwszego OCR
@@ -168,12 +182,13 @@ def generate_output(
             seq.append({
                 "type": "excluded",
                 "text": f"### POMINIETE CELOWO: {it.name};{format_qty(it.qty)};;SZT;{magazyn or ''}",
+                "physical_order": item_order,
             })
             continue
 
         jm = match.jm_override or "SZT"
         if match.quality == QUALITY_OK and match.kod:
-            add_kod(match.kod, it.qty, jm)
+            add_kod(match.kod, it.qty, jm, item_order)
             continue
 
         if it.off_form and match.quality == QUALITY_BAD:
@@ -181,6 +196,7 @@ def generate_output(
                 "type": "excluded",
                 "text": f'Elektryka;1;DOPISEK SPOZA FORMULARZA - oryginal: "{it.name}", '
                         f"ilosc na kartce: {format_qty(it.qty)};szt;{magazyn or ''}",
+                "physical_order": item_order,
             })
             continue
 
@@ -192,6 +208,7 @@ def generate_output(
             "type": "unmatched",
             "text0": f"### BRAK DOPASOWANIA (sprawdz recznie - {podpowiedz}): {it.name}",
             "qty": it.qty, "jm": jm,
+            "physical_order": item_order,
         })
 
     # R3: zestawy szynoprzewod - metry lacznie / dzielnik (z pola przelicznik w JSON) = szt zestawu.
@@ -231,6 +248,7 @@ def generate_output(
 
     out_lines: list[str] = []
     out_kody: list[Optional[str]] = []
+    out_orders: list[int] = []
     for entry in seq:
         if entry["type"] == "drop":
             continue
@@ -243,6 +261,7 @@ def generate_output(
         else:
             out_lines.append(entry["text"])
             out_kody.append(None)
+        out_orders.append(entry["physical_order"])
 
     # Always-include ("pierwsza wydawka"): brakujace pozycje bazy wstawiane WE WLASCIWE MIEJSCE
     # wzgledem fizycznej kolejnosci formularza (galaz Excel/ORDER_INDEX z monolitu poza zakresem).
@@ -255,14 +274,13 @@ def generate_output(
         for ai in missing:
             target = physical_order_for(ai["kod"])
             insert_at = len(out_lines)
-            for i, kod in enumerate(out_kody):
-                if not kod:
-                    continue
-                if physical_order_for(kod) > target:
+            for i, existing_order in enumerate(out_orders):
+                if existing_order > target:
                     insert_at = i
                     break
             out_lines.insert(insert_at, f"{ai['kod']};1;;{ai['jm']};{magazyn or ''}")
             out_kody.insert(insert_at, ai["kod"])
+            out_orders.insert(insert_at, target)
             included_kody.add(ai["kod"])
 
     return GenerateResult(

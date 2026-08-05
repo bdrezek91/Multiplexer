@@ -7,21 +7,16 @@ FORM_ROWS (posortowane alfabetycznie) sluzy do dopasowania/poprawiania tekstu od
 kolejnosci wyniku (sortowanie wykrytych pozycji + wstawianie brakujacych pozycji bazy "pierwsza
 wydawka" we wlasciwe miejsce), nigdy do oczyszczania odczytu OCR.
 
-POPRAWKA (2026-08-04, zgloszone przez Bartka - "mega pojebana kolejnosc"): ta lista byla STARA -
-opisywala wariant formularza z pozycjami "niemieckimi" (Rozłącznik izolacyjny modułowy 2P,
-Różnicówka niemiecka CDS240D/CDS263D, Wyłącznik nadprądowy 10-25A niemiecki, Gniazdo
-pojedyńcze/podwójne/potrójne niemieckie), ktory dawno przestal odpowiadac realnemu formularzowi
-w uzyciu (dzisiejszy formularz ma "polskie" pozycje: Rozłącznik izolacyjny modułowy 4P,
-Różnicówka polska 3 fazowa 40A, Wyłącznik nadprądowy MBN316E/MBN325E/10-25A polski, Gniazdo
-pojedyńcze/podwójne/potrójne polskie biale). Realne pozycje z aktualnej kartki nie mialy DOKLADNEGO
-dopasowania w starej liscie i musialy polegac na niepewnym fuzzy-matchu (Dice >= 0.5) do
-przypadkowo najpodobniejszej "niemieckiej" pozycji, co dawalo losowo poprzestawiana kolejnosc w
-wygenerowanym pliku (np. "Wskaźnik zasilania jednomodułowy (FAZ)", fizycznie wiersz 9, ladowal
-sie na sam koniec listy, bo w ogole nie bylo go w starej liscie). Lista ponizej to doslowny,
-aktualny uklad kartki (skan zdjecia przeslany przez Bartka) - pierwsze dwie pozycje ("...1F") sa
-starym wariantem 1-fazowym, ktorego nie ma juz na dzisiejszej kartce, ale zostawione na wypadek
-starszych/innych wariantow formularza w obiegu (nic nie kosztuje ich zostawienie, fuzzy-match i
-tak by je znalazl gdzies na poczatku)."""
+Lista byla juz raz poprawiana po zgloszeniu losowej kolejnosci. Wariant zeskanowany 2026-08-05
+(projekt 52/06/26) pokazal, ze realny formularz zawiera jednoczesnie pozycje niemieckie, polskie
+i francuskie. Lista ponizej odwzorowuje ten pelny uklad strona po stronie; starsze aliasy pozostaja
+obok odpowiadajacych im wierszy. Dzieki temu eksport nie polega na niepewnym fuzzy-matchu przy
+ustalaniu kolejnosci.
+
+Wazne: dopasowany kod Optimy moze nazywac sie inaczej niz wiersz formularza (np. "Kinkiet LED
+HANA" -> "KINKIET ARCHITEKTONICZNY IP65 CZARNY"). Generator przechowuje pozycje z nazwy
+zrodlowej i wedlug niej wstawia elementy "pierwszej wydawki".
+"""
 from __future__ import annotations
 
 from app.modules.parser.core_elektryka import core_and_attrs
@@ -37,12 +32,25 @@ FORM_PHYSICAL_ORDER: list[str] = [
     "Wskaźnik zasilania jednomodułowy (FAZ)", "Rozdzielnica SRN 12 biała",
     "Rozdzielnica SRN 24 biała", "Rozdzielnica SRN 36 biała",
     "Rozdzielnica SRN 48 biała", "Maskownica do rozdzielnicy",
-    "Rozłącznik izolacyjny modułowy 4P", "Różnicówka polska 3 fazowa 40A",
+    # Wariant formularza 52/06/26 zawiera obok siebie pozycje niemieckie, polskie i francuskie.
+    # Wszystkie musza miec jawna pozycje - fuzzy match nie moze decydowac o kolejnosci eksportu.
+    "Rozłącznik izolacyjny modułowy 2P", "Rozłącznik izolacyjny modułowy 4P",
+    "Różnicówka niemiecka CDS240D", "Różnicówka niemiecka CDS263D",
+    "Różnicówka polska CDC240J", "Różnicówka polska CDA263J",
+    "Różnicówka francuska CDS743F", "Różnicówka polska 3 fazowa 40A",
+    "Różnicówka niemiecka 3 fazowa 40A",
     "Wyłącznik nadprądowy MBN316E polska 3P 16A", "Wyłącznik nadprądowy MBN325E polska 3P 25A",
+    "Wyłącznik nadprądowy MBS 325 niemiecki 3P 25A",
+    "Wyłącznik nadprądowy 10A niemiecki", "Wyłącznik nadprądowy 16A niemiecki",
+    "Wyłącznik nadprądowy 20A niemiecki", "Wyłącznik nadprądowy 25A niemiecki",
     "Wyłącznik nadprądowy 10A polski", "Wyłącznik nadprądowy 16A polski",
     "Wyłącznik nadprądowy 20A polski", "Wyłącznik nadprądowy 25A polski",
+    "Wyłącznik nadprądowy 10A francuski", "Wyłącznik nadprądowy 16A francuski",
+    "Gniazdo pojedyńcze niemieckie", "Gniazdo podwójne niemieckie",
+    "Gniazdo potrójne niemieckie", "Gniazdo podwójne hermetyczne niemieckie (IP65)",
     "Gniazdo pojedyńcze polskie białe", "Gniazdo podwójne polskie białe",
     "Gniazdo potrójne polskie białe", "Gniazdo podwójne hermetyczne polskie (IP65)",
+    "Gniazdo pojedyńcze angielskie", "Gniazdo podwójne angielskie",
     "Gniazdo podłogowe ORNO polskie", "Wyłącznik jednobiegunowy biały",
     "Łącznik świecznikowy biały", "Wyłącznik schodowy biały",
     "Wyłącznik krzyżowy biały", "Oprawa panel LED BLINGO 120X30 biała",
@@ -58,7 +66,7 @@ FORM_PHYSICAL_ORDER: list[str] = [
     "Końcówka tulejkowa  TE 1,5-10", "Końcówka tulejkowa  TE 2,5-10",
     "Końcówka tulejkowa  4-12", "Końcówka tulejkowa  10/12",
     "Końcówka tulejkowa  16/12", "Wago zamykane podwójne",
-    "Wago zamykane potrójne", "Wago zamykane 5 przewodów",
+    "Wago zamykane potrójne", "Wago zamykane 4 przewody", "Wago zamykane 5 przewodów",
     "Przewód 3x1,5", "Przewód 3x2,5",
     "Przewód 3x4", "Przewód 5x4",
     "Przewód 5x16", "Przewód 3X16",
@@ -68,7 +76,8 @@ FORM_PHYSICAL_ORDER: list[str] = [
     "Dławica PG….....................", "Korytko 32x15 białe",
     "Korytko 40x25 białe", "Korytko 60x40 białe",
     "Korytko 90x60 białe", "Wkręt ocynk 4,2x16",
-    "Wkręt czarny OSB", "Skrzynka LAN",
+    "Wkręt czarny OSB", "INNE", "Gniazdo podtynkowe z klapką grafit",
+    "Puszka podtynkowa podwójna", "Ramka podwójna grafit", "Skrzynka LAN",
     "Gniazdo LAN pojed.", "kabel lan",
 ]
 

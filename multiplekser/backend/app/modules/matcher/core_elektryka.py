@@ -65,6 +65,8 @@ def match_against_catalog(
         hits = [c for c in hits if c.atrybuty.get("montaz") == "NATYNKOWY"]
     elif q.montaz == "PODTYNKOWY":
         hits = [c for c in hits if not c.atrybuty.get("montaz") or c.atrybuty.get("montaz") == "PODTYNKOWY"]
+    elif q.montaz == "STALY":
+        hits = [c for c in hits if c.atrybuty.get("montaz") == "STALY"]
 
     if len(hits) == 1:
         cand = apply_warehouse_variant(catalog, hits[0], magazyn)
@@ -75,7 +77,16 @@ def match_against_catalog(
 
     search_pool = hits if len(hits) > 1 else catalog.products
 
-    q_color_eff = COLOR_TO_JSON.get(q.color, "BIALY") if q.color else "BIALY"
+    if q.color:
+        q_color_eff = COLOR_TO_JSON.get(q.color, "BIALY")
+    elif q.montaz == "STALY" and q.phase == "3F":
+        # Przemyslowe gniazdo CEE 3F jest czerwone nawet wtedy, gdy formularz podaje tylko
+        # "gniazdo odbiornikowe 3F". Bez tej reguly domyslny bialy kolor wybieral osprzet domowy.
+        q_color_eff = "CZERWONY"
+    elif q.montaz == "STALY" and q.phase == "1F":
+        q_color_eff = "NIEBIESKI"
+    else:
+        q_color_eff = "BIALY"
     q_country_eff = COUNTRY_TO_JSON.get(q.country) if q.country else None
     q_krotnosc_eff = int(q.mult) if q.mult else 1  # domyslnie pojedyncze (bug wykryty 2026-07-27)
 
@@ -161,6 +172,8 @@ def match_against_catalog(
             if cand_montaz != "NATYNKOWY":
                 conflicts += 1
         elif q.montaz == "PODTYNKOWY" and cand_montaz and cand_montaz != "PODTYNKOWY":
+            conflicts += 1
+        elif q.montaz == "STALY" and cand_montaz != "STALY":
             conflicts += 1
 
         phase_penalty = 0

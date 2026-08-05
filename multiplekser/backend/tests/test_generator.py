@@ -63,6 +63,16 @@ def test_physical_order_rozdzielnica_polska_w_kolejnosci_numerow():
     )
 
 
+def test_physical_order_wariant_francuski_z_formularza_52_06_26():
+    assert (
+        physical_order_for("Rozłącznik izolacyjny modułowy 2P")
+        < physical_order_for("Różnicówka francuska CDS743F")
+        < physical_order_for("Wyłącznik nadprądowy 10A francuski")
+        < physical_order_for("Wyłącznik nadprądowy 16A francuski")
+        < physical_order_for("Gniazdo pojedyńcze polskie białe")
+    )
+
+
 def test_generate_output_sortuje_wg_fizycznej_kolejnosci_nie_kolejnosci_wejscia(catalog):
     # Celowo w odwrotnej kolejnosci fizycznej: wkret ocynk (blisko konca formularza) przed
     # gniazdem (blisko poczatku).
@@ -218,6 +228,35 @@ def test_first_wydawka_nie_dubluje_juz_obecnej_pozycji(catalog):
     result = generate_output(items, catalog, magazyn=None, first_wydawka=True)
     wago_lines = [l for l in result.lines if l.startswith("WAGO ZAMYKANE PODWÓJNE;")]
     assert wago_lines == ["WAGO ZAMYKANE PODWÓJNE;9;;SZT;"]  # realna ilosc, nie nadpisana "1"
+
+
+def test_first_wydawka_zachowuje_miejsce_wiersza_mimo_innej_nazwy_kodu(catalog):
+    """Regresja z projektu 52/06/26: wiersz formularza "Kinkiet LED HANA" jest dopasowany do
+    inaczej nazwanego kodu Optimy. Wstawianie bazy po nazwie kodu uznawalo kinkiet za nieznany
+    i przenosilo za niego szyny, przewody, korytka i wkret, razem z czujnikiem i puszka."""
+    items = [
+        GeneratorItem(
+            name="Kinkiet LED HANA", qty=2,
+            match_kod="KINKIET ARCHITEKTONICZNY IP65 CZARNY",
+            match_nazwa="Kinkiet architektoniczny IP65 czarny",
+            match_jm="SZT", match_quality="ok", match_score=1.0,
+        ),
+        GeneratorItem(name="Czujnik zmierzchu", qty=1),
+        GeneratorItem(name="Puszka pusta 86x86", qty=2),
+    ]
+
+    result = generate_output(items, catalog, magazyn=None, first_wydawka=True)
+    kody = [line.split(";")[0] for line in result.lines]
+
+    assert (
+        kody.index("KINKIET ARCHITEKTONICZNY IP65 CZARNY")
+        < kody.index("CZUJNIK ZMIERZCHU")
+        < kody.index("SZYNA GRZEBIENIOWA WIDEŁKOWA")
+        < kody.index("PRZEWÓD OLFLEX 4X1,5 (DO KLIMATYZACJI)")
+        < kody.index("PUSZKA PUSTA 86X86")
+        < kody.index("KORYTKO 32X15")
+        < kody.index("WKRĘT 4,2X16 (OCYNK) (50 SZT)")
+    )
 
 
 def test_bez_first_wydawka_baza_nie_jest_dodawana(catalog):

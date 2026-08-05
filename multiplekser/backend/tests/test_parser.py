@@ -68,6 +68,10 @@ def test_detect_phase_brak_wskazowek_zwraca_none():
     assert detect_phase("Rozdzielnica SRN 12") is None
 
 
+def test_gniazdo_odbiornikowe_oznacza_montaz_staly():
+    assert core_and_attrs("Gniazdo odbiornikowe 3F 16A").montaz == "STALY"
+
+
 # ---- COUNTRY_PATTERNS: warianty tolerancyjne na literowki OCR + skroty ----
 
 def test_country_niemiecki_literowka_brak_e():

@@ -59,6 +59,14 @@ def test_montaz_natynkowe_nie_myli_sie_z_podtynkowym(catalog):
     assert r.kod == "GNIAZDO POJEDYŃCZE NATYNKOWE NIEMIECKIE IP66"
 
 
+def test_gniazdo_odbiornikowe_3f_16a_nie_myli_sie_z_podtynkowym(catalog):
+    """Realny blad: przemyslowe gniazdo odbiornikowe CEE bylo dopasowane do domowego
+    gniazda 16A podtynkowego bialego zamiast dedykowanego gniazda stalego czerwonego."""
+    r = match_against_catalog("Gniazdo odbiornikowe 3F 16A", catalog)
+    assert r.kod.strip() == "GNIAZDO STAŁE 16A CZERWONE"
+    assert r.quality == "ok"
+
+
 def test_krotnosc_domyslnie_pojedyncze(catalog):
     """Bug: bez domyslnej krotnosci=1, 'Gniazdo podtynkowe biale niemieckie' (bez slowa
     o krotnosci) trafialo w GNIAZDO POCZWÓRNE (krotnosc=4) przez przypadkowy remis Dice."""

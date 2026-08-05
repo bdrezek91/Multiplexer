@@ -59,11 +59,13 @@ def test_run_ocr_task_dwa_pliki_wysyla_oba_w_jednym_zapytaniu(
         original_filename="strona1.jpg", extra_files=[(key2, "image/jpeg")],
     )
 
-    ai_response = (
+    classify_response = '{"dzial":"elektryka","confidence":98.0}'
+    ocr_response = (
         '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
     )
     with patch(
-        "app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(return_value=ai_response),
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
     ) as mock_recognize:
         run_ocr_task(str(document.id), db_session)
 
@@ -230,7 +232,9 @@ def test_run_ocr_task_klasyfikacja_niesparsowalna_pozostaje_na_elektryce(
 
     classify_response = "nie rozumiem"
     ocr_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
-    with _mock_recognize_sequence(classify_response, ocr_response):
+    # Nieparsowalna odpowiedz jest odrzucana przez kazdy z czterech darmowych modeli,
+    # a dopiero wyczerpanie lancucha uruchamia zgodny wstecznie fallback do Elektryki.
+    with _mock_recognize_sequence(*([classify_response] * 4), ocr_response):
         run_ocr_task(document_id, db_session)
 
     document = doc_repo.get_document(db_session, document_id)
@@ -310,7 +314,9 @@ def test_run_ocr_task_druga_proba_uzupelnia_pomijeta_ilosc(
     document_id = _create_document(db_session, admin_user)
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "confidence": 90}]}'  # brak ilosci
+    ocr_response = (
+        '{"pozycje": [{"nazwa": "Bojler 80 L", "ma_oznaczenie": true, "confidence": 90}]}'
+    )  # brak ilosci, ale widoczne oznaczenie kieruje pozycje do dodatkowej kontroli
     verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
@@ -331,7 +337,9 @@ def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(
     document_id = _create_document(db_session, admin_user)
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "confidence": 90}]}'
+    ocr_response = (
+        '{"pozycje": [{"nazwa": "Bojler 80 L", "ma_oznaczenie": true, "confidence": 90}]}'
+    )
     verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",

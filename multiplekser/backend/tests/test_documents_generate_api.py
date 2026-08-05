@@ -180,7 +180,9 @@ def test_generate_pomija_pozycje_bez_ilosci_finalnej(client, db_session, admin_u
 
 def test_generate_uzywa_ilosci_po_patch(client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json):
     _setup_catalog(db_session, baza_elektryka_json)
-    ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "confidence": 90}]}'
+    ai_response = (
+        '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ma_oznaczenie": true, "confidence": 90}]}'
+    )
     doc_id = _create_done_document(db_session, admin_user, ai_response)
     item_id = doc_repo.get_document(db_session, doc_id).items[0].id
 

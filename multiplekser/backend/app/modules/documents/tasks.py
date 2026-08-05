@@ -52,16 +52,10 @@ _RETRY_DELAYS_S = (5, 15)
 _MAX_VERIFY_ITEMS = 8
 
 
-def _resolve_product_id(session: Session, kod: str | None, dzial: str):
-    """Znajduje dopasowany produkt wewnatrz katalogu dzialu dokumentu.
-
-    Kod jest unikalny per dzial, nie globalnie. Oba katalogi maja m.in. kilka kodow
-    ``GRZEJNIK ...``, wiec wyszukanie tylko po kodzie mogloby przypiac pozycji Hydrauliki FK
-    produktu z Elektryki (albo odwrotnie).
-    """
+def _resolve_product_id(session: Session, kod):
     if not kod:
         return None
-    row = session.query(ProductModel.id).filter_by(kod=kod, dzial=dzial).first()
+    row = session.query(ProductModel.id).filter(ProductModel.kod == kod).first()
     return row[0] if row else None
 
 
@@ -181,7 +175,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "form_note": it.form_note,
                 "uwagi": it.uwagi,
                 "confidence": it.confidence,
-                "matched_product_id": _resolve_product_id(session, it.match.kod, dzial),
+                "matched_product_id": _resolve_product_id(session, it.match.kod),
                 "match_kod": it.match.kod,
                 "match_nazwa": it.match.nazwa,
                 "match_jm": it.match.jm_override,

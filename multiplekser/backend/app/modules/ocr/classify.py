@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Mapping, Optional
 
 from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, run_ocr_chain
+from .cooldown import OCRCooldownStore
 from .parsing import extract_json
 
 CLASSIFY_PROMPT = (
@@ -56,6 +57,7 @@ async def classify_document(
     files: list[tuple[bytes, str]], chain: Optional[list[OCRChainStep]] = None,
     log_context: Optional[Mapping[str, object]] = None,
     event_callback: Optional[OCRChainEventCallback] = None,
+    cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> ClassifyResult:
     # thinking_level="low" (2026-08-04, na zyczenie uzytkownika - przetwarzanie calego dokumentu
     # trwalo 2-3 minuty) - to trywialna decyzja (jedno pole naglowka), nie potrzebuje glebszego
@@ -67,6 +69,7 @@ async def classify_document(
             response_validator=_is_valid_classification_response,
             log_context={**dict(log_context or {}), "ai_stage": "classification"},
             event_callback=event_callback,
+            cooldown_store=cooldown_store,
         )
     except AllProvidersFailedError as exc:
         # Zachowujemy bezpieczny fallback, ale dopiero po sprawdzeniu pozostalych modeli.

@@ -53,8 +53,9 @@ async def test_brak_output_zwraca_pusty_tekst():
 async def test_blad_http_rzuca_ocr_provider_error_z_kodem_statusu():
     fake = _fake_response(status_code=429, text="rate limited")
     with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=fake)):
-        with pytest.raises(OCRProviderError, match="429"):
+        with pytest.raises(OCRProviderError, match="429") as exc_info:
             await OpenAIProvider().recognize(files=[(b"dane", "image/jpeg")], model="m", api_key="k", prompt="p")
+    assert exc_info.value.status_code == 429
 
 
 async def test_timeout_rzuca_ocr_provider_error():

@@ -18,6 +18,7 @@ from app.modules.matcher.special_rules import SpecialRule
 from app.modules.products import Catalog
 
 from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, run_ocr_chain
+from .cooldown import OCRCooldownStore
 from .form_rows_elektryka import reconcile_form_row, snap_to_form_row
 from .parsing import extract_json, is_valid_ocr_response, validate_item
 from .prompt import AI_OCR_PROMPT
@@ -114,12 +115,14 @@ async def recognize_document(
     chain: Optional[list[OCRChainStep]] = None,
     log_context: Optional[Mapping[str, object]] = None,
     event_callback: Optional[OCRChainEventCallback] = None,
+    cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> OCRResult:
     try:
         chain_result = await run_ocr_chain(
             files, AI_OCR_PROMPT, chain=chain, response_validator=is_valid_ocr_response,
             log_context={**dict(log_context or {}), "ai_stage": "full_ocr_elektryka"},
             event_callback=event_callback,
+            cooldown_store=cooldown_store,
         )
     except AllProvidersFailedError as exc:
         if exc.last_invalid_text is not None:

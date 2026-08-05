@@ -17,6 +17,10 @@ from app.core.config import settings
 class OCRProviderError(Exception):
     """Blad pojedynczego dostawcy - w lancuchu (chain.py) kazdy taki blad przelacza na kolejnego."""
 
+    def __init__(self, message: str, *, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+
 
 class OCRProvider(ABC):
     @abstractmethod
@@ -67,7 +71,9 @@ class GeminiProvider(OCRProvider):
             raise OCRProviderError(f"Błąd połączenia: {exc}") from exc
 
         if resp.status_code >= 400:
-            raise OCRProviderError(f"API {resp.status_code}: {resp.text[:300]}")
+            raise OCRProviderError(
+                f"API {resp.status_code}: {resp.text[:300]}", status_code=resp.status_code,
+            )
 
         data = resp.json()
         candidates = data.get("candidates") or []
@@ -112,7 +118,9 @@ class OpenAIProvider(OCRProvider):
             raise OCRProviderError(f"Błąd połączenia: {exc}") from exc
 
         if resp.status_code >= 400:
-            raise OCRProviderError(f"API {resp.status_code}: {resp.text[:300]}")
+            raise OCRProviderError(
+                f"API {resp.status_code}: {resp.text[:300]}", status_code=resp.status_code,
+            )
 
         data = resp.json()
         texts = []

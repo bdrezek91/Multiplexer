@@ -20,6 +20,24 @@ class _FakeProvider(OCRProvider):
         return self.behavior(model)
 
 
+class _FakeCooldown:
+    def __init__(self, remaining: dict[str, int] | None = None, cooldown_minutes: int = 10):
+        self.remaining = remaining or {}
+        self.cooldown_minutes = cooldown_minutes
+        self.rate_limits: list[str] = []
+        self.resets: list[str] = []
+
+    def remaining_seconds(self, step_label: str) -> int:
+        return self.remaining.get(step_label, 0)
+
+    def record_rate_limit(self, step_label: str) -> int:
+        self.rate_limits.append(step_label)
+        return self.cooldown_minutes
+
+    def reset(self, step_label: str) -> None:
+        self.resets.append(step_label)
+
+
 async def test_default_chain_ma_gemini_x4_darmowy_gemini_platny_openai_platny():
     """Cztery modele Gemini na kluczu darmowym, potem platny Gemini i OpenAI jako ostatni fallback."""
     chain = default_ocr_chain()
@@ -178,3 +196,50 @@ async def test_loguje_odrzucenie_odpowiedzi_przez_walidator(caplog):
     assert rejected.ai_model == "model-a"
     assert rejected.reason == "odpowiedz nie spelnia wymagan formatu lub schematu"
     assert rejected.error_type == "ResponseValidationError"
+
+
+async def test_api_429_ustawia_cooldown_i_pokazuje_czas_w_dzienniku():
+    def behavior(model):
+        if model == "model-a":
+            raise OCRProviderError("API 429: quota exceeded", status_code=429)
+        return "OK"
+
+    provider = _FakeProvider(behavior)
+    cooldown = _FakeCooldown(cooldown_minutes=10)
+    events: list[dict[str, object]] = []
+    steps = [
+        OCRChainStep("Pierwszy", provider, "model-a", "klucz-a"),
+        OCRChainStep("Drugi", provider, "model-b", "klucz-b"),
+    ]
+
+    result = await run_ocr_chain(
+        [(b"dane", "image/jpeg")], "prompt", chain=steps,
+        cooldown_store=cooldown, event_callback=events.append,
+    )
+
+    assert result.used_label == "Drugi"
+    assert cooldown.rate_limits == ["Pierwszy"]
+    assert cooldown.resets == ["Drugi"]
+    rejected = next(event for event in events if event["status"] == "rejected")
+    assert "blokada modelu na 10 min" in str(rejected["reason"])
+
+
+async def test_model_z_aktywnym_cooldownem_jest_pominiety_bez_wywolania_api():
+    provider = _FakeProvider(lambda model: "OK")
+    cooldown = _FakeCooldown(remaining={"Pierwszy": 599})
+    events: list[dict[str, object]] = []
+    steps = [
+        OCRChainStep("Pierwszy", provider, "model-a", "klucz-a"),
+        OCRChainStep("Drugi", provider, "model-b", "klucz-b"),
+    ]
+
+    result = await run_ocr_chain(
+        [(b"dane", "image/jpeg")], "prompt", chain=steps,
+        cooldown_store=cooldown, event_callback=events.append,
+    )
+
+    assert result.used_label == "Drugi"
+    assert provider.calls == ["model-b"]
+    skipped = next(event for event in events if event["status"] == "skipped")
+    assert skipped["model"] == "model-a"
+    assert "pozostalo ok. 10 min" in str(skipped["reason"])

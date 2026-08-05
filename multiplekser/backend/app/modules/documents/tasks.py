@@ -23,6 +23,7 @@ from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
 from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback
 from app.modules.ocr.classify import classify_document
+from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
 from app.modules.ocr.image import downscale_image
 from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
@@ -62,6 +63,7 @@ def _resolve_product_id(session: Session, kod):
 def _classify_and_recognize(
     files: list[tuple[bytes, str]], session: Session, document,
     event_callback: OCRChainEventCallback,
+    cooldown_store: OCRCooldownStore,
 ):
     """Klasyfikacja dzialu + pelny odczyt, z automatycznym ponowieniem na przejsciowe bledy
     dostepnosci AI (patrz _MAX_ATTEMPTS/_RETRY_DELAYS_S wyzej). Klasyfikacja jest ponawiana
@@ -79,6 +81,7 @@ def _classify_and_recognize(
         try:
             classify_result = asyncio.run(classify_document(
                 files, log_context=log_context, event_callback=event_callback,
+                cooldown_store=cooldown_store,
             ))
             dzial = classify_result.dzial
 
@@ -88,6 +91,7 @@ def _classify_and_recognize(
                     recognize_document_hydraulika(
                         files, catalog, magazyn=document.magazyn, log_context=log_context,
                         event_callback=event_callback,
+                        cooldown_store=cooldown_store,
                     )
                 )
             else:
@@ -96,6 +100,7 @@ def _classify_and_recognize(
                     recognize_document(
                         files, catalog, special_rules, magazyn=document.magazyn,
                         log_context=log_context, event_callback=event_callback,
+                        cooldown_store=cooldown_store,
                     )
                 )
             return classify_result, dzial, result
@@ -112,6 +117,7 @@ def _classify_and_recognize(
 async def _verify_ambiguous_items(
     files: list[tuple[bytes, str]], items: list[dict], document_id: str,
     event_callback: OCRChainEventCallback,
+    cooldown_store: OCRCooldownStore,
 ) -> None:
     """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
     ptaszka przy pierwszym przebiegu) - druga, waska proba per-wiersz, rownolegle. Modyfikuje
@@ -129,6 +135,7 @@ async def _verify_ambiguous_items(
             verify_ambiguous_quantity(
                 files, items[i]["rozpoznana_nazwa"], log_context={"document_id": document_id},
                 event_callback=event_callback,
+                cooldown_store=cooldown_store,
             )
             for i in targets
         )
@@ -163,6 +170,8 @@ def run_ocr_task(document_id: str, session: Session) -> None:
     def save_ai_event(event: dict[str, object]) -> None:
         repository.append_ai_trace_event(session, document, event)
 
+    cooldown_store = get_ocr_cooldown_store()
+
     try:
         # Wiele plikow = wiele osobnych stron TEGO SAMEGO dokumentu (np. dwa zdjecia z telefonu
         # jednej papierowej wydawki, ktorej nie da sie zmiescic na jednym zdjeciu tak jak wielo-
@@ -179,7 +188,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
         # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
         classify_result, dzial, result = _classify_and_recognize(
-            files, session, document, save_ai_event,
+            files, session, document, save_ai_event, cooldown_store,
         )
 
         items = []
@@ -207,7 +216,9 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "match_jm": it.match.jm_override,
             })
 
-        asyncio.run(_verify_ambiguous_items(files, items, document_id, save_ai_event))
+        asyncio.run(_verify_ambiguous_items(
+            files, items, document_id, save_ai_event, cooldown_store,
+        ))
 
         repository.mark_done(
             session, document,

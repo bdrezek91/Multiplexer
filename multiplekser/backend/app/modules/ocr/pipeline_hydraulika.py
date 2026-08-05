@@ -20,6 +20,7 @@ from app.modules.matcher import MatchResult, match_against_catalog_hydraulika
 from app.modules.products import Catalog
 
 from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, run_ocr_chain
+from .cooldown import OCRCooldownStore
 from .form_rows_hydraulika import snap_to_known_item_hydraulika
 from .parsing import extract_json, is_valid_ocr_response, validate_item
 from .pipeline_elektryka import OCRUnparsableResponseError, normalize_project_number
@@ -90,6 +91,7 @@ async def recognize_document_hydraulika(
     chain: Optional[list[OCRChainStep]] = None,
     log_context: Optional[Mapping[str, object]] = None,
     event_callback: Optional[OCRChainEventCallback] = None,
+    cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> OCRResultHydraulika:
     try:
         chain_result = await run_ocr_chain(
@@ -97,6 +99,7 @@ async def recognize_document_hydraulika(
             response_validator=is_valid_ocr_response,
             log_context={**dict(log_context or {}), "ai_stage": "full_ocr_hydraulika"},
             event_callback=event_callback,
+            cooldown_store=cooldown_store,
         )
     except AllProvidersFailedError as exc:
         if exc.last_invalid_text is not None:

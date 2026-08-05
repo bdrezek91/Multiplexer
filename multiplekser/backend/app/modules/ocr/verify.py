@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Mapping, Optional
 
 from .chain import OCRChainEventCallback, run_ocr_chain
+from .cooldown import OCRCooldownStore
 from .parsing import extract_json, parse_float_loose
 
 _VERIFY_PROMPT_TEMPLATE = (
@@ -51,6 +52,7 @@ async def verify_ambiguous_quantity(
     files: list[tuple[bytes, str]], nazwa: str,
     log_context: Optional[Mapping[str, object]] = None,
     event_callback: Optional[OCRChainEventCallback] = None,
+    cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> VerifyResult:
     prompt = _VERIFY_PROMPT_TEMPLATE.format(nazwa=nazwa.replace('"', "'"))
     try:
@@ -58,6 +60,7 @@ async def verify_ambiguous_quantity(
             files, prompt,
             log_context={**dict(log_context or {}), "ai_stage": "quantity_verification"},
             event_callback=event_callback,
+            cooldown_store=cooldown_store,
         )
     except Exception:
         return VerifyResult(None, None)

@@ -16,6 +16,7 @@ krok. Krok bez skonfigurowanego klucza jest pomijany (nie liczy sie jako "blad" 
 from __future__ import annotations
 
 import logging
+import math
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ from typing import Callable, Mapping, Optional
 
 from app.core.config import settings
 
+from .cooldown import OCRCooldownStore
 from .providers import GeminiProvider, OCRProvider, OCRProviderError, OpenAIProvider
 
 logger = logging.getLogger(__name__)
@@ -150,6 +152,7 @@ async def run_ocr_chain(
     thinking_level: str = "medium", response_validator: Optional[Callable[[str], bool]] = None,
     log_context: Optional[Mapping[str, object]] = None,
     event_callback: Optional[OCRChainEventCallback] = None,
+    cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> OCRChainResult:
     """Przejscie po lancuchu: pierwszy dostawca z kluczem, ktory odpowie poprawnie, wygrywa.
     `files` - lista (bytes, mime), patrz OCRProvider.recognize. `thinking_level` - patrz
@@ -157,7 +160,8 @@ async def run_ocr_chain(
     dzialu w classify.py), domyslnie "medium" dla pelnego odczytu tabeli.
     `response_validator` odrzuca odpowiedz HTTP 200 w zlym formacie i uruchamia kolejny krok.
     `log_context` pozwala dopiac np. document_id i etap OCR bez logowania prompta/pliku/klucza.
-    `event_callback` zapisuje ten sam bezpieczny slad do widoku dokumentu."""
+    `event_callback` zapisuje ten sam bezpieczny slad do widoku dokumentu. `cooldown_store`
+    pomija modele czasowo zablokowane po API 429 (w produkcji wspolny Redis)."""
     steps = chain if chain is not None else default_ocr_chain()
     last_error: Optional[Exception] = None
     last_invalid_text: Optional[str] = None
@@ -190,6 +194,14 @@ async def run_ocr_chain(
                 {**step_extra, "reason": "brak skonfigurowanego klucza API"},
                 event_callback,
             )
+            continue
+        remaining_seconds = cooldown_store.remaining_seconds(step.label) if cooldown_store else 0
+        if remaining_seconds > 0:
+            remaining_minutes = max(1, math.ceil(remaining_seconds / 60))
+            reason = f"blokada po API 429, pozostalo ok. {remaining_minutes} min"
+            skipped.append(f"{step.label} ({reason})")
+            logger.info("OCR AI - model pominiety", extra={**step_extra, "reason": reason})
+            _publish_event("skipped", {**step_extra, "reason": reason}, event_callback)
             continue
         started_at = time.monotonic()
         logger.info("OCR AI - proba modelu", extra=step_extra)
@@ -231,6 +243,8 @@ async def run_ocr_chain(
                     "duration_ms": round((time.monotonic() - started_at) * 1000),
                 },
             )
+            if cooldown_store:
+                cooldown_store.reset(step.label)
             _publish_event(
                 "selected",
                 {
@@ -242,11 +256,20 @@ async def run_ocr_chain(
             return OCRChainResult(text=text, used_label=step.label)
         except OCRProviderError as exc:
             last_error = exc
+            reason = _safe_reason(exc)
+            if exc.status_code == 429:
+                # Pelne body bledu Google jest dlugie i malo czytelne w panelu dokumentu.
+                # Wystarcza kod + konkretna decyzja systemu; surowej odpowiedzi nie zapisujemy.
+                reason = "Przekroczony limit zapytan API (429)"
+                if cooldown_store:
+                    cooldown_minutes = cooldown_store.record_rate_limit(step.label)
+                    if cooldown_minutes:
+                        reason = f"{reason} | blokada modelu na {cooldown_minutes} min"
             logger.warning(
                 "OCR AI - model odrzucony",
                 extra={
                     **step_extra,
-                    "reason": _safe_reason(exc),
+                    "reason": reason,
                     "error_type": type(exc).__name__,
                     "duration_ms": round((time.monotonic() - started_at) * 1000),
                 },
@@ -255,7 +278,7 @@ async def run_ocr_chain(
                 "rejected",
                 {
                     **step_extra,
-                    "reason": _safe_reason(exc),
+                    "reason": reason,
                     "duration_ms": round((time.monotonic() - started_at) * 1000),
                 },
                 event_callback,

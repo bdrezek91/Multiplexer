@@ -118,6 +118,7 @@ _HYDRAULIKA_PAGES: tuple[tuple[str, ...], ...] = (
         "Bateria zlewozmywakowa",
         "Blat kuchenny 1200x600",
         "Blat kuchenny 1250x600",
+        "Blat kuchenny 1650x600",
         "Blat kuchenny 825x600",
         "Bojler 50 L",
         "Czwórnik 110x50 90 st",
@@ -151,9 +152,9 @@ _HYDRAULIKA_PAGES: tuple[tuple[str, ...], ...] = (
         "Mufa dwukielichowa",
         "Mufa GW",
         "Mufa GZ",
-        "Nakrętka M12",
     ),
     (
+        "Nakrętka M12",
         "Narożnik wewnętrzny beżowy",
         "Narożnik wewnętrzny srebrny",
         "Podgrzewacz nadumywalkowy 10 L",
@@ -278,9 +279,62 @@ def _horizontal_line_centers(
     ]
 
 
+def _trim_isolated_edges(centers: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Odcina odosobnione kandydatow na krancach listy (np. gorna krawedz/ramka renderu strony),
+    ktorych odleglosc do najblizszego sasiada jest razaco wieksza niz typowy rozstaw wierszy w
+    reszcie listy. Realny przypadek (2026-08-07): samotna, dosc silna linia y=2 tuz pod gornym
+    brzegiem strony, ~200px od pierwszej prawdziwej linii tabeli (typowy rozstaw wierszy ~38px)
+    - za silna, by odrzucic ja przez _drop_weak_candidates, ale gdy liczba kandydatow po
+    filtrach byla dokladnie rowna wymaganej (required), okno w _find_row_lines nie mialo juz
+    zadnego wyboru i musialo ja przyjac, przesuwajac caly rzad wierszy o jedna pozycje. Dziala
+    na krancach niezaleznie od required - nie zuzywa "zapasu" kandydatow potrzebnego
+    _drop_weak_candidates."""
+    centers = list(centers)
+    while len(centers) > 3:
+        gaps = [b[0] - a[0] for a, b in zip(centers, centers[1:])]
+        if gaps[0] > gaps[1] * 1.8:
+            centers.pop(0)
+        else:
+            break
+    while len(centers) > 3:
+        gaps = [b[0] - a[0] for a, b in zip(centers, centers[1:])]
+        if gaps[-1] > gaps[-2] * 1.8:
+            centers.pop()
+        else:
+            break
+    return centers
+
+
+def _drop_weak_candidates(centers: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Odrzuca kandydatow na linie, ktorych 'sila' (ilosc ciemnych pikseli w przekroju) jest
+    razaco nizsza niz najsilniejsza linia na stronie - to zwykle nie prawdziwa linia siatki
+    tabeli, tylko tekst/artefakt (np. pogrubiony wiersz naglowka kolumn tuz nad pierwszym
+    wierszem materialowym), ktory przypadkiem przekroczyl prog szerokosci w
+    _horizontal_line_centers. Realny przypadek (2026-08-07): dwie takie slabe "linie" (sila
+    ~380 przy prawdziwych liniach ~1221) weszly do wybranego okna w _find_row_lines i przesunely
+    caly rzad wierszy o 2 pozycje - system podpisywal wycinek jednego wiersza ("Blat kuchenny
+    825x600") nazwa i zaznaczeniem sasiedniego ("Blat kuchenny 1200x600").
+
+    Prog jest wzgledny do najsilniejszej linii na TEJ stronie (nie stala), zeby dzialac tak samo
+    na wyraznym i bladym skanie. Filtr dziala bezwarunkowo (bez ogladania sie na required) -
+    taki slaby kandydat nigdy nie jest prawdziwa linia siatki, wiec lepiej odciac go zawsze i
+    pozwolic wywolujacemu (_find_row_lines) spasc do istniejacej galezi dla bladych/niepelnych
+    skanow (drugi, luzniejszy prog + _interpolate_faint_table_lines), gdyby po odcieciu zabraklo
+    kandydatow - a nie po cichu przepuszczac wiersz siatki zbudowany z artefaktu."""
+    if len(centers) < 2:
+        return centers
+    max_strength = max(strength for _, strength in centers)
+    return [(y, strength) for y, strength in centers if strength >= max_strength * 0.6]
+
+
 def _find_row_lines(image: Image.Image, row_count: int) -> list[int] | None:
     centers = _horizontal_line_centers(image)
     required = row_count + 1
+    # Kolejnosc ma znaczenie: odciecie slabych kandydatow jako pierwsze zapobiega falszywym
+    # "izolowanym" lukom w _trim_isolated_edges, gdyby slaby kandydat siedzial tuz obok
+    # prawdziwej linii (sztucznie male sasiednie odstepy myla porownanie odstepow).
+    centers = _drop_weak_candidates(centers)
+    centers = _trim_isolated_edges(centers)
     if len(centers) < required:
         # Ostatnia strona Hydrauliki jest bardzo blada. Drugi prog dopuszcza jasniejsze linie,
         # a ponizsza kontrola regularnego rozstawu nadal odrzuca tekst i przypadkowe zabrudzenia.

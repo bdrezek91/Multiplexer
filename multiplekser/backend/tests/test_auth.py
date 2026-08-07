@@ -61,6 +61,41 @@ def test_login_rate_limit_po_5_probach(client, admin_user):
     assert r.status_code == 429
 
 
+def test_login_blokada_konta_po_serii_bledow(client, admin_user):
+    """Blokada per-konto (lockout.py) - niezalezna od rate limitera per-IP (@limiter.limit
+    powyzej, 5/minute): resetujemy limiter po kazdej probie, zeby izolowac akurat blokade konta,
+    nie ograniczenie IP z ktorego przychodzi caly test."""
+    from app.core.rate_limit import limiter
+
+    for _ in range(5):
+        r = client.post("/auth/token", data={"username": admin_user.email, "password": "zle-haslo"})
+        assert r.status_code == 401
+        limiter.reset()
+
+    # Nawet z POPRAWNYM haslem, konto jest zablokowane - limiter per-IP juz zresetowany wyzej,
+    # wiec to musi byc blokada per-konto (lockout.py), nie efekt uboczny rate limitera.
+    r = client.post("/auth/token", data={"username": admin_user.email, "password": ADMIN_PASSWORD})
+    assert r.status_code == 429
+    assert "zablokowane" in r.json()["detail"].lower()
+
+
+def test_login_sukces_zeruje_licznik_nieudanych_prob(client, admin_user):
+    from app.core.rate_limit import limiter
+
+    for _ in range(4):
+        r = client.post("/auth/token", data={"username": admin_user.email, "password": "zle-haslo"})
+        assert r.status_code == 401
+        limiter.reset()
+
+    r = client.post("/auth/token", data={"username": admin_user.email, "password": ADMIN_PASSWORD})
+    limiter.reset()
+    assert r.status_code == 200
+
+    # Po udanym logowaniu licznik jest wyzerowany - kolejna nieudana proba nie blokuje od razu.
+    r = client.post("/auth/token", data={"username": admin_user.email, "password": "zle-haslo"})
+    assert r.status_code == 401
+
+
 def test_me_bez_tokenu_zwraca_401(client):
     r = client.get("/auth/me")
     assert r.status_code == 401
@@ -87,6 +122,39 @@ def test_refresh_odrzuca_access_token(client, admin_headers):
     access_token = admin_headers["Authorization"].removeprefix("Bearer ")
     r = client.post("/auth/refresh", json={"refresh_token": access_token})
     assert r.status_code == 401
+
+
+def test_logout_uniewaznia_refresh_token(client, admin_user):
+    login = client.post("/auth/token", data={"username": admin_user.email, "password": ADMIN_PASSWORD})
+    refresh_token = login.json()["refresh_token"]
+
+    r_logout = client.post("/auth/logout", json={"refresh_token": refresh_token})
+    assert r_logout.status_code == 204
+
+    r_refresh = client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    assert r_refresh.status_code == 401
+    assert "unieważniony" in r_refresh.json()["detail"]
+
+
+def test_logout_z_nieprawidlowym_tokenem_jest_idempotentny(client):
+    """Wylogowanie ma byc bezpieczne do wywolania nawet z juz nieprawidlowym/sfabrykowanym
+    tokenem (patrz docstring endpointu) - frontend zawsze kasuje tokeny lokalnie niezaleznie."""
+    r = client.post("/auth/logout", json={"refresh_token": "cos-nieprawidlowego"})
+    assert r.status_code == 204
+
+
+def test_logout_nie_uniewaznia_innych_tokenow_tego_uzytkownika(client, admin_user):
+    """Kazdy refresh token ma wlasne 'jti' - wylogowanie jedna sesja nie psuje innej (np. drugie
+    urzadzenie), inaczej niz globalna zmiana hasla."""
+    login_1 = client.post("/auth/token", data={"username": admin_user.email, "password": ADMIN_PASSWORD})
+    login_2 = client.post("/auth/token", data={"username": admin_user.email, "password": ADMIN_PASSWORD})
+    refresh_token_1 = login_1.json()["refresh_token"]
+    refresh_token_2 = login_2.json()["refresh_token"]
+
+    client.post("/auth/logout", json={"refresh_token": refresh_token_1})
+
+    assert client.post("/auth/refresh", json={"refresh_token": refresh_token_1}).status_code == 401
+    assert client.post("/auth/refresh", json={"refresh_token": refresh_token_2}).status_code == 200
 
 
 def test_zapis_produktow_wymaga_roli_admin(client, magazynier_headers):

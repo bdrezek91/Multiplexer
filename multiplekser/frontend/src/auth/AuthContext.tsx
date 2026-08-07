@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadUser])
 
   const logout = useCallback(() => {
-    apiLogout()
+    void apiLogout()
     setUser(null)
   }, [])
 

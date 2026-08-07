@@ -66,7 +66,9 @@ npm run dev   # http://localhost:5173
 npm run test  # Vitest
 ```
 
-API: `/auth/token` (logowanie, od Etapu 5), `/match` (dopasowanie, wymaga zalogowania), pelny CRUD
+API: `/auth/token` (logowanie, od Etapu 5, chronione rate limitem per-IP i blokada konta po 5
+nieudanych probach - patrz `docs/RAPORT_BEZPIECZENSTWO_1.md`), `/auth/logout` (uniewaznia refresh
+token), `/match` (dopasowanie, wymaga zalogowania), pelny CRUD
 `/products` (od Etapu 4, zapis tylko rola admin), `/documents` (upload skanu + async OCR przez
 Celery, od Etapu 7 - `POST` zwraca 202 natychmiast, `GET /documents/{id}` do odpytania statusu i
 wyniku), `PATCH /documents/{id}/items/{item_id}` (weryfikacja ilosci/kodu przed generowaniem, od

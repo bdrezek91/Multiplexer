@@ -75,6 +75,20 @@ def _reset_rate_limiter():
     yield
 
 
+@pytest.fixture(autouse=True)
+def _reset_login_lockout():
+    """Blokada logowania per-konto po nieudanych probach (lockout.py) - jak rate limiter wyzej,
+    stan zyje w Redis wspolnym dla calego procesu testowego. Bez resetu, test symulujacy 5
+    nieudanych prob (test_login_blokada_konta_po_serii_bledow) zablokowalby admin@test.local
+    na 15 minut dla wszystkich kolejnych testow w tym samym uruchomieniu."""
+    from app.modules.users.lockout import get_login_lockout_store
+
+    store = get_login_lockout_store()
+    for email in ("admin@test.local", "magazynier@test.local"):
+        store.reset(email)
+    yield
+
+
 @pytest.fixture()
 def client(db_session):
     """TestClient z Depends(get_db) podmienionym na sesje testowa (rollback po tescie)."""

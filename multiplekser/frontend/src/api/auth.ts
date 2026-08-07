@@ -33,8 +33,22 @@ export async function login(email: string, password: string): Promise<void> {
   tokenStorage.setTokens(data.access_token, data.refresh_token)
 }
 
-export function logout(): void {
+// Uniewaznia refresh token po stronie backendu (Redis blacklist, patrz POST /auth/logout) -
+// lokalne tokeny sa kasowane od razu, niezaleznie od wyniku zadania sieciowego (uzytkownik ma
+// byc wylogowany z punktu widzenia UI nawet gdy backend/siec akurat nie dziala).
+export async function logout(): Promise<void> {
+  const refreshToken = tokenStorage.getRefreshToken()
   tokenStorage.clear()
+  if (!refreshToken) return
+  try {
+    await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+  } catch {
+    // best-effort - patrz komentarz wyzej
+  }
 }
 
 export async function fetchCurrentUser(): Promise<CurrentUser> {

@@ -20,6 +20,14 @@ _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 TokenType = Literal["access", "refresh"]
 
+# Haslo-placeholder do wyrownania czasu odpowiedzi logowania (patrz router.py: login()) - gdy
+# konto nie istnieje, weryfikujemy hasla wobec tego hasha zamiast krotko-obwodowac cala
+# weryfikacje. Bez tego czas odpowiedzi 401 zdradza, czy podany e-mail istnieje w bazie (bcrypt
+# ~100ms tylko dla istniejacych kont) - luka do enumeracji kont. Stala, nie generowana za kazdym
+# razem hash_password() - koszt liczenia hasha ma byc poniesiony raz przy imporcie modulu, nie
+# przy kazdym nieudanym logowaniu.
+DUMMY_PASSWORD_HASH = "$2b$12$lWzs2SZtIn5H0P91ExkNz.mIPk6JerodhR95hOAsUZwc8qThMBzMu"
+
 
 class InvalidTokenError(Exception):
     pass

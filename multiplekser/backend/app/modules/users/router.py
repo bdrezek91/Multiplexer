@@ -27,8 +27,8 @@ from .schemas import (
     AccessToken, PasswordResetRequest, RefreshRequest, Token, UserCreate, UserOut, UserUpdate,
 )
 from .security import (
-    InvalidTokenError, create_access_token, create_refresh_token, decode_refresh_token,
-    verify_password,
+    DUMMY_PASSWORD_HASH, InvalidTokenError, create_access_token, create_refresh_token,
+    decode_refresh_token, verify_password,
 )
 from .token_blacklist import get_token_blacklist_store
 
@@ -61,7 +61,11 @@ def login(
             ),
         )
     user = repository.get_user_by_email(session, form_data.username)
-    if user is None or not user.active or not verify_password(form_data.password, user.hashed_password):
+    # verify_password() wywolane ZAWSZE (nawet gdy user is None, wobec DUMMY_PASSWORD_HASH) -
+    # bcrypt trwa ~100ms, wiec krotkie obwodzenie tego wywolania dla nieistniejacego konta
+    # zdradzalo timing-iem, czy podany e-mail istnieje w bazie (enumeracja kont).
+    password_ok = verify_password(form_data.password, user.hashed_password if user else DUMMY_PASSWORD_HASH)
+    if user is None or not user.active or not password_ok:
         lockout_store.record_failure(form_data.username)
         logger.warning("Nieudane logowanie", extra={"email": form_data.username})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nieprawidłowy email lub hasło")

@@ -45,6 +45,26 @@ def test_login_nieistniejacy_uzytkownik(client):
     assert r.status_code == 401
 
 
+def test_login_nieistniejacego_uzytkownika_i_tak_liczy_bcrypt(client, monkeypatch):
+    """Regresja timing-attack (enumeracja kont): dla nieistniejacego e-maila verify_password()
+    musi byc wywolane (wobec DUMMY_PASSWORD_HASH), inaczej brak bcrypt sprawia, ze odpowiedz na
+    nieistniejace konto jest mierzalnie szybsza niz na istniejace ze zlym haslem."""
+    from app.modules.users import router as users_router
+
+    calls: list[str] = []
+    original = users_router.verify_password
+
+    def _spy(password: str, hashed: str) -> bool:
+        calls.append(hashed)
+        return original(password, hashed)
+
+    monkeypatch.setattr(users_router, "verify_password", _spy)
+
+    r = client.post("/auth/token", data={"username": "nikt@test.local", "password": "cokolwiek"})
+    assert r.status_code == 401
+    assert calls == [users_router.DUMMY_PASSWORD_HASH]
+
+
 def test_login_rate_limit_po_5_probach(client, admin_user):
     """Etap "quick winy" (2026-07-30) - ochrona przed brute-force: 5 prob/minute na /auth/token,
     niezaleznie od tego czy haslo bylo poprawne czy nie (limit liczy proby, nie tylko porazki)."""

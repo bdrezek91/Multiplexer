@@ -4,6 +4,11 @@ Wszystkie niejasne wiersze trafiaja do jednego zapytania na model. Dla aktualneg
 Elektryka wejscie jest dodatkowo zamieniane na jeden obraz z wycinkami docelowych wierszy
 (verification_image.py). Odpowiedz z samymi null NIE jest sukcesem: taki model zostaje odrzucony,
 a nierozpoznane pozycje przechodza zbiorczo do nastepnego kroku lancucha.
+
+Lancuch (`quantity_verification_chain()`, patrz chain.py) jest na zyczenie uzytkownika (2026-08-07)
+WYLACZNIE darmowy - pozycja, ktorej nie odczyta zaden z czterech darmowych modeli Gemini, zostaje
+"Bez wyniku" (patrz `_publish_no_result`) i wymaga recznej weryfikacji na oryginale, bez placonego
+fallbacku (inaczej niz `default_ocr_chain()` uzywany do pelnego odczytu calego dokumentu).
 """
 from __future__ import annotations
 
@@ -14,7 +19,7 @@ from typing import Mapping, Optional
 from .chain import (
     AllProvidersFailedError,
     OCRChainEventCallback,
-    default_ocr_chain,
+    quantity_verification_chain,
     run_ocr_chain,
 )
 from .cooldown import OCRCooldownStore
@@ -128,7 +133,7 @@ async def verify_ambiguous_quantities(
     verification_files, cropped = prepare_verification_files(files, targets, dzial)
     unresolved = dict(targets)
     found: dict[str, VerifyResult] = {}
-    steps = default_ocr_chain()
+    steps = quantity_verification_chain()
 
     for step_index, step in enumerate(steps):
         if not unresolved:

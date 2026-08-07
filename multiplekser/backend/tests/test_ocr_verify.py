@@ -31,7 +31,7 @@ async def test_jedno_zapytanie_obsluguje_wiele_pozycji(monkeypatch):
         ']}'
     ])
     monkeypatch.setattr(
-        "app.modules.ocr.verify.default_ocr_chain",
+        "app.modules.ocr.verify.quantity_verification_chain",
         lambda: [OCRChainStep("Model pierwszy", provider, "model-a", "klucz")],
     )
     monkeypatch.setattr(
@@ -61,7 +61,7 @@ async def test_null_przechodzi_do_nastepnego_modelu_tylko_dla_nierozpoznanej_poz
         '{"pozycje":[{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     ])
     monkeypatch.setattr(
-        "app.modules.ocr.verify.default_ocr_chain",
+        "app.modules.ocr.verify.quantity_verification_chain",
         lambda: [
             OCRChainStep("Model pierwszy", first, "model-a", "klucz-a"),
             OCRChainStep("Model drugi", second, "model-b", "klucz-b"),
@@ -89,7 +89,7 @@ async def test_same_nulle_sa_odrzucone_i_log_konczy_sie_bez_wyniku(monkeypatch):
     ])
     events: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "app.modules.ocr.verify.default_ocr_chain",
+        "app.modules.ocr.verify.quantity_verification_chain",
         lambda: [OCRChainStep("Model pierwszy", provider, "model-a", "klucz")],
     )
     monkeypatch.setattr(

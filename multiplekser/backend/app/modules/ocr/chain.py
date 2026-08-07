@@ -11,6 +11,12 @@ Dwa warianty lancucha, obydwa budowane na biezaco z `settings` (patrz kazda funk
   proste (jedno pole tekstowe z naglowka), ze zaczyna od NAJSLABSZEGO/najtanszego modelu Gemini,
   zeby nie marnowac zasobow mocniejszych modeli na ten krok; fallback dalej przez te same
   modele/klucze co wyzej.
+- `quantity_verification_chain()` - dodatkowa kontrola ilosci dla pojedynczych niejasnych
+  wierszy (ocr/verify.py), wspolna dla Elektryki i Hydrauliki. Na zyczenie uzytkownika (2026-08-07)
+  BEZ platnych krokow (Gemini platny, OpenAI) - to dorazne sprawdzenie kilku komorek, nie caly
+  dokument, wiec koszt platnego fallbacku nie jest tu proporcjonalny do korzysci. Pozycja, ktorej
+  nie odczyta zaden z czterech darmowych modeli, zostaje "Bez wyniku" - user i tak musi ja
+  zweryfikowac na oryginale, tak jak kazda inna niejasna pozycje spoza tej sciezki.
 
 Osobny mechanizm cross-checku OpenAI (rownolegly drugi odczyt przy KAZDYM dokumencie, patrz git
 historia ocr/crosscheck.py) zostal porzucony, bo w praktyce dawal duzo szumu (falszywe "nie
@@ -91,6 +97,24 @@ def classify_ocr_chain() -> list[OCRChainStep]:
             f"OpenAI {settings.openai_model} (klucz platny)",
             OpenAIProvider(), settings.openai_model, settings.openai_api_key,
         ),
+    ]
+
+
+def quantity_verification_chain() -> list[OCRChainStep]:
+    """Lancuch dla dodatkowej kontroli ilosci pominietych przez glowny odczyt pozycji (Krok
+    verify.py, verify_ambiguous_quantities()) - wspolny dla Elektryki i Hydrauliki (dzial wybiera
+    tylko uklad wycinka, nie lancuch modeli - patrz verification_image.py). W odroznieniu od
+    default_ocr_chain() BEZ platnych krokow: to sprawdzenie kilku pojedynczych, juz niejasnych
+    komorek, nie caly dokument, a placony fallback (Gemini platny, OpenAI) tu nie jest tego
+    warty - user i tak zweryzykuje niejasna pozycje na oryginale, jesli zaden darmowy model jej
+    nie odczyta."""
+    gemini = GeminiProvider()
+    free_key = settings.gemini_api_key_free
+    return [
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key),
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key),
     ]
 
 

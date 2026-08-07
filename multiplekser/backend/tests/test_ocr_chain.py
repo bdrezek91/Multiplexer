@@ -5,6 +5,7 @@ from app.modules.ocr.chain import (
     AllProvidersFailedError,
     OCRChainStep,
     default_ocr_chain,
+    quantity_verification_chain,
     run_ocr_chain,
 )
 from app.modules.ocr.providers import GeminiProvider, OCRProvider, OCRProviderError, OpenAIProvider
@@ -62,6 +63,22 @@ async def test_default_chain_ma_gemini_x4_darmowy_gemini_platny_openai_platny():
     paid_steps = [s for s in chain if "platny" in s.label]
     assert len(free_steps) == 4
     assert len(paid_steps) == 2  # Gemini platny + OpenAI platny
+
+
+async def test_quantity_verification_chain_ma_tylko_cztery_darmowe_modele_gemini():
+    """Na zyczenie uzytkownika (2026-08-07) dodatkowa kontrola ilosci (verify.py) nie siega po
+    platne modele - to sprawdzenie kilku niejasnych komorek, nie caly dokument, wiec placony
+    fallback nie jest tu proporcjonalny do korzysci."""
+    chain = quantity_verification_chain()
+    assert len(chain) == 4
+    assert all(isinstance(s.provider, GeminiProvider) for s in chain)
+    assert all("darmowy" in s.label for s in chain)
+    assert [s.model for s in chain] == [
+        "gemini-3.6-flash",
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-3.1-flash-lite",
+    ]
 
 
 async def test_brak_zadnego_klucza_rzuca_z_jasnym_komunikatem():

@@ -26,7 +26,10 @@ generateOutput() w monolicie, zweryfikowany bezposrednio, nie zgadywany):
    w sklad zestawu) - wszystkie obecne z tych 5 znikaja z wyniku, zastapione JEDNYM wierszem
    "ZESTAW MEBLI BIAŁYCH" z ILOSCIA ZAWSZE RÓWNĄ 1 (zestaw to zawsze jeden komplet mebli do
    jednej lazienki/kuchni, ilosc poszczegolnych elementow na wydawce nie ma tu znaczenia).
-   Ponizej 3 z 5 - bez zmian, pozycje zostaja nierozpoznane (jak dotad).
+   Ponizej 3 z 5 - bez zmian, pozycje zostaja nierozpoznane (jak dotad). Ten wiersz - wyjatkowo,
+   na zyczenie uzytkownika - ladowany jest na KONIEC wyniku (nie w miejscu pierwszego polaczonego
+   elementu jak zasada 1) nakazywalaby domyslnie), zeby przyblizyc jego alfabetyczna pozycje bez
+   pelnego sortowania calego wyniku.
 """
 from __future__ import annotations
 
@@ -74,11 +77,12 @@ def _merge_zestaw_mebli_bialych(items: list[GeneratorItem]) -> list[GeneratorIte
     )
     matched_set = set(matched_idx)
     out = [it for i, it in enumerate(items) if i not in matched_set]
-    # Wstawiamy zestaw na miejscu PIERWSZEGO polaczonego elementu, zeby zachowac zasade 1)
-    # (kolejnosc wyniku = kolejnosc w dokumencie zrodlowym) tak blisko oryginalu, jak sie da.
-    # Nic wczesniejszego nie zostalo usuniete (to najmniejszy usuniety indeks), wiec pozycja
-    # w `out` pokrywa sie wprost z oryginalnym indeksem.
-    out.insert(min(matched_idx), zestaw)
+    # Wstawiamy zestaw na KONIEC (2026-08-07, na zyczenie uzytkownika) - nie na miejscu
+    # pierwszego polaczonego elementu jak pierwotnie. Reszta wyniku nadal trzyma sie zasady 1)
+    # (kolejnosc = kolejnosc w dokumencie zrodlowym), ten jeden wiersz jest wyjatkiem: "Zestaw"
+    # zaczyna sie na "Z", wiec koniec listy przyblizeniowo odpowiada miejscu, w ktorym wypadaloby
+    # alfabetycznie - bez wprowadzania pelnego sortowania alfabetycznego calego wyniku.
+    out.append(zestaw)
     return out
 
 

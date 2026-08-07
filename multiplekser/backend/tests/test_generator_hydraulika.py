@@ -146,7 +146,10 @@ def test_2_z_5_elementow_bialych_nie_laczy_sie_zostaja_osobno(catalog):
     assert all(line.startswith("### BRAK DOPASOWANIA") for line in result.lines)
 
 
-def test_zestaw_bialych_zachowuje_pozycje_pierwszego_elementu_w_kolejnosci(catalog):
+def test_zestaw_bialych_ladowany_na_koniec_wyniku_nie_w_miejscu_pierwszego_elementu(catalog):
+    """Reszta wyniku trzyma sie kolejnosci z wydawki (zasada 1), ale "ZESTAW MEBLI BIAŁYCH" -
+    jako wyjatek, na zyczenie uzytkownika - zawsze ladowany jest na koniec (przyblizenie
+    pozycji alfabetycznej bez pelnego sortowania calego wyniku)."""
     items = [
         GeneratorItem(name="Bojler 80 L", qty=1),
         _SZAFKA_STOJACA_40, _SZAFKA_STOJACA_80, _SZAFKA_WISZACA_40,
@@ -154,7 +157,7 @@ def test_zestaw_bialych_zachowuje_pozycje_pierwszego_elementu_w_kolejnosci(catal
     ]
     result = generate_output_hydraulika(items, catalog, magazyn=None)
     kody = [line.split(";")[0] for line in result.lines]
-    assert kody == ["BOJLER 80 L", "ZESTAW MEBLI BIAŁYCH", "ZAWÓR KĄTOWY 1/2X3/4"]
+    assert kody == ["BOJLER 80 L", "ZAWÓR KĄTOWY 1/2X3/4", "ZESTAW MEBLI BIAŁYCH"]
 
 
 def test_zestaw_bialych_scala_sie_z_recznie_dopisanym_tym_samym_kodem(catalog):

@@ -1,12 +1,20 @@
 """Lancuch dostawcow z automatycznym fallbackiem - port AI_CHAIN + petli prob w runAI() z monolitu.
 
-Kolejnosc prob (2026-08-04): cztery modele Gemini na kluczu darmowym (3.6 Flash, 3.5 Flash,
-3.5 Flash Lite i 3.1 Flash Lite) -> Gemini 3.6 Flash na kluczu platnym -> OpenAI na kluczu
-platnym (ostatni krok, uzywany WYLACZNIE gdy wszystkie kroki Gemini zawioda - nie przy kazdym
-dokumencie). Osobny mechanizm cross-checku OpenAI (rownolegly drugi odczyt przy KAZDYM
-dokumencie, patrz git historia ocr/crosscheck.py) zostal porzucony, bo w praktyce dawal duzo
-szumu (falszywe "nie znaleziono pozycji") i byl bardziej kosztowny niz prosty fallback na koncu
-tego samego lancucha.
+Dwa warianty lancucha, obydwa budowane na biezaco z `settings` (patrz kazda funkcja):
+- `default_ocr_chain()` - pelny odczyt pozycji z dokumentu (pipeline_elektryka/hydraulika,
+  verify.py). Kolejnosc prob (2026-08-04): cztery modele Gemini na kluczu darmowym (3.6 Flash,
+  3.5 Flash, 3.5 Flash Lite i 3.1 Flash Lite) -> Gemini 3.6 Flash na kluczu platnym -> OpenAI na
+  kluczu platnym (ostatni krok, uzywany WYLACZNIE gdy wszystkie kroki Gemini zawioda - nie przy
+  kazdym dokumencie). Tu liczy sie przede wszystkim jakosc, wiec zaczynamy od najmocniejszego
+  modelu.
+- `classify_ocr_chain()` - sama klasyfikacja dzialu (ocr/classify.py, Krok A), zadanie na tyle
+  proste (jedno pole tekstowe z naglowka), ze zaczyna od NAJSLABSZEGO/najtanszego modelu Gemini,
+  zeby nie marnowac zasobow mocniejszych modeli na ten krok; fallback dalej przez te same
+  modele/klucze co wyzej.
+
+Osobny mechanizm cross-checku OpenAI (rownolegly drugi odczyt przy KAZDYM dokumencie, patrz git
+historia ocr/crosscheck.py) zostal porzucony, bo w praktyce dawal duzo szumu (falszywe "nie
+znaleziono pozycji") i byl bardziej kosztowny niz prosty fallback na koncu tego samego lancucha.
 
 Blad dowolnego kroku (429/401/403/timeout/5xx/brak sieci) automatycznie przelacza na kolejny
 krok. Krok bez skonfigurowanego klucza jest pomijany (nie liczy sie jako "blad" - odpowiednik
@@ -54,6 +62,30 @@ def default_ocr_chain() -> list[OCRChainStep]:
         OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key),
         OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key),
         OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key),
+        OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key),
+        OCRChainStep(
+            f"OpenAI {settings.openai_model} (klucz platny)",
+            OpenAIProvider(), settings.openai_model, settings.openai_api_key,
+        ),
+    ]
+
+
+def classify_ocr_chain() -> list[OCRChainStep]:
+    """Lancuch dla samej klasyfikacji dzialu (Krok A z ocr/classify.py) - to zadanie jest
+    bardzo proste (odczytanie jednego pola tekstowego z naglowka), wiec w odroznieniu od
+    `default_ocr_chain()` (uzywanego do pelnego odczytu pozycji, gdzie na pierwszym miejscu
+    liczy sie jakosc) zaczynamy od NAJSLABSZEGO/najtanszego modelu Gemini na kluczu darmowym,
+    zeby nie marnowac zasobow mocniejszych modeli na tak prosty krok. Fallback nadal przechodzi
+    przez te same modele/klucze co domyslny lancuch (w razie bledu/przeciazenia), z tym samym
+    ostatecznym zabezpieczeniem na OpenAI jako ostatni krok."""
+    gemini = GeminiProvider()
+    free_key = settings.gemini_api_key_free
+    paid_key = settings.gemini_api_key_paid
+    return [
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key),
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key),
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key),
         OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key),
         OCRChainStep(
             f"OpenAI {settings.openai_model} (klucz platny)",

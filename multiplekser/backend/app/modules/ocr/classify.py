@@ -16,7 +16,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
-from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, run_ocr_chain
+from .chain import (
+    AllProvidersFailedError,
+    OCRChainEventCallback,
+    OCRChainStep,
+    classify_ocr_chain,
+    run_ocr_chain,
+)
 from .cooldown import OCRCooldownStore
 from .parsing import extract_json
 
@@ -64,7 +70,8 @@ async def classify_document(
     # sekwencyjnych zapytan; pozostale etapy korzystaja z takiej samej wartosci domyslnej.
     try:
         chain_result = await run_ocr_chain(
-            files, CLASSIFY_PROMPT, chain=chain, thinking_level="low",
+            files, CLASSIFY_PROMPT, chain=chain if chain is not None else classify_ocr_chain(),
+            thinking_level="low",
             response_validator=_is_valid_classification_response,
             log_context={**dict(log_context or {}), "ai_stage": "classification"},
             event_callback=event_callback,

@@ -3,8 +3,6 @@ z monolitu (sekcja "DETEKCJA KOLORU DOMINUJACEGO PROJEKTU", port z Multiplekser 
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from app.modules.matcher.core_elektryka import match_against_catalog
 from app.modules.products.catalog import Catalog
 

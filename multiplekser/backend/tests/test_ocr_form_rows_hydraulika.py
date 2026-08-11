@@ -19,8 +19,10 @@ def test_snap_rura_fi_32_100_cm_nie_myli_sie_z_50_cm():
     assert r.status == "exact"
 
 
-def test_additional_rows_ma_114_pozycji():
-    assert len(ADDITIONAL_ROWS) == 114
+def test_additional_rows_ma_115_pozycji():
+    """115, nie 114 - "Silikon sanitarny" dopisany pozniej (patrz prompt.py, dopisek
+    DOPISKI POZA TABELĄ w Hydraulice)."""
+    assert len(ADDITIONAL_ROWS) == 115
 
 
 def test_snap_dokladne_dopasowanie_formularza_jest_exact():
@@ -40,6 +42,13 @@ def test_snap_pozycja_tylko_z_bazy_dodatkowej_jest_additional():
     r = snap_to_known_item_hydraulika("Grzejnik 1000W")
     assert r.status == "additional"
     assert r.name == "Grzejnik 1000W"
+
+
+def test_dokladny_waz_20_cm_z_bazy_dodatkowej_nie_zmienia_sie_na_30_cm():
+    r = snap_to_known_item_hydraulika("Wąż 1/2x1/2 cala 20 cm")
+    assert r.status == "additional"
+    assert r.ratio == 1.0
+    assert r.name == "Wąż 1/2x1/2 cala 20 cm"
 
 
 def test_snap_zupelnie_obcy_tekst_jest_off():

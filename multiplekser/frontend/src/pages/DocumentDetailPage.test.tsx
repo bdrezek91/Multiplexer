@@ -10,7 +10,7 @@ import type { DocumentDetail, Product } from '../types'
 
 vi.mock('../api/documents', async () => {
   const actual = await vi.importActual<typeof import('../api/documents')>('../api/documents')
-  return { ...actual, getDocument: vi.fn(), updateDocumentItem: vi.fn() }
+  return { ...actual, getDocument: vi.fn(), updateDocumentItem: vi.fn(), addDocumentItem: vi.fn() }
 })
 vi.mock('../api/products', async () => {
   const actual = await vi.importActual<typeof import('../api/products')>('../api/products')
@@ -39,6 +39,7 @@ const documentDetail: DocumentDetail = {
   used_provider: 'gemini',
   rejected_count: 0,
   error_message: null,
+  ai_trace: [],
   created_at: new Date().toISOString(),
   items: [
     {
@@ -61,6 +62,47 @@ const documentDetail: DocumentDetail = {
   ],
 }
 
+describe('DocumentDetailPage - przebieg AI', () => {
+  beforeEach(() => {
+    vi.mocked(documentsApi.getDocument).mockReset()
+    vi.mocked(documentsApi.getDocument).mockResolvedValue({
+      ...documentDetail,
+      ai_trace: [
+        {
+          status: 'rejected', stage: 'full_ocr_hydraulika', provider: 'Gemini',
+          model: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash (klucz darmowy)',
+          reason: 'API 429: limit zapytań', step: 1, total_steps: 6, duration_ms: 420,
+          attempt: 1, created_at: '2026-08-05T07:00:00Z',
+        },
+        {
+          status: 'selected', stage: 'full_ocr_hydraulika', provider: 'Gemini',
+          model: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash Lite (klucz darmowy)',
+          reason: null, step: 3, total_steps: 6, duration_ms: 1840,
+          attempt: 1, created_at: '2026-08-05T07:00:02Z',
+        },
+        {
+          status: 'no_result', stage: 'quantity_verification', provider: null,
+          model: null, label: null, reason: 'Nie znaleziono ilości dla wskazanej pozycji',
+          target: 'Gniazdo podwójne polskie białe', step: null, total_steps: null,
+          duration_ms: null, attempt: null, created_at: '2026-08-05T07:00:03Z',
+        },
+      ],
+    })
+  })
+
+  it('pokazuje model odrzucony z powodem oraz model ostatecznie wybrany', async () => {
+    renderPage()
+
+    expect(await screen.findByText('Przebieg AI')).toBeInTheDocument()
+    expect(screen.getByText('Odrzucony')).toBeInTheDocument()
+    expect(screen.getByText(/Powód: API 429: limit zapytań/)).toBeInTheDocument()
+    expect(screen.getByText('Wybrany')).toBeInTheDocument()
+    expect(screen.getByText(/Gemini 3.5 Flash Lite/)).toBeInTheDocument()
+    expect(screen.getByText('Bez wyniku')).toBeInTheDocument()
+    expect(screen.getByText(/Pozycje: Gniazdo podwójne polskie białe/)).toBeInTheDocument()
+  })
+})
+
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -78,6 +120,7 @@ describe('DocumentDetailPage - MatchKodCell', () => {
   beforeEach(() => {
     vi.mocked(documentsApi.getDocument).mockReset()
     vi.mocked(documentsApi.updateDocumentItem).mockReset()
+    vi.mocked(documentsApi.addDocumentItem).mockReset()
     vi.mocked(productsApi.listProducts).mockReset()
     vi.mocked(documentsApi.getDocument).mockResolvedValue(documentDetail)
   })
@@ -113,5 +156,54 @@ describe('DocumentDetailPage - MatchKodCell', () => {
       ),
     )
     expect(await screen.findByText(/RURA FI 32 100 CM/)).toBeInTheDocument()
+  })
+})
+
+describe('DocumentDetailPage - AddItemRow', () => {
+  beforeEach(() => {
+    vi.mocked(documentsApi.getDocument).mockReset()
+    vi.mocked(documentsApi.addDocumentItem).mockReset()
+    vi.mocked(productsApi.listProducts).mockReset()
+    vi.mocked(documentsApi.getDocument).mockResolvedValue(documentDetail)
+  })
+
+  it('pozwala dodac nowa pozycje spoza OCR wybrana z katalogu wlasciwego dzialu', async () => {
+    const user = userEvent.setup()
+    const searchResults: Product[] = [
+      { kod: 'BOJLER 80 L', nazwa: 'Bojler 80 L', jm: 'SZT', grupa: 'Grzejniki', status: 'generyczny', atrybuty: {}, kolor_domniemany: false, aliasy: [], warianty_magazynowe: null, dzial: 'hydraulika' },
+    ]
+    vi.mocked(productsApi.listProducts).mockResolvedValue(searchResults)
+    vi.mocked(documentsApi.addDocumentItem).mockResolvedValue({
+      id: 'item2', rozpoznana_nazwa: 'Bojler 80 L', ilosc_wydana: null, ilosc_zuzyta: null,
+      ilosc_finalna: 2, match_kod: 'BOJLER 80 L', match_nazwa: 'Bojler 80 L', match_jm: 'SZT',
+      match_quality: 'ok', match_score: 1, off_form: false, needs_review: false, form_note: '',
+      uwagi: 'Dodano ręcznie', confidence: null,
+    })
+
+    renderPage()
+    await screen.findByDisplayValue('RURA FI 32 50 CM')
+
+    const searchInput = screen.getByPlaceholderText('Wybierz produkt z katalogu...')
+    await user.type(searchInput, 'bojler')
+
+    await waitFor(() =>
+      expect(productsApi.listProducts).toHaveBeenCalledWith(
+        expect.objectContaining({ dzial: 'hydraulika', search: 'bojler' }),
+      ),
+    )
+    await user.click(await screen.findByText(/BOJLER 80 L/))
+
+    const qtyInput = screen.getByPlaceholderText('Ilość')
+    await user.type(qtyInput, '2')
+
+    const addButton = screen.getByRole('button', { name: 'Dodaj pozycję' })
+    await user.click(addButton)
+
+    await waitFor(() =>
+      expect(documentsApi.addDocumentItem).toHaveBeenCalledWith('doc1', {
+        match_kod: 'BOJLER 80 L',
+        ilosc_finalna: 2,
+      }),
+    )
   })
 })

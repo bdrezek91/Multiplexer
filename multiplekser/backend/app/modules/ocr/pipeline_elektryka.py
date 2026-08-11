@@ -11,15 +11,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from app.modules.matcher import MatchResult, match_against_catalog
 from app.modules.matcher.special_rules import SpecialRule
 from app.modules.products import Catalog
 
-from .chain import OCRChainStep, run_ocr_chain
+from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, run_ocr_chain
+from .cooldown import OCRCooldownStore
 from .form_rows_elektryka import reconcile_form_row, snap_to_form_row
-from .parsing import extract_json, validate_item
+from .parsing import extract_json, is_actionable_item, is_valid_ocr_response, validate_item
 from .prompt import AI_OCR_PROMPT
 
 
@@ -107,14 +108,26 @@ def _build_item(
 
 
 async def recognize_document(
-    file_bytes: bytes,
-    mime: str,
+    files: list[tuple[bytes, str]],
     catalog: Catalog,
     special_rules: list[SpecialRule],
     magazyn: Optional[str] = None,
     chain: Optional[list[OCRChainStep]] = None,
+    log_context: Optional[Mapping[str, object]] = None,
+    event_callback: Optional[OCRChainEventCallback] = None,
+    cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> OCRResult:
-    chain_result = await run_ocr_chain(file_bytes, mime, AI_OCR_PROMPT, chain=chain)
+    try:
+        chain_result = await run_ocr_chain(
+            files, AI_OCR_PROMPT, chain=chain, response_validator=is_valid_ocr_response,
+            log_context={**dict(log_context or {}), "ai_stage": "full_ocr_elektryka"},
+            event_callback=event_callback,
+            cooldown_store=cooldown_store,
+        )
+    except AllProvidersFailedError as exc:
+        if exc.last_invalid_text is not None:
+            raise OCRUnparsableResponseError(exc.last_invalid_text) from exc
+        raise
     parsed: Any = extract_json(chain_result.text)
     if parsed is None:
         raise OCRUnparsableResponseError(chain_result.text)
@@ -126,8 +139,9 @@ async def recognize_document(
         pn = parsed.get("numer_projektu")
         numer_projektu = normalize_project_number(str(pn).strip()) if pn else None
 
-    valid_items = [it for it in raw_items if validate_item(it)]
-    rejected_count = len(raw_items) - len(valid_items)
+    schema_items = [it for it in raw_items if validate_item(it)]
+    valid_items = [it for it in schema_items if is_actionable_item(it)]
+    rejected_count = len(raw_items) - len(schema_items)
 
     pozycje = [_build_item(it, catalog, special_rules, magazyn) for it in valid_items]
 

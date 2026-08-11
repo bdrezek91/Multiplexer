@@ -173,7 +173,8 @@ def core_and_attrs(name: str) -> ParsedAttrs:
     color, t = _extract(t, COLOR_PATTERNS)
     mult, t = _extract(t, MULT_PATTERNS)
 
-    # Montaz (podtynkowy/natynkowy) - wykrywane PRZED reszta obrobki, zeby nie zniknelo w core.
+    # Montaz - wykrywany PRZED reszta obrobki, zeby nie zniknal w core. W osprzecie CEE
+    # "gniazdo odbiornikowe" oznacza gniazdo stale, a nie domowe gniazdo podtynkowe.
     montaz = None
     if re.search(r"\bpodtynkow\w*\b", t, re.I):
         montaz = "PODTYNKOWY"
@@ -181,6 +182,8 @@ def core_and_attrs(name: str) -> ParsedAttrs:
     elif re.search(r"\bnatynkow\w*\b", t, re.I):
         montaz = "NATYNKOWY"
         t = re.sub(r"\bnatynkow\w*\b", " ", t, flags=re.I)
+    elif re.search(r"\bgniazd\w*\b.*\b(odbiornikow\w*|sta[łl]\w*)\b", t, re.I):
+        montaz = "STALY"
 
     amp_m = AMP_RE.search(t)
     amp = amp_m.group(1) if amp_m else None

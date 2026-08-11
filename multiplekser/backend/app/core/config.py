@@ -20,15 +20,6 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "multiplekser-dokumenty"
 
-    # Flaga trybu "Multiplekser Portable" (.exe na Windows, bez Dockera/Postgresa/Redis/MinIO) -
-    # sam punkt wejscia (desktop_main.py) zostal usuniety (2026-07-30, niepotrzebny), wiec ta
-    # flaga jest dead code: zawsze False, nic jej juz nie ustawia na True. Zostawiona swiadomie,
-    # bo storage.py/tasks.py wciaz na niej gałęzią - patrz CLAUDE.md. Przelaczalaby: storage na
-    # lokalny folder (local_storage_path) i wykonanie OCR na watek w tym samym procesie zamiast
-    # Celery/Redis.
-    desktop_mode: bool = False
-    local_storage_path: str = "./dokumenty"
-
     # UWAGA: wartosc domyslna jest TYLKO do dewelopmentu lokalnego - w produkcji MUSI byc
     # nadpisana zmienna srodowiskowa JWT_SECRET_KEY (losowy, dlugi sekret).
     jwt_secret_key: str = "dev-insecure-secret-change-me-in-production"
@@ -41,7 +32,23 @@ class Settings(BaseSettings):
     # bezpieczenstwa: monolit (index.html) mial klucze zaszyte w kodzie, co jest wyciekiem.
     gemini_api_key_free: str | None = None
     gemini_api_key_paid: str | None = None
-    ocr_timeout_seconds: int = 90
+    # Skrocone z 90s (2026-08-04, na zyczenie uzytkownika - przetwarzanie calego dokumentu
+    # trwalo 2-3 minuty, za dlugo) - przy opornym/przeciazonym kroku lancucha lepiej szybciej
+    # poddac sie i przejsc do kolejnego kroku (patrz chain.py) niz czekac az do 90s na kazdym
+    # z kilku sekwencyjnych zapytan (klasyfikacja + pelny odczyt) z osobna.
+    ocr_timeout_seconds: int = 30
+
+    # Klucz OpenAI - OSTATNI krok w default_ocr_chain() (patrz ocr/chain.py), uzywany WYLACZNIE
+    # gdy wszystkie kroki Gemini zawioda (429/timeout/limit) - nie przy kazdym dokumencie.
+    # Opcjonalny - brak klucza po prostu pomija ten krok, tak jak brak klucza Gemini platnego.
+    #
+    # Historia (2026-08-04): pierwsza wersja probowala OpenAI jako niezalezny cross-check
+    # (rownolegly drugi odczyt przy KAZDYM dokumencie, flagujacy rozbieznosci) - porzucone na
+    # zyczenie uzytkownika po tym, jak "gpt-4o-mini" w tej roli znajdowal ulamek pozycji Gemini
+    # (1 z kilkunastu), przez co prawie wszystko bylo falszywie oznaczane "do weryfikacji".
+    # Prosty fallback na koncu tego samego lancucha okazal sie skuteczniejszy i tanszy.
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o"
 
     # Skalowanie zdjec (nie-PDF) przed wyslaniem do AI - mniejszy upload = szybsza odpowiedz.
     # Podniesione z 1800/85 (port 1:1 z monolitu) - realny przypadek z produkcji (patrz

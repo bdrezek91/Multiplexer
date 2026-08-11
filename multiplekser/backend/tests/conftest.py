@@ -67,11 +67,25 @@ def baza_hydraulika_json() -> dict:
 def _reset_rate_limiter():
     """Rate limiting na /auth/token (Etap "quick winy") liczy proby w Redis per-IP, wspolnym
     dla calego procesu testowego - bez resetu przed kazdym testem setki logowan przez fixture
-    `admin_headers`/`elektryk_headers` (kazdy test loguje sie od nowa) szybko wyczerpalyby limit
+    `admin_headers`/`magazynier_headers` (kazdy test loguje sie od nowa) szybko wyczerpalyby limit
     "5/minute" i posypaly niepowiazane testy 429-kami zamiast prawdziwych bledow."""
     from app.core.rate_limit import limiter
 
     limiter.reset()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_lockout():
+    """Blokada logowania per-konto po nieudanych probach (lockout.py) - jak rate limiter wyzej,
+    stan zyje w Redis wspolnym dla calego procesu testowego. Bez resetu, test symulujacy 5
+    nieudanych prob (test_login_blokada_konta_po_serii_bledow) zablokowalby admin@test.local
+    na 15 minut dla wszystkich kolejnych testow w tym samym uruchomieniu."""
+    from app.modules.users.lockout import get_login_lockout_store
+
+    store = get_login_lockout_store()
+    for email in ("admin@test.local", "magazynier@test.local"):
+        store.reset(email)
     yield
 
 
@@ -89,7 +103,7 @@ def client(db_session):
 
 
 ADMIN_PASSWORD = "admin-test-haslo-123"
-ELEKTRYK_PASSWORD = "elektryk-test-haslo-123"
+MAGAZYNIER_PASSWORD = "magazynier-test-haslo-123"
 
 
 @pytest.fixture()
@@ -100,12 +114,12 @@ def admin_user(db_session):
 
 
 @pytest.fixture()
-def elektryk_user(db_session):
+def magazynier_user(db_session):
     from app.modules.users.repository import create_user
 
     return create_user(
-        db_session, email="elektryk@test.local", password=ELEKTRYK_PASSWORD,
-        rola="elektryk", magazyny_dostepne=["Zabrze"],
+        db_session, email="magazynier@test.local", password=MAGAZYNIER_PASSWORD,
+        rola="magazynier", magazyny_dostepne=["Zabrze"],
     )
 
 
@@ -122,8 +136,8 @@ def admin_headers(client, admin_user):
 
 
 @pytest.fixture()
-def elektryk_headers(client, elektryk_user):
-    return _login_headers(client, elektryk_user.email, ELEKTRYK_PASSWORD)
+def magazynier_headers(client, magazynier_user):
+    return _login_headers(client, magazynier_user.email, MAGAZYNIER_PASSWORD)
 
 
 @pytest.fixture()
@@ -132,6 +146,17 @@ def gemini_key_configured():
     settings.gemini_api_key_free = "test-key"
     yield
     settings.gemini_api_key_free = original
+
+
+@pytest.fixture()
+def openai_key_configured():
+    """Wlacza krok OpenAI - ostatni w default_ocr_chain() (patrz ocr/chain.py) - domyslnie
+    WYLACZONY w testach (settings.openai_api_key=None), tak jak w produkcji bez skonfigurowanego
+    klucza (ten krok jest wtedy po prostu pomijany)."""
+    original = settings.openai_api_key
+    settings.openai_api_key = "test-openai-key"
+    yield
+    settings.openai_api_key = original
 
 
 @pytest.fixture()

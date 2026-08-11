@@ -1,5 +1,5 @@
 import { apiRequest, apiRequestBlob } from './client'
-import type { DocumentCreated, DocumentDetail, DocumentItem, DocumentItemUpdate, GenerateRequest } from '../types'
+import type { DocumentCreated, DocumentDetail, DocumentItem, DocumentItemAdd, DocumentItemUpdate, GenerateRequest } from '../types'
 
 export function listDocuments(): Promise<DocumentDetail[]> {
   return apiRequest<DocumentDetail[]>('/documents')
@@ -9,9 +9,12 @@ export function getDocument(id: string): Promise<DocumentDetail> {
   return apiRequest<DocumentDetail>(`/documents/${encodeURIComponent(id)}`)
 }
 
-export function uploadDocument(file: File, magazyn?: string): Promise<DocumentCreated> {
+// `files` - jeden lub wiecej (np. dwa osobne zdjecia z telefonu tej samej papierowej wydawki,
+// ktora nie zmiescila sie na jednym zdjeciu - patrz historia czatu). Wszystkie pod tym samym
+// polem "plik" w FormData - backend (FastAPI) skleja powtorzone pola tej samej nazwy w liste.
+export function uploadDocument(files: File[], magazyn?: string): Promise<DocumentCreated> {
   const formData = new FormData()
-  formData.append('plik', file)
+  files.forEach((file) => formData.append('plik', file))
   if (magazyn) formData.append('magazyn', magazyn)
   return apiRequest<DocumentCreated>('/documents', { method: 'POST', formData })
 }
@@ -32,6 +35,13 @@ export function updateDocumentItem(
     `/documents/${encodeURIComponent(documentId)}/items/${encodeURIComponent(itemId)}`,
     { method: 'PATCH', body },
   )
+}
+
+export function addDocumentItem(documentId: string, body: DocumentItemAdd): Promise<DocumentItem> {
+  return apiRequest<DocumentItem>(`/documents/${encodeURIComponent(documentId)}/items`, {
+    method: 'POST',
+    body,
+  })
 }
 
 export async function generateDocument(

@@ -21,11 +21,16 @@ from app.core.rate_limit import limiter
 
 from . import repository
 from .deps import get_current_user, require_admin
+from .lockout import get_login_lockout_store
 from .models import UserModel
 from .schemas import (
     AccessToken, PasswordResetRequest, RefreshRequest, Token, UserCreate, UserOut, UserUpdate,
 )
-from .security import InvalidTokenError, create_access_token, create_refresh_token, decode_token, verify_password
+from .security import (
+    DUMMY_PASSWORD_HASH, InvalidTokenError, create_access_token, create_refresh_token,
+    decode_refresh_token, verify_password,
+)
+from .token_blacklist import get_token_blacklist_store
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +45,31 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_db),
 ):
+    # Blokada per-konto (Redis, patrz lockout.py) - uzupelnia rate limiting per-IP powyzej
+    # (@limiter.limit), ktory nie chroni przed rozproszonym atakiem na to samo konto z wielu
+    # adresow IP. Sprawdzana PRZED odczytem uzytkownika/haslem - zablokowane konto nie
+    # ujawnia nawet czy haslo bylo poprawne.
+    lockout_store = get_login_lockout_store()
+    locked_seconds = lockout_store.remaining_seconds(form_data.username)
+    if locked_seconds > 0:
+        logger.warning("Logowanie zablokowane (zbyt wiele nieudanych prob)", extra={"email": form_data.username})
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "Konto tymczasowo zablokowane po zbyt wielu nieudanych próbach logowania - "
+                f"spróbuj ponownie za {locked_seconds // 60 + 1} min."
+            ),
+        )
     user = repository.get_user_by_email(session, form_data.username)
-    if user is None or not user.active or not verify_password(form_data.password, user.hashed_password):
+    # verify_password() wywolane ZAWSZE (nawet gdy user is None, wobec DUMMY_PASSWORD_HASH) -
+    # bcrypt trwa ~100ms, wiec krotkie obwodzenie tego wywolania dla nieistniejacego konta
+    # zdradzalo timing-iem, czy podany e-mail istnieje w bazie (enumeracja kont).
+    password_ok = verify_password(form_data.password, user.hashed_password if user else DUMMY_PASSWORD_HASH)
+    if user is None or not user.active or not password_ok:
+        lockout_store.record_failure(form_data.username)
         logger.warning("Nieudane logowanie", extra={"email": form_data.username})
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nieprawidłowy email lub hasło")
+    lockout_store.reset(form_data.username)
     uid = str(user.id)
     logger.info("Logowanie", extra={"user_id": uid, "email": user.email})
     return Token(access_token=create_access_token(uid), refresh_token=create_refresh_token(uid))
@@ -52,13 +78,29 @@ def login(
 @router.post("/refresh", response_model=AccessToken)
 def refresh(data: RefreshRequest, session: Session = Depends(get_db)):
     try:
-        user_id = decode_token(data.refresh_token, expected_type="refresh")
+        refresh_data = decode_refresh_token(data.refresh_token)
     except InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Nieprawidłowy lub wygasły refresh token")
-    user = repository.get_user_by_id(session, user_id)
+    if get_token_blacklist_store().is_revoked(refresh_data.jti):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token został unieważniony (wylogowano)")
+    user = repository.get_user_by_id(session, refresh_data.user_id)
     if user is None or not user.active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Użytkownik nie istnieje lub jest nieaktywny")
     return AccessToken(access_token=create_access_token(str(user.id)))
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(data: RefreshRequest) -> None:
+    """Uniewaznia refresh token (wpisuje jego 'jti' na blackliste w Redis do naturalnego
+    wygasniecia - patrz token_blacklist.py). Celowo NIE zwraca 401 na niepoprawnym/juz
+    wygaslym/juz uniewaznionym tokenie - wylogowanie ma byc idempotentne z punktu widzenia
+    klienta (frontend i tak kasuje lokalnie zapisane tokeny niezaleznie od wyniku tego
+    zadania, patrz frontend/src/api/auth.ts)."""
+    try:
+        refresh_data = decode_refresh_token(data.refresh_token)
+    except InvalidTokenError:
+        return
+    get_token_blacklist_store().revoke(refresh_data.jti, refresh_data.expires_in_seconds)
 
 
 @router.get("/me", response_model=UserOut)

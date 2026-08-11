@@ -17,6 +17,19 @@ generateOutput() w monolicie, zweryfikowany bezposrednio, nie zgadywany):
    Elektryka (`generator/core.py`), ale bez niuansu `_VERY_LOW_RATIO` (Hydraulika w zrodle
    zawsze podaje "podpowiedz: {kod}" gdy jest jakikolwiek kod, inaczej "brak" - bez progu
    podobienstwa rozstrzygajacego, czy podpowiedz ma sens).
+5) ZESTAW MEBLI BIAŁYCH (2026-08-07, na zyczenie uzytkownika): "Szafka stojaca 40/80 cm biala",
+   "Szafka wiszaca 40/80 cm biala", "Szafka okapowa 60 cm biala" NIE MAJA WLASNYCH kodow w
+   katalogu Optima (nie istnieja jako osobne produkty - sprzedawane sa WYLACZNIE w komplecie
+   jako "ZESTAW MEBLI BIAŁYCH"), dlatego bez tej reguly zawsze ladowaly do "### BRAK
+   DOPASOWANIA". Jesli na dokumencie wystapia co najmniej 3 z tych 5 pozycji (dowolne, w
+   dowolnych ilosciach - pracownik czasem nie dopisuje np. okapowej, mimo ze fizycznie wchodzi
+   w sklad zestawu) - wszystkie obecne z tych 5 znikaja z wyniku, zastapione JEDNYM wierszem
+   "ZESTAW MEBLI BIAŁYCH" z ILOSCIA ZAWSZE RÓWNĄ 1 (zestaw to zawsze jeden komplet mebli do
+   jednej lazienki/kuchni, ilosc poszczegolnych elementow na wydawce nie ma tu znaczenia).
+   Ponizej 3 z 5 - bez zmian, pozycje zostaja nierozpoznane (jak dotad). Ten wiersz - wyjatkowo,
+   na zyczenie uzytkownika - ladowany jest na KONIEC wyniku (nie w miejscu pierwszego polaczonego
+   elementu jak zasada 1) nakazywalaby domyslnie), zeby przyblizyc jego alfabetyczna pozycje bez
+   pelnego sortowania calego wyniku.
 """
 from __future__ import annotations
 
@@ -24,11 +37,53 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.modules.matcher import match_against_catalog_hydraulika
-from app.modules.matcher.result import QUALITY_OK
+from app.modules.matcher.result import QUALITY_OK, MatchResult
+from app.modules.parser.shared import strip_diacritics
 from app.modules.products.catalog import Catalog
 
 from .core_elektryka import GeneratorItem
 from .output_format import format_qty
+
+_ZESTAW_MEBLI_BIALYCH_KOD = "ZESTAW MEBLI BIAŁYCH"
+_ZESTAW_MEBLI_BIALYCH_MIN_ELEMENTOW = 3
+
+
+def _norm_nazwa(value: str) -> str:
+    return strip_diacritics((value or "").strip().lower())
+
+
+_ZESTAW_MEBLI_BIALYCH_ELEMENTY = {
+    _norm_nazwa(nazwa) for nazwa in (
+        "Szafka stojąca 40 cm biała",
+        "Szafka stojąca 80 cm biała",
+        "Szafka wisząca 40 cm biała",
+        "Szafka wisząca 80 cm biała",
+        "Szafka okapowa 60 cm biała",
+    )
+}
+
+
+def _merge_zestaw_mebli_bialych(items: list[GeneratorItem]) -> list[GeneratorItem]:
+    matched_idx = [
+        i for i, it in enumerate(items) if _norm_nazwa(it.name) in _ZESTAW_MEBLI_BIALYCH_ELEMENTY
+    ]
+    if len(matched_idx) < _ZESTAW_MEBLI_BIALYCH_MIN_ELEMENTOW:
+        return items
+
+    zestaw = GeneratorItem(
+        name=_ZESTAW_MEBLI_BIALYCH_KOD, qty=1.0,
+        match_kod=_ZESTAW_MEBLI_BIALYCH_KOD, match_nazwa="Zestaw mebli białych",
+        match_jm="SZT", match_quality=QUALITY_OK, match_score=1.0,
+    )
+    matched_set = set(matched_idx)
+    out = [it for i, it in enumerate(items) if i not in matched_set]
+    # Wstawiamy zestaw na KONIEC (2026-08-07, na zyczenie uzytkownika) - nie na miejscu
+    # pierwszego polaczonego elementu jak pierwotnie. Reszta wyniku nadal trzyma sie zasady 1)
+    # (kolejnosc = kolejnosc w dokumencie zrodlowym), ten jeden wiersz jest wyjatkiem: "Zestaw"
+    # zaczyna sie na "Z", wiec koniec listy przyblizeniowo odpowiada miejscu, w ktorym wypadaloby
+    # alfabetycznie - bez wprowadzania pelnego sortowania alfabetycznego calego wyniku.
+    out.append(zestaw)
+    return out
 
 
 @dataclass
@@ -43,6 +98,7 @@ def generate_output_hydraulika(
     magazyn: Optional[str],
     qty_mode: str = "real",
 ) -> GenerateResultHydraulika:
+    items = _merge_zestaw_mebli_bialych(items)
     seq: list[dict] = []
     kod_index: dict[str, int] = {}
 
@@ -54,7 +110,17 @@ def generate_output_hydraulika(
         seq.append({"type": "kod", "kod": kod, "qty": qty, "jm": jm})
 
     for it in items:
-        match = match_against_catalog_hydraulika(it.name, catalog, magazyn=magazyn)
+        # Reczna korekta (PATCH .../items/{item_id}) albo juz-dobre dopasowanie z pierwszego OCR
+        # ma pierwszenstwo przed ponownym dopasowywaniem od zera - inaczej generator ignorowal
+        # poprawki uzytkownika i eksportowal "BRAK DOPASOWANIA" mimo poprawionego kodu w UI.
+        if it.match_quality == QUALITY_OK and it.match_kod:
+            match = MatchResult(
+                kod=it.match_kod, nazwa=it.match_nazwa, quality=QUALITY_OK,
+                ratio=it.match_score if it.match_score is not None else 1.0,
+                jm_override=it.match_jm,
+            )
+        else:
+            match = match_against_catalog_hydraulika(it.name, catalog, magazyn=magazyn)
         jm = match.jm_override or "SZT"
 
         if match.quality == QUALITY_OK and match.kod:

@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+*.rdb
 
 # Sekrety lokalne/produkcyjne (JWT_SECRET_KEY, hasla DB, klucze Gemini...) - patrz
 # multiplekser/.env.prod.example i multiplekser/frontend/.env.example, ktore SA sledzone (to tylko

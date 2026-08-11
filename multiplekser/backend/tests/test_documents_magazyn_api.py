@@ -99,32 +99,33 @@ def test_zmiana_magazynu_nieistniejacy_dokument_zwraca_404(client, admin_headers
 
 
 def test_zmiana_magazynu_cudzy_dokument_zwraca_403(
-    client, db_session, admin_user, elektryk_headers, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json,
+    client, db_session, admin_user, magazynier_headers, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json,
 ):
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
     ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 90}]}'
     doc_id = _create_done_document(db_session, admin_user, ai_response)
 
-    r = client.patch(f"/documents/{doc_id}/magazyn", json={"magazyn": "Zabrze"}, headers=elektryk_headers)
+    r = client.patch(f"/documents/{doc_id}/magazyn", json={"magazyn": "Zabrze"}, headers=magazynier_headers)
     assert r.status_code == 403
 
 
-def test_zmiana_magazynu_elektryk_ograniczony_do_przypisanych_magazynow(
-    client, db_session, elektryk_user, elektryk_headers, mocked_storage, gemini_key_configured, baza_elektryka_json,
+def test_zmiana_magazynu_magazynier_ma_dostep_do_kazdego_magazynu(
+    client, db_session, magazynier_user, magazynier_headers, mocked_storage, gemini_key_configured, baza_elektryka_json,
 ):
-    """elektryk_user ma dostep tylko do Zabrza (patrz conftest.py) - proba ustawienia Czekanowa
-    (do ktorego nie ma dostepu) musi zostac odrzucona."""
+    """magazynier_user ma magazyny_dostepne=['Zabrze'] (patrz conftest.py), ale ograniczenie RBAC
+    do przypisanych magazynow zostalo usuniete (2026-08-04, na zyczenie uzytkownika) - magazynier
+    moze ustawic rowniez Czekanow, tak jak admin."""
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
-    key = f"documents/test/{elektryk_user.id}-own.jpg"
+    key = f"documents/test/{magazynier_user.id}-own.jpg"
     get_storage().upload(key, _fake_jpeg_bytes(), "image/jpeg")
     document = doc_repo.create_document(
-        db_session, user_id=elektryk_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
+        db_session, user_id=magazynier_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
     )
     ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 90}]}'
     with _mock_recognize(ai_response):
         run_ocr_task(str(document.id), db_session)
 
-    r = client.patch(f"/documents/{document.id}/magazyn", json={"magazyn": "Czekanów"}, headers=elektryk_headers)
-    assert r.status_code == 403
+    r = client.patch(f"/documents/{document.id}/magazyn", json={"magazyn": "Czekanów"}, headers=magazynier_headers)
+    assert r.status_code == 200

@@ -21,7 +21,6 @@ import KeyIcon from '@mui/icons-material/VpnKey'
 import { useQuery } from '@tanstack/react-query'
 import { listUsers } from '../api/users'
 import { ApiError } from '../api/client'
-import { magazynLabel } from '../constants'
 import { useAuth } from '../auth/AuthContext'
 import { UserFormDialog } from './UserFormDialog'
 import { ResetPasswordDialog } from './ResetPasswordDialog'
@@ -70,7 +69,6 @@ export function UsersPage() {
             <TableRow>
               <TableCell>Email</TableCell>
               <TableCell>Rola</TableCell>
-              <TableCell>Magazyny dostępne</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="right">Akcje</TableCell>
             </TableRow>
@@ -78,12 +76,12 @@ export function UsersPage() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5}>Ładowanie...</TableCell>
+                <TableCell colSpan={4}>Ładowanie...</TableCell>
               </TableRow>
             )}
             {!isLoading && (users ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={5}>Brak użytkowników</TableCell>
+                <TableCell colSpan={4}>Brak użytkowników</TableCell>
               </TableRow>
             )}
             {(users ?? []).map((u) => (
@@ -94,9 +92,6 @@ export function UsersPage() {
                 </TableCell>
                 <TableCell>
                   <Chip size="small" label={u.rola} color={u.rola === 'admin' ? 'primary' : 'default'} />
-                </TableCell>
-                <TableCell>
-                  {u.rola === 'admin' ? 'wszystkie' : u.magazyny_dostepne.map(magazynLabel).join(', ') || '-'}
                 </TableCell>
                 <TableCell>
                   <Chip size="small" label={u.active ? 'aktywny' : 'nieaktywny'} color={u.active ? 'success' : 'default'} />

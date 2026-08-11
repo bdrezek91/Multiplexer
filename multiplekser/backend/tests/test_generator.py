@@ -37,6 +37,42 @@ def test_physical_order_fallback_dla_calkowicie_niedopasowanego_tekstu():
     assert physical_order_for("zupelnie nieznana pozycja spoza formularza xyz", fallback=12345) == 12345
 
 
+def test_physical_order_pozycje_polskie_nie_wypadaja_na_koniec():
+    """Regresja (2026-08-04, zgloszona przez Bartka jako "mega pojebana kolejnosc"): stara
+    FORM_PHYSICAL_ORDER opisywala wariant formularza z pozycjami "niemieckimi" (dawno nieaktualny),
+    wiec dzisiejsze "polskie" pozycje z realnej kartki nie mialy dokladnego dopasowania i czesto
+    ladowaly sie na koniec listy (fallback) zamiast we wlasciwym miejscu - np. "Wskaźnik zasilania
+    jednomodułowy (FAZ)" (fizycznie wiersz 9. na kartce) trafial na SAM KONIEC wygenerowanego pliku
+    zamiast blisko poczatku, bo w starej liscie w ogole nie bylo takiej pozycji."""
+    order = physical_order_for("Wskaźnik zasilania jednomodułowy (FAZ)")
+    assert order < 10000  # nie fallback - musi byc realnie dopasowany, nie zgadywany
+    assert order < physical_order_for("Rozdzielnica SRN 24 biała")
+    assert order < physical_order_for("Wyłącznik nadprądowy MBN316E polska 3P 16A")
+    assert order < physical_order_for("Szyna grzebieniowa trójfazowa")
+    assert order < physical_order_for("Wkręt ocynk 4,2x16")
+
+
+def test_physical_order_rozdzielnica_polska_w_kolejnosci_numerow():
+    """Kolejny realny przypadek z tego samego zgloszenia: "Rozdzielnica SRN 24 biała" musi byc
+    miedzy SRN 12 a SRN 36, nie przypadkowo dopasowana do innej, podobnej etykiety."""
+    assert (
+        physical_order_for("Rozdzielnica SRN 12 biała")
+        < physical_order_for("Rozdzielnica SRN 24 biała")
+        < physical_order_for("Rozdzielnica SRN 36 biała")
+        < physical_order_for("Rozdzielnica SRN 48 biała")
+    )
+
+
+def test_physical_order_wariant_francuski_z_formularza_52_06_26():
+    assert (
+        physical_order_for("Rozłącznik izolacyjny modułowy 2P")
+        < physical_order_for("Różnicówka francuska CDS743F")
+        < physical_order_for("Wyłącznik nadprądowy 10A francuski")
+        < physical_order_for("Wyłącznik nadprądowy 16A francuski")
+        < physical_order_for("Gniazdo pojedyńcze polskie białe")
+    )
+
+
 def test_generate_output_sortuje_wg_fizycznej_kolejnosci_nie_kolejnosci_wejscia(catalog):
     # Celowo w odwrotnej kolejnosci fizycznej: wkret ocynk (blisko konca formularza) przed
     # gniazdem (blisko poczatku).
@@ -137,6 +173,21 @@ def test_offform_z_niskim_ratio_dostaje_fallback_elektryka(catalog):
     assert "ilosc na kartce: 2" in result.lines[0]
 
 
+def test_offform_zapisany_automatyczny_match_z_niskim_score_nadal_dostaje_fallback(catalog):
+    """Regresja: zapisanie wyniku OCR nie moze zamieniac score 0.5625 na pewnosc 1.0."""
+    items = [GeneratorItem(
+        name="Przełącznik LAN", qty=1, off_form=True,
+        match_kod="ŁĄCZNIK SZYNOPRZEWODU BIAŁY", match_nazwa="Łącznik szynoprzewodu biały",
+        match_jm="SZT", match_quality="ok", match_score=0.5625,
+    )]
+    result = generate_output(items, catalog, magazyn="Zabrze")
+    assert len(result.lines) == 1
+    assert result.lines[0].startswith(
+        'Elektryka;1;DOPISEK SPOZA FORMULARZA - oryginal: "Przełącznik LAN"'
+    )
+    assert not any(line.startswith("ŁĄCZNIK SZYNOPRZEWODU BIAŁY;") for line in result.lines)
+
+
 # ---- qty_mode "ones" ----
 
 def test_qty_mode_ones_ustawia_wszystko_na_1(catalog):
@@ -177,6 +228,35 @@ def test_first_wydawka_nie_dubluje_juz_obecnej_pozycji(catalog):
     result = generate_output(items, catalog, magazyn=None, first_wydawka=True)
     wago_lines = [l for l in result.lines if l.startswith("WAGO ZAMYKANE PODWÓJNE;")]
     assert wago_lines == ["WAGO ZAMYKANE PODWÓJNE;9;;SZT;"]  # realna ilosc, nie nadpisana "1"
+
+
+def test_first_wydawka_zachowuje_miejsce_wiersza_mimo_innej_nazwy_kodu(catalog):
+    """Regresja z projektu 52/06/26: wiersz formularza "Kinkiet LED HANA" jest dopasowany do
+    inaczej nazwanego kodu Optimy. Wstawianie bazy po nazwie kodu uznawalo kinkiet za nieznany
+    i przenosilo za niego szyny, przewody, korytka i wkret, razem z czujnikiem i puszka."""
+    items = [
+        GeneratorItem(
+            name="Kinkiet LED HANA", qty=2,
+            match_kod="KINKIET ARCHITEKTONICZNY IP65 CZARNY",
+            match_nazwa="Kinkiet architektoniczny IP65 czarny",
+            match_jm="SZT", match_quality="ok", match_score=1.0,
+        ),
+        GeneratorItem(name="Czujnik zmierzchu", qty=1),
+        GeneratorItem(name="Puszka pusta 86x86", qty=2),
+    ]
+
+    result = generate_output(items, catalog, magazyn=None, first_wydawka=True)
+    kody = [line.split(";")[0] for line in result.lines]
+
+    assert (
+        kody.index("KINKIET ARCHITEKTONICZNY IP65 CZARNY")
+        < kody.index("CZUJNIK ZMIERZCHU")
+        < kody.index("SZYNA GRZEBIENIOWA WIDEŁKOWA")
+        < kody.index("PRZEWÓD OLFLEX 4X1,5 (DO KLIMATYZACJI)")
+        < kody.index("PUSZKA PUSTA 86X86")
+        < kody.index("KORYTKO 32X15")
+        < kody.index("WKRĘT 4,2X16 (OCYNK) (50 SZT)")
+    )
 
 
 def test_bez_first_wydawka_baza_nie_jest_dodawana(catalog):
@@ -226,3 +306,36 @@ def test_encode_cp1250_polskie_znaki():
 
 def test_encode_cp1250_nieznany_znak_fallback_pytajnik():
     assert encode_cp1250("emoji 😀") == b"emoji ?"
+
+
+def test_encode_cp1250_typograficzny_cudzyslow():
+    """Realny blad z produkcji (2026-08-03): kody typu 'ODPOWIETRZNIK AUTOMATYCZNY 1/2” BIALY'
+    mialy cudzyslow zamieniany na '?' (brak w mapie), Optima nie znajdowala takiej pozycji przy
+    imporcie."""
+    assert encode_cp1250("1/2”") == b"1/2" + bytes([0x94])
+    assert encode_cp1250("“cytat”") == bytes([0x93]) + b"cytat" + bytes([0x94])
+
+
+# ---- Reczna korekta dopasowania (2026-07-31) ----
+
+def test_generate_output_uzywa_zapisanego_dopasowania_gdy_ok(catalog):
+    """Realny blad z produkcji: generator ignorowal reczna korekte match_kod (PATCH
+    .../items/{item_id}) i zawsze dopasowywal surowa nazwe od zera - "cos niejasnego xyz" nigdy
+    nie dopasuje sie samo, wiec test przechodzi TYLKO jesli generator faktycznie uzyje
+    przekazanego match_kod/match_jm zamiast wlasnego dopasowania."""
+    items = [GeneratorItem(
+        name="cos niejasnego xyz", qty=3, match_kod="KORYTKO 32X15", match_nazwa="Korytko 32x15",
+        match_jm="M", match_quality="ok",
+    )]
+    result = generate_output(items, catalog, magazyn=None)
+    assert result.lines == ["KORYTKO 32X15;3;;M;"]
+
+
+def test_generate_output_ignoruje_zapisane_dopasowanie_gdy_nie_ok(catalog):
+    """Jesli match_quality nie jest 'ok' (np. nigdy nie poprawione recznie) - generator
+    dopasowuje normalnie, tak jak dotychczas."""
+    items = [GeneratorItem(
+        name="Grzejnik 1800W", qty=1, match_kod="KORYTKO 32X15", match_quality="bad",
+    )]
+    result = generate_output(items, catalog, magazyn=None)
+    assert result.lines == ["GRZEJNIK 2000W;1;;SZT;"]

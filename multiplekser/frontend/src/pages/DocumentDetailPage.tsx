@@ -6,7 +6,7 @@ import {
   Checkbox,
   Chip,
   FormControlLabel,
-  MenuItem,
+  IconButton,
   Paper,
   Stack,
   Table,
@@ -20,21 +20,104 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DownloadIcon from '@mui/icons-material/Download'
 import { alpha } from '@mui/material/styles'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type FocusEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { generateDocument, getDocument, updateDocumentItem, updateDocumentMagazyn } from '../api/documents'
+import { addDocumentItem, generateDocument, getDocument, updateDocumentItem, updateDocumentMagazyn } from '../api/documents'
 import { listProducts } from '../api/products'
 import { StatusChip } from '../components/StatusChip'
 import { DzialChip } from '../components/DzialChip'
 import { MatchQualityChip } from '../components/MatchQualityChip'
 import { ApiError } from '../api/client'
-import { useAuth } from '../auth/AuthContext'
 import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
-import type { Dzial, DocumentItem, Product } from '../types'
+import type { AITraceEvent, Dzial, DocumentItem, Product } from '../types'
+
+const AI_STAGE_LABELS: Record<string, string> = {
+  classification: 'Rozpoznanie działu',
+  full_ocr_elektryka: 'Odczyt wydawki — Elektryka',
+  full_ocr_hydraulika: 'Odczyt wydawki — Hydraulika',
+  quantity_verification: 'Dodatkowa kontrola ilości',
+}
+
+const AI_STATUS: Record<string, {
+  label: string
+  color: 'default' | 'info' | 'warning' | 'error' | 'success'
+}> = {
+  attempt: { label: 'Próba', color: 'info' },
+  skipped: { label: 'Pominięty', color: 'default' },
+  rejected: { label: 'Odrzucony', color: 'error' },
+  selected: { label: 'Wybrany', color: 'success' },
+  no_result: { label: 'Bez wyniku', color: 'warning' },
+  failed: { label: 'Niepowodzenie', color: 'error' },
+}
+
+function AITracePanel({ events }: { events: AITraceEvent[] }) {
+  if (events.length === 0) return null
+
+  return (
+    <Box
+      sx={{
+        mt: 2,
+        p: 1.5,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 1,
+        bgcolor: (theme) => alpha(theme.palette.background.default, 0.35),
+      }}
+    >
+      <Typography variant="subtitle2" sx={{ mb: 1 }}>
+        Przebieg AI
+      </Typography>
+      <Stack spacing={0.75} sx={{ maxHeight: 240, overflowY: 'auto', pr: 0.5 }}>
+        {events.map((event, index) => {
+          const status = AI_STATUS[event.status] ?? AI_STATUS.failed
+          const stage = event.stage ? (AI_STAGE_LABELS[event.stage] ?? event.stage) : 'Łańcuch AI'
+          const model = event.label ?? event.model ?? 'Wszystkie modele'
+          const duration = event.duration_ms !== null
+            ? ` • ${(event.duration_ms / 1000).toFixed(1)} s`
+            : ''
+          const retry = event.attempt && event.attempt > 1 ? ` • podejście ${event.attempt}` : ''
+
+          return (
+            <Stack
+              key={`${event.created_at}-${index}`}
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1}
+              alignItems={{ xs: 'flex-start', sm: 'center' }}
+            >
+              <Chip label={status.label} color={status.color} size="small" sx={{ minWidth: 92 }} />
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2">
+                  <strong>{stage}:</strong> {model}
+                  <Typography component="span" variant="caption" color="text.secondary">
+                    {retry}{duration}
+                  </Typography>
+                </Typography>
+                {event.target && (
+                  <Typography variant="caption" display="block" color="text.secondary">
+                    Pozycje: {event.target}
+                  </Typography>
+                )}
+                {event.reason && (
+                  <Typography
+                    variant="caption"
+                    color={event.status === 'rejected' ? 'error' : 'text.secondary'}
+                  >
+                    Powód: {event.reason}
+                  </Typography>
+                )}
+              </Box>
+            </Stack>
+          )
+        })}
+      </Stack>
+    </Box>
+  )
+}
 
 function QtyFinalnaCell({ documentId, item }: { documentId: string; item: DocumentItem }) {
   const queryClient = useQueryClient()
@@ -51,7 +134,10 @@ function QtyFinalnaCell({ documentId, item }: { documentId: string; item: Docume
   const handleBlur = (event: FocusEvent<HTMLInputElement>) => {
     const raw = event.target.value.trim()
     const parsed = raw === '' ? null : Number(raw.replace(',', '.'))
-    if (parsed !== null && Number.isNaN(parsed)) return
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed <= 0)) {
+      setValue(item.ilosc_finalna ?? '')
+      return
+    }
     if (parsed === (item.ilosc_finalna ?? null)) return
     mutation.mutate(parsed)
   }
@@ -59,6 +145,7 @@ function QtyFinalnaCell({ documentId, item }: { documentId: string; item: Docume
   return (
     <TextField
       size="small"
+      type="number"
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onBlur={handleBlur}
@@ -144,12 +231,120 @@ function MatchKodCell({ documentId, item, dzial }: { documentId: string; item: D
   )
 }
 
+// Reczne dodanie pozycji spoza OCR (np. cos pominietego na papierowej wydawce) - patrz historia
+// czatu. Ten sam wzorzec wyszukiwania co MatchKodCell (search po stronie serwera, debounce), ale
+// dla PUSTEGO, jeszcze nieistniejacego wiersza - stad kontrolowany `value`/`inputValue` (nie ma
+// tu problemu z remountem przy kazdej zmianie, bo caly stan i tak resetuje sie po dodaniu).
+function AddItemRow({ documentId, dzial }: { documentId: string; dzial: Dzial }) {
+  const queryClient = useQueryClient()
+  const [inputValue, setInputValue] = useState('')
+  const [selected, setSelected] = useState<Product | null>(null)
+  const [qty, setQty] = useState('')
+  const [options, setOptions] = useState<Product[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const mutation = useMutation({
+    mutationFn: (payload: { match_kod: string; ilosc_finalna: number }) => addDocumentItem(documentId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents', documentId] })
+      setSelected(null)
+      setInputValue('')
+      setQty('')
+    },
+  })
+
+  useEffect(() => {
+    if (inputValue.trim().length < 2) {
+      setOptions([])
+      return
+    }
+    let active = true
+    setLoading(true)
+    const timeout = setTimeout(() => {
+      listProducts({ dzial, search: inputValue, limit: 20 })
+        .then((results) => active && setOptions(results))
+        .finally(() => active && setLoading(false))
+    }, 300)
+    return () => {
+      active = false
+      clearTimeout(timeout)
+    }
+  }, [inputValue, dzial])
+
+  const qtyNumber = Number(qty.trim().replace(',', '.'))
+  const canSubmit = Boolean(selected) && qty.trim() !== '' && Number.isFinite(qtyNumber) && qtyNumber > 0
+
+  const handleSubmit = () => {
+    if (!selected || !canSubmit) return
+    mutation.mutate({ match_kod: selected.kod, ilosc_finalna: qtyNumber })
+  }
+
+  return (
+    <TableRow>
+      <TableCell colSpan={2}>
+        <Typography variant="body2" color="text.secondary">
+          Nowa pozycja
+        </Typography>
+      </TableCell>
+      <TableCell>-</TableCell>
+      <TableCell>
+        <TextField
+          size="small"
+          type="number"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          placeholder="Ilość"
+          sx={{ width: 90 }}
+        />
+      </TableCell>
+      <TableCell>
+        <Autocomplete
+          size="small"
+          sx={{ minWidth: 480 }}
+          options={options}
+          loading={loading}
+          value={selected}
+          inputValue={inputValue}
+          isOptionEqualToValue={(option, val) => option.kod === val.kod}
+          getOptionLabel={(option) => option.kod}
+          filterOptions={(opts) => opts}
+          onInputChange={(_, newInput) => setInputValue(newInput)}
+          onChange={(_, newValue) => setSelected(newValue)}
+          disabled={mutation.isPending}
+          noOptionsText={inputValue.trim().length < 2 ? 'Wpisz co najmniej 2 znaki' : 'Brak wyników'}
+          renderOption={(props, option) => (
+            <li {...props} key={option.kod}>
+              {option.kod} — {option.nazwa}
+            </li>
+          )}
+          renderInput={(params) => <TextField {...params} placeholder="Wybierz produkt z katalogu..." />}
+        />
+      </TableCell>
+      <TableCell>
+        <IconButton
+          color="primary"
+          aria-label="Dodaj pozycję"
+          disabled={!canSubmit || mutation.isPending}
+          onClick={handleSubmit}
+        >
+          <AddIcon />
+        </IconButton>
+      </TableCell>
+      <TableCell>
+        {mutation.isError && (
+          <Typography variant="caption" color="error">
+            {mutation.error instanceof ApiError ? mutation.error.detail : 'Nie udało się dodać pozycji'}
+          </Typography>
+        )}
+      </TableCell>
+    </TableRow>
+  )
+}
+
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { user } = useAuth()
-  const isAdmin = user?.rola === 'admin'
   const documentId = id as string
   const [firstWydawka, setFirstWydawka] = useState(false)
   const [generateError, setGenerateError] = useState<string | null>(null)
@@ -178,11 +373,13 @@ export function DocumentDetailPage() {
     mutationFn: async (column: 'wydana' | 'zuzyta') => {
       const items = document?.items ?? []
       await Promise.all(
-        items.map((item) =>
-          updateDocumentItem(documentId, item.id, {
-            ilosc_finalna: (column === 'zuzyta' ? item.ilosc_zuzyta : item.ilosc_wydana) ?? null,
-          }),
-        ),
+        items.map((item) => {
+          const sourceQty = column === 'zuzyta' ? item.ilosc_zuzyta : item.ilosc_wydana
+          const validQty = sourceQty !== null && Number.isFinite(sourceQty) && sourceQty > 0
+            ? sourceQty
+            : null
+          return updateDocumentItem(documentId, item.id, { ilosc_finalna: validQty })
+        }),
       )
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', documentId] }),
@@ -231,37 +428,19 @@ export function DocumentDetailPage() {
                     <Typography variant="body2" color="text.secondary">
                       Magazyn:
                     </Typography>
-                    {isAdmin ? (
-                      <ToggleButtonGroup
-                        exclusive
-                        value={document.magazyn || null}
-                        onChange={(_, next: string | null) => magazynMutation.mutate(next)}
-                        size="small"
-                        disabled={magazynMutation.isPending}
-                      >
-                        {KNOWN_MAGAZYNY.map((m) => (
-                          <ToggleButton key={m.value} value={m.value}>
-                            {m.label}
-                          </ToggleButton>
-                        ))}
-                      </ToggleButtonGroup>
-                    ) : (
-                      <TextField
-                        select
-                        size="small"
-                        value={document.magazyn ?? ''}
-                        onChange={(e) => magazynMutation.mutate(e.target.value || null)}
-                        disabled={magazynMutation.isPending || (user?.magazyny_dostepne ?? []).length === 0}
-                        sx={{ minWidth: 200 }}
-                      >
-                        <MenuItem value="">Bez magazynu</MenuItem>
-                        {(user?.magazyny_dostepne ?? []).map((m) => (
-                          <MenuItem key={m} value={m}>
-                            {magazynLabel(m)}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-                    )}
+                    <ToggleButtonGroup
+                      exclusive
+                      value={document.magazyn || null}
+                      onChange={(_, next: string | null) => magazynMutation.mutate(next)}
+                      size="small"
+                      disabled={magazynMutation.isPending}
+                    >
+                      {KNOWN_MAGAZYNY.map((m) => (
+                        <ToggleButton key={m.value} value={m.value}>
+                          {m.label}
+                        </ToggleButton>
+                      ))}
+                    </ToggleButtonGroup>
                   </Stack>
                 )}
                 {document.status !== 'done' && (
@@ -280,6 +459,8 @@ export function DocumentDetailPage() {
                 <StatusChip status={document.status} />
               </Stack>
             </Stack>
+
+            <AITracePanel events={document.ai_trace} />
 
             {document.status === 'processing' || document.status === 'queued' ? (
               <Alert severity="info" sx={{ mt: 2 }}>
@@ -401,6 +582,7 @@ export function DocumentDetailPage() {
                         <TableCell>{item.uwagi || '-'}</TableCell>
                       </TableRow>
                     ))}
+                    <AddItemRow documentId={documentId} dzial={document.dzial || 'elektryka'} />
                   </TableBody>
                 </Table>
               </TableContainer>

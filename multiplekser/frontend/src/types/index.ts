@@ -2,7 +2,7 @@
 // Trzymane recznie w synchronizacji - backend nie generuje jeszcze klienta z OpenAPI (mozliwe
 // rozszerzenie w przyszlosci, patrz docs/RAPORT_ETAP_8.md).
 
-export type Rola = 'admin' | 'elektryk'
+export type Rola = 'admin' | 'magazynier'
 
 export type Dzial = 'elektryka' | 'hydraulika'
 
@@ -52,6 +52,21 @@ export interface DocumentItem {
   confidence: number | null
 }
 
+export interface AITraceEvent {
+  status: 'attempt' | 'skipped' | 'rejected' | 'selected' | 'failed' | 'no_result'
+  stage: string | null
+  provider: string | null
+  model: string | null
+  label: string | null
+  reason: string | null
+  step: number | null
+  total_steps: number | null
+  duration_ms: number | null
+  attempt: number | null
+  target?: string | null
+  created_at: string
+}
+
 export interface DocumentDetail {
   id: string
   status: DocumentStatus
@@ -64,6 +79,7 @@ export interface DocumentDetail {
   used_provider: string | null
   rejected_count: number
   error_message: string | null
+  ai_trace: AITraceEvent[]
   created_at: string
   items: DocumentItem[]
 }
@@ -76,6 +92,11 @@ export interface DocumentCreated {
 export interface DocumentItemUpdate {
   ilosc_finalna?: number | null
   match_kod?: string | null
+}
+
+export interface DocumentItemAdd {
+  match_kod: string
+  ilosc_finalna: number
 }
 
 export interface UserInput {

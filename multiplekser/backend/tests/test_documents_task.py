@@ -38,6 +38,51 @@ def test_run_ocr_task_dokument_nieistniejacy_nic_nie_robi(db_session):
     run_ocr_task("00000000-0000-0000-0000-000000000000", db_session)  # nie rzuca wyjatku
 
 
+def test_run_ocr_task_dwa_pliki_wysyla_oba_w_jednym_zapytaniu(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Realna potrzeba (patrz historia czatu): papierowa wydawka nie zmiescila sie na jednym
+    zdjeciu z telefonu, wiec pracownik robi dwa osobne zdjecia (dwie strony jednego dokumentu).
+    Oba musza trafic do Gemini w JEDNYM zapytaniu (patrz prompt.py, WIELE OBRAZOW), zeby model
+    polaczyl pozycje z obu stron w jedna liste - nie dwa osobne wywolania/dwa osobne wyniki."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+
+    strona1 = _fake_jpeg_bytes()
+    strona2 = _fake_jpeg_bytes()
+    key1 = f"documents/test/{admin_user.id}-strona1.jpg"
+    key2 = f"documents/test/{admin_user.id}-strona2.jpg"
+    get_storage().upload(key1, strona1, "image/jpeg")
+    get_storage().upload(key2, strona2, "image/jpeg")
+    document = doc_repo.create_document(
+        db_session, user_id=admin_user.id, file_key=key1, mime="image/jpeg",
+        original_filename="strona1.jpg", extra_files=[(key2, "image/jpeg")],
+    )
+
+    classify_response = '{"dzial":"elektryka","confidence":98.0}'
+    ocr_response = (
+        '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    )
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+    ) as mock_recognize:
+        run_ocr_task(str(document.id), db_session)
+
+    # KAZDE wywolanie recognize() (klasyfikacja + pelny odczyt) musi dostac OBIE strony naraz.
+    assert mock_recognize.call_count == 2  # klasyfikacja + pelny odczyt
+    for call in mock_recognize.call_args_list:
+        files = call.kwargs["files"]
+        assert len(files) == 2
+        assert files[0][1] == "image/jpeg"
+        assert files[1][1] == "image/jpeg"
+
+    saved = doc_repo.get_document(db_session, str(document.id))
+    assert saved.status == "done"
+    assert len(saved.extra_files) == 1
+    assert saved.extra_files[0].file_key == key2
+
+
 def test_run_ocr_task_sukces_zapisuje_pozycje(
     db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
 ):
@@ -67,6 +112,28 @@ def test_run_ocr_task_sukces_zapisuje_pozycje(
     assert item.match_quality == "ok"
     assert item.matched_product_id is not None
     assert item.off_form is True
+
+
+def test_run_ocr_task_uzywa_openai_jako_ostatniego_fallbacku_lancucha(
+    db_session, admin_user, mocked_storage, gemini_key_configured, openai_key_configured, baza_elektryka_json,
+):
+    """OpenAI jest ostatnim ogniwem default_ocr_chain() (patrz ocr/chain.py) - uzywany WYLACZNIE
+    gdy wszystkie kroki Gemini (darmowy x4 + platny) zawioda, nigdy rownolegle do Gemini."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+
+    openai_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    with (
+        patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=OCRProviderError("timeout"))),
+        patch("app.modules.ocr.providers.OpenAIProvider.recognize", new=AsyncMock(return_value=openai_response)),
+    ):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert "OpenAI" in document.used_provider
+    assert document.items[0].ilosc_wydana == 1.0
 
 
 def test_run_ocr_task_odrzuca_niepoprawne_pozycje(
@@ -165,7 +232,9 @@ def test_run_ocr_task_klasyfikacja_niesparsowalna_pozostaje_na_elektryce(
 
     classify_response = "nie rozumiem"
     ocr_response = '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
-    with _mock_recognize_sequence(classify_response, ocr_response):
+    # Nieparsowalna odpowiedz jest odrzucana przez kazdy z czterech darmowych modeli,
+    # a dopiero wyczerpanie lancucha uruchamia zgodny wstecznie fallback do Elektryki.
+    with _mock_recognize_sequence(*([classify_response] * 4), ocr_response):
         run_ocr_task(document_id, db_session)
 
     document = doc_repo.get_document(db_session, document_id)
@@ -203,11 +272,11 @@ def test_run_ocr_task_ponawia_po_przejsciowym_bledzie_i_konczy_sukcesem(
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
-    # 4 kroki lancucha na kluczu darmowym (patrz default_ocr_chain) zawodza w pierwszej probie
-    # klasyfikacji - dopiero druga proba (attempt 1) dochodzi do sukcesu.
-    responses = [OCRProviderError("timeout"), OCRProviderError("timeout"),
-                 OCRProviderError("timeout"), OCRProviderError("timeout"),
-                 classify_response, ocr_response]
+    # Tylko cztery kroki Gemini na kluczu darmowym maja klucz skonfigurowany
+    # (gemini_key_configured) - kroki platne (Gemini/OpenAI) sa pomijane (brak klucza), wiec
+    # wszystkie 4 darmowe kroki musza zawiesc w pierwszej probie klasyfikacji. Dopiero druga
+    # proba (attempt 1) dochodzi do sukcesu.
+    responses = [OCRProviderError("timeout")] * 4 + [classify_response, ocr_response]
     with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=responses)), \
          patch("app.modules.documents.tasks.time.sleep") as fake_sleep:
         run_ocr_task(document_id, db_session)
@@ -245,8 +314,10 @@ def test_run_ocr_task_druga_proba_uzupelnia_pomijeta_ilosc(
     document_id = _create_document(db_session, admin_user)
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "confidence": 90}]}'  # brak ilosci
-    verify_response = '{"ilosc_wydana": 1, "ilosc_zuzyta": null}'
+    ocr_response = (
+        '{"pozycje": [{"nazwa": "Bojler 80 L", "ma_oznaczenie": true, "confidence": 90}]}'
+    )  # brak ilosci, ale widoczne oznaczenie kieruje pozycje do dodatkowej kontroli
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
         new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response]),
@@ -266,11 +337,15 @@ def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(
     document_id = _create_document(db_session, admin_user)
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "confidence": 90}]}'
-    verify_response = '{"ilosc_wydana": null, "ilosc_zuzyta": null}'  # sam ptaszek, bez cyfry
+    ocr_response = (
+        '{"pozycje": [{"nazwa": "Bojler 80 L", "ma_oznaczenie": true, "confidence": 90}]}'
+    )
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response]),
+        # Cztery modele darmowe dostaja ten sam semantyczny brak wyniku; dopiero wtedy kontrola
+        # konczy sie statusem "Bez wyniku" i pozostawia pole puste.
+        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 4),
     ):
         run_ocr_task(document_id, db_session)
 

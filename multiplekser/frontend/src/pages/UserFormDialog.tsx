@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import {
   Alert,
-  Box,
   Button,
   Checkbox,
   Dialog,
@@ -9,18 +8,13 @@ import {
   DialogContent,
   DialogTitle,
   FormControlLabel,
-  FormHelperText,
   MenuItem,
   Stack,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
 } from '@mui/material'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createUser, updateUser } from '../api/users'
 import { ApiError } from '../api/client'
-import { KNOWN_MAGAZYNY } from '../constants'
 import type { CurrentUser, Rola } from '../types'
 
 interface Props {
@@ -36,17 +30,18 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
 
   const [email, setEmail] = useState(user?.email ?? '')
   const [password, setPassword] = useState('')
-  const [rola, setRola] = useState<Rola>(user?.rola ?? 'elektryk')
-  const [magazynyDostepne, setMagazynyDostepne] = useState<string[]>(user?.magazyny_dostepne ?? [])
+  const [rola, setRola] = useState<Rola>(user?.rola ?? 'magazynier')
   const [active, setActive] = useState(user?.active ?? true)
   const [error, setError] = useState<string | null>(null)
 
   const mutation = useMutation({
     mutationFn: async () => {
+      // Obie role maja pelny dostep do wszystkich magazynow (2026-08-04) - magazyny_dostepne
+      // nie jest juz wymuszane, wysylane jako puste dla zgodnosci ze schematem backendu.
       if (isEditing) {
-        return updateUser(user.id, { email, rola, magazyny_dostepne: magazynyDostepne, active })
+        return updateUser(user.id, { email, rola, magazyny_dostepne: [], active })
       }
-      return createUser({ email, password, rola, magazyny_dostepne: magazynyDostepne })
+      return createUser({ email, password, rola, magazyny_dostepne: [] })
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -93,28 +88,9 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
               onChange={(e) => setRola(e.target.value as Rola)}
               disabled={isSelf}
             >
-              <MenuItem value="elektryk">elektryk</MenuItem>
+              <MenuItem value="magazynier">magazynier</MenuItem>
               <MenuItem value="admin">admin</MenuItem>
             </TextField>
-            <Box>
-              <Typography variant="body2" color={rola === 'admin' ? 'text.disabled' : 'text.secondary'}>
-                Magazyny dostępne
-              </Typography>
-              <ToggleButtonGroup
-                value={magazynyDostepne}
-                onChange={(_, next: string[]) => setMagazynyDostepne(next)}
-                disabled={rola === 'admin'}
-                size="small"
-                sx={{ mt: 0.5 }}
-              >
-                {KNOWN_MAGAZYNY.map((m) => (
-                  <ToggleButton key={m.value} value={m.value}>
-                    {m.label}
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-              <FormHelperText>Ignorowane dla roli admin - admin ma dostęp do każdego magazynu</FormHelperText>
-            </Box>
             {isEditing && (
               <FormControlLabel
                 control={

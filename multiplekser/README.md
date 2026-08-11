@@ -22,10 +22,10 @@ listą zużytych/wydanych materiałów. Ktoś musiał to później ręcznie prze
 5. **Generowanie** — jeden przycisk tworzy plik w formacie gotowym do importu w Optimie
    (`kod;ilość;;jm;magazyn`, kodowanie CP1250).
 
-Całość jest **wielodziałowa i wieloużytkownikowa**: role (admin/elektryk) z przypisanymi
-magazynami, osobne katalogi produktów per dział (Elektryka, Hydraulika — kolejne działy jak
-stolarka/wentylacja można dołożyć tym samym wzorcem), pełna historia dokumentów, panel
-administracyjny katalogu i użytkowników.
+Całość jest **wielodziałowa i wieloużytkownikowa**: role `admin` i `magazynier`, osobne katalogi
+produktów per dział (Elektryka, Hydraulika — kolejne działy nie są planowane), pełna historia
+dokumentów oraz panel administracyjny katalogu i użytkowników. Obie role mogą pracować na obu
+magazynach; `magazyny_dostepne` pozostaje metadanym profilu i nie ogranicza dostępu.
 
 To migracja jednoplikowego prototypu HTML/JS (`Multiplekser_Elektryka.html`) do architektury
 webowej klasy produkcyjnej — logika biznesowa (parser/matcher/generator) przeniesiona 1:1,
@@ -66,7 +66,9 @@ npm run dev   # http://localhost:5173
 npm run test  # Vitest
 ```
 
-API: `/auth/token` (logowanie, od Etapu 5), `/match` (dopasowanie, wymaga zalogowania), pelny CRUD
+API: `/auth/token` (logowanie, od Etapu 5, chronione rate limitem per-IP i blokada konta po 5
+nieudanych probach - patrz `docs/RAPORT_BEZPIECZENSTWO_1.md`), `/auth/logout` (uniewaznia refresh
+token), `/match` (dopasowanie, wymaga zalogowania), pelny CRUD
 `/products` (od Etapu 4, zapis tylko rola admin), `/documents` (upload skanu + async OCR przez
 Celery, od Etapu 7 - `POST` zwraca 202 natychmiast, `GET /documents/{id}` do odpytania statusu i
 wyniku), `PATCH /documents/{id}/items/{item_id}` (weryfikacja ilosci/kodu przed generowaniem, od
@@ -94,6 +96,11 @@ Ustaw tez `GEMINI_API_KEY_FREE`/`GEMINI_API_KEY_PAID` (Google AI Studio) w `.env
 dokumenty koncza sie statusem `error`. **Nigdy nie wpisuj tych kluczy do kodu/repo** - patrz
 `docs/RAPORT_ETAP_6.md`, zastrzezenie bezpieczenstwa (klucze zaszyte w starym `index.html`).
 Plik `.env` jest w `.gitignore` (sekrety) - `.env.prod.example` to tylko szablon bez wartosci.
+
+Opcjonalnie ustaw tez `OPENAI_API_KEY` (platform.openai.com) - ostatni krok w lancuchu OCR
+(patrz `backend/app/modules/ocr/chain.py`), uzywany WYLACZNIE gdy wszystkie kroki Gemini
+zawioda (limit/awaria). Bez tego klucza ten krok jest po prostu pomijany, dokumenty dzialaja
+normalnie na samym Gemini.
 
 **Wlasny VPS (serwer w chmurze)** — skrocona sciezka od zera do dzialajacej, publicznej strony:
 

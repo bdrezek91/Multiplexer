@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Uuid, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -42,11 +43,21 @@ class DocumentModel(Base):
     used_provider: Mapped[str | None] = mapped_column(String, nullable=True)
     rejected_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Bezpieczny, uzytkowy dziennik decyzji lancucha AI wyswietlany na stronie dokumentu.
+    # Zawiera tylko model/status/powod/czas - nigdy prompt, odpowiedz, plik ani klucz API.
+    ai_trace: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     items: Mapped[list["DocumentItemModel"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="DocumentItemModel.sequence",
+    )
+    # Strony 2+ dokumentu wieloplikowego (np. dwa osobne zdjecia z telefonu = dwie strony jednej
+    # wydawki) - patrz historia czatu. Pierwsza strona zostaje w file_key/mime powyzej (wsteczna
+    # zgodnosc z dokumentami sprzed tej zmiany, ktore maja dokladnie jeden plik i zero wierszy
+    # tutaj). `extra_files` bo `files` kolidowaloby nazwa z `plik`/upload w API.
+    extra_files: Mapped[list["DocumentFileModel"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan", order_by="DocumentFileModel.sequence",
     )
 
 
@@ -85,3 +96,18 @@ class DocumentItemModel(Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     document: Mapped["DocumentModel"] = relationship(back_populates="items")
+
+
+class DocumentFileModel(Base):
+    """Strona 2+ dokumentu wieloplikowego (patrz DocumentModel.extra_files) - np. dwa osobne
+    zdjecia z telefonu tej samej papierowej wydawki (jedno zdjecie = jedna kartka, w
+    przeciwienstwie do skanu PDF, ktory moze miec wiele stron w jednym pliku)."""
+    __tablename__ = "document_file"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document.id"), nullable=False, index=True)
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    file_key: Mapped[str] = mapped_column(String, nullable=False)
+    mime: Mapped[str] = mapped_column(String, nullable=False)
+
+    document: Mapped["DocumentModel"] = relationship(back_populates="extra_files")

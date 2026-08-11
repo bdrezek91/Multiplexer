@@ -1,5 +1,5 @@
 """Testy Etapu 6: extract_json()/validate_item() - port extractJSON()/validAIItem() z monolitu."""
-from app.modules.ocr.parsing import extract_json, validate_item
+from app.modules.ocr.parsing import extract_json, is_actionable_item, validate_item
 
 
 def test_extract_json_czysty_json():
@@ -51,3 +51,28 @@ def test_validate_item_ilosc_z_jednostka_akceptowana_tak_jak_w_js():
 def test_validate_item_nie_dict():
     assert validate_item("napis") is False
     assert validate_item(None) is False
+
+
+def test_pusty_wiersz_szablonu_nie_jest_pozycja_do_kontroli():
+    assert is_actionable_item({
+        "nazwa": "Rozdzielnica SRN 36 biala",
+        "ilosc_wydana": None,
+        "ilosc_zuzyta": None,
+    }) is False
+
+
+def test_nieczytelny_wiersz_z_widocznym_oznaczeniem_jest_do_kontroli():
+    assert is_actionable_item({
+        "nazwa": "Rozdzielnica SRN 36 biala",
+        "ilosc_wydana": None,
+        "ilosc_zuzyta": None,
+        "ma_oznaczenie": True,
+    }) is True
+
+
+def test_odczytana_ilosc_jest_pozycja_nawet_bez_flagi_oznaczenia():
+    assert is_actionable_item({
+        "nazwa": "Rozdzielnica SRN 12 biala",
+        "ilosc_wydana": 1,
+        "ilosc_zuzyta": None,
+    }) is True

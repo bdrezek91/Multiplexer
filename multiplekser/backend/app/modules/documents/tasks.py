@@ -13,24 +13,24 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import threading
 import time
+from typing import Mapping, Optional
 
 from sqlalchemy.orm import Session
 
 from app.core.celery_app import celery_app
-from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
-from app.modules.ocr.chain import AllProvidersFailedError
+from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback
 from app.modules.ocr.classify import classify_document
+from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
 from app.modules.ocr.image import downscale_image
 from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
 from app.modules.ocr.providers import OCRProviderError
-from app.modules.ocr.verify import verify_ambiguous_quantity
+from app.modules.ocr.verify import verify_ambiguous_quantities
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 
@@ -48,12 +48,6 @@ _PDF_MIME = "application/pdf"
 _MAX_ATTEMPTS = 3
 _RETRY_DELAYS_S = (5, 15)
 
-# Druga, waska proba odczytu ilosci (patrz app/modules/ocr/verify.py) - ograniczona do
-# rozsadnej liczby pozycji na dokument, zeby pojedynczy, mocno uszkodzony skan (duzo pustych
-# wierszy) nie wygenerowal lawiny dodatkowych zapytan do AI.
-_MAX_VERIFY_ITEMS = 8
-
-
 def _resolve_product_id(session: Session, kod):
     if not kod:
         return None
@@ -61,28 +55,48 @@ def _resolve_product_id(session: Session, kod):
     return row[0] if row else None
 
 
-def _classify_and_recognize(file_bytes: bytes, mime: str, session: Session, document):
+def _classify_and_recognize(
+    files: list[tuple[bytes, str]], session: Session, document,
+    event_callback: OCRChainEventCallback,
+    cooldown_store: OCRCooldownStore,
+):
     """Klasyfikacja dzialu + pelny odczyt, z automatycznym ponowieniem na przejsciowe bledy
     dostepnosci AI (patrz _MAX_ATTEMPTS/_RETRY_DELAYS_S wyzej). Klasyfikacja jest ponawiana
     razem z odczytem (nie osobno) - jest tania/szybka, a w praktyce oba kroki zawodza z tego
-    samego powodu (brak sieci/limit), wiec nie ma sensu ich rozdzielac."""
+    samego powodu (brak sieci/limit), wiec nie ma sensu ich rozdzielac. `files` - jeden element
+    dla zwyklego skanu/PDF, wiecej gdy dokument sklada sie z kilku osobnych plikow (np. dwa
+    zdjecia z telefonu = dwie strony jednej papierowej wydawki, patrz historia czatu) - wszystkie
+    trafiaja do Gemini w JEDNYM zapytaniu (patrz ocr/providers.py), prompt uczy model laczyc je
+    w jeden wynik."""
     last_exc: Exception | None = None
     for attempt in range(_MAX_ATTEMPTS):
+        log_context = {"document_id": str(document.id), "ocr_attempt": attempt + 1}
         if attempt > 0:
             time.sleep(_RETRY_DELAYS_S[attempt - 1])
         try:
-            classify_result = asyncio.run(classify_document(file_bytes, mime))
+            classify_result = asyncio.run(classify_document(
+                files, log_context=log_context, event_callback=event_callback,
+                cooldown_store=cooldown_store,
+            ))
             dzial = classify_result.dzial
 
             catalog = Catalog.from_db(session, dzial=dzial)
             if dzial == "hydraulika":
                 result = asyncio.run(
-                    recognize_document_hydraulika(file_bytes, mime, catalog, magazyn=document.magazyn)
+                    recognize_document_hydraulika(
+                        files, catalog, magazyn=document.magazyn, log_context=log_context,
+                        event_callback=event_callback,
+                        cooldown_store=cooldown_store,
+                    )
                 )
             else:
                 special_rules = rules_from_db(session)
                 result = asyncio.run(
-                    recognize_document(file_bytes, mime, catalog, special_rules, magazyn=document.magazyn)
+                    recognize_document(
+                        files, catalog, special_rules, magazyn=document.magazyn,
+                        log_context=log_context, event_callback=event_callback,
+                        cooldown_store=cooldown_store,
+                    )
                 )
             return classify_result, dzial, result
         except (AllProvidersFailedError, OCRProviderError) as exc:
@@ -95,27 +109,59 @@ def _classify_and_recognize(file_bytes: bytes, mime: str, session: Session, docu
     raise last_exc  # wyczerpano proby - blad koncowy, jak dotad ida do Document.status="error"
 
 
-async def _verify_ambiguous_items(file_bytes: bytes, mime: str, items: list[dict]) -> None:
+async def _verify_ambiguous_items(
+    files: list[tuple[bytes, str]], items: list[dict], document_id: str,
+    event_callback: OCRChainEventCallback,
+    cooldown_store: OCRCooldownStore,
+    dzial: str,
+    quantity_marks: Optional[Mapping[str, tuple[bool, bool]]] = None,
+) -> None:
     """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
-    ptaszka przy pierwszym przebiegu) - druga, waska proba per-wiersz, rownolegle. Modyfikuje
-    `items` w miejscu; kazdy blad pojedynczej proby jest juz pochloniety w verify_ambiguous_quantity
-    (best-effort), wiec tu nie ma juz obslugi wyjatkow do zrobienia."""
-    targets = [
-        i for i, it in enumerate(items)
-        if it["ilosc_wydana"] is None and it["ilosc_zuzyta"] is None
-    ][:_MAX_VERIFY_ITEMS]
+    ptaszka przy pierwszym przebiegu) - jedna zbiorcza kontrola wszystkich wierszy. Nierozpoznane
+    pozycje przechodza razem do kolejnego modelu, bez rownoleglego zalewania darmowego API."""
+    marks = quantity_marks or {}
+    targets = []
+    for index, item in enumerate(items):
+        has_wydana, has_zuzyta = marks.get(item["rozpoznana_nazwa"], (False, False))
+        both_missing = item["ilosc_wydana"] is None and item["ilosc_zuzyta"] is None
+        marked_column_missing = (
+            (item["ilosc_wydana"] is None and has_wydana)
+            or (item["ilosc_zuzyta"] is None and has_zuzyta)
+        )
+        if both_missing or marked_column_missing:
+            targets.append(index)
     if not targets:
         return
 
-    results = await asyncio.gather(
-        *(verify_ambiguous_quantity(file_bytes, mime, items[i]["rozpoznana_nazwa"]) for i in targets)
+    results = await verify_ambiguous_quantities(
+        files,
+        [items[i]["rozpoznana_nazwa"] for i in targets],
+        dzial,
+        log_context={"document_id": document_id},
+        event_callback=event_callback,
+        cooldown_store=cooldown_store,
     )
     for idx, result in zip(targets, results):
         if not result.found_anything:
             continue
-        items[idx]["ilosc_wydana"] = result.ilosc_wydana
-        items[idx]["ilosc_zuzyta"] = result.ilosc_zuzyta
-        items[idx]["ilosc_finalna"] = pick_qty_razem(result.ilosc_wydana, result.ilosc_zuzyta)
+        # Kontrola uzupelnia tylko brakujaca kolumne. Poprawny wynik glownego OCR nie moze
+        # zostac wyzerowany, gdy model kontrolny odczyta tylko druga z dwoch wartosci.
+        if items[idx]["ilosc_wydana"] is None and result.ilosc_wydana is not None:
+            items[idx]["ilosc_wydana"] = result.ilosc_wydana
+        if items[idx]["ilosc_zuzyta"] is None and result.ilosc_zuzyta is not None:
+            items[idx]["ilosc_zuzyta"] = result.ilosc_zuzyta
+        items[idx]["ilosc_finalna"] = pick_qty_razem(
+            items[idx]["ilosc_wydana"], items[idx]["ilosc_zuzyta"],
+        )
+
+
+def _download_and_prepare(get_storage, file_key: str, mime: str) -> tuple[bytes, str]:
+    """Pobiera jeden plik ze storage i przygotowuje do wyslania do AI - PDF wysylany natywnie,
+    obraz najpierw przeskalowany (patrz ocr/image.py, dlaczego)."""
+    raw = get_storage().download(file_key)
+    if mime == _PDF_MIME:
+        return raw, _PDF_MIME
+    return downscale_image(raw), "image/jpeg"
 
 
 def run_ocr_task(document_id: str, session: Session) -> None:
@@ -128,17 +174,29 @@ def run_ocr_task(document_id: str, session: Session) -> None:
     repository.mark_processing(session, document)
     logger.info("OCR - start przetwarzania", extra={"document_id": document_id})
 
+    def save_ai_event(event: dict[str, object]) -> None:
+        repository.append_ai_trace_event(session, document, event)
+
+    cooldown_store = get_ocr_cooldown_store()
+
     try:
-        raw = get_storage().download(document.file_key)
-        if document.mime == _PDF_MIME:
-            file_bytes, mime = raw, _PDF_MIME
-        else:
-            file_bytes, mime = downscale_image(raw), "image/jpeg"
+        # Wiele plikow = wiele osobnych stron TEGO SAMEGO dokumentu (np. dwa zdjecia z telefonu
+        # jednej papierowej wydawki, ktorej nie da sie zmiescic na jednym zdjeciu tak jak wielo-
+        # stronicowy PDF ze skanera) - patrz historia czatu. Pierwszy plik to zawsze
+        # document.file_key/mime (wsteczna zgodnosc), kolejne to document.extra_files w kolejnosci
+        # `sequence`. Wszystkie razem trafiaja do Gemini w jednym zapytaniu (ocr/providers.py).
+        files = [_download_and_prepare(get_storage, document.file_key, document.mime)]
+        files += [
+            _download_and_prepare(get_storage, extra.file_key, extra.mime)
+            for extra in document.extra_files
+        ]
 
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
         # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
-        classify_result, dzial, result = _classify_and_recognize(file_bytes, mime, session, document)
+        classify_result, dzial, result = _classify_and_recognize(
+            files, session, document, save_ai_event, cooldown_store,
+        )
 
         items = []
         for it in result.pozycje:
@@ -165,7 +223,10 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "match_jm": it.match.jm_override,
             })
 
-        asyncio.run(_verify_ambiguous_items(file_bytes, mime, items))
+        asyncio.run(_verify_ambiguous_items(
+            files, items, document_id, save_ai_event, cooldown_store, dzial,
+            quantity_marks=getattr(result, "quantity_marks", None),
+        ))
 
         repository.mark_done(
             session, document,
@@ -198,20 +259,7 @@ def process_ocr_document(document_id: str) -> None:
 
 
 def dispatch_ocr_task(document_id: str) -> None:
-    """Uruchamia przetwarzanie dokumentu - Celery/Redis normalnie (produkcja/Docker), albo
-    watek w tym samym procesie w trybie Multiplekser Portable (`settings.desktop_mode`,
-    patrz docs/RAPORT_PORTABLE_1.md) - dla jednego uzytkownika na wlasnym komputerze osobny
-    broker/worker to zbedny narzut, ktory wymagalby doinstalowania Redis. Router wywoluje
-    WYLACZNIE ta funkcje, nigdy `process_ocr_document` bezposrednio - dzieki temu przelaczenie
-    trybu nie wymaga zmian poza konfiguracja."""
-    if settings.desktop_mode:
-        def _run() -> None:
-            session = SessionLocal()
-            try:
-                run_ocr_task(document_id, session)
-            finally:
-                session.close()
-
-        threading.Thread(target=_run, daemon=True).start()
-    else:
-        process_ocr_document.delay(document_id)
+    """Zleca przetwarzanie dokumentu do Celery. Router wywoluje WYLACZNIE ta funkcje, nigdy
+    `process_ocr_document` bezposrednio - cienka warstwa oddzielajaca "co robi zadanie" od
+    "jak jest zlecane"."""
+    process_ocr_document.delay(document_id)

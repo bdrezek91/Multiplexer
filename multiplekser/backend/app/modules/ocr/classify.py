@@ -14,16 +14,25 @@ zachowanie zamiast losowo zgadywac nowy dzial.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Mapping, Optional
 
-from .chain import OCRChainStep, run_ocr_chain
+from .chain import (
+    AllProvidersFailedError,
+    OCRChainEventCallback,
+    OCRChainStep,
+    classify_ocr_chain,
+    run_ocr_chain,
+)
+from .cooldown import OCRCooldownStore
 from .parsing import extract_json
 
 CLASSIFY_PROMPT = (
-    'Jesteś klasyfikatorem dokumentów magazynowych. Na obrazie/w PDF jest formularz wydania '
-    'materiałów z nagłówkiem, w którym jedno z pól to nazwa działu - dokładnie "Elektryka" lub '
-    '"Hydraulika" (czasem odręcznie, czasem drukowane). Odczytaj WYŁĄCZNIE tę wartość, nie '
-    'analizuj tabeli pozycji ani innych pól nagłówka.\n\n'
+    'Jesteś klasyfikatorem dokumentów magazynowych. Na obrazie (lub obrazach, jeśli dostajesz '
+    'więcej niż jeden - to kolejne strony TEGO SAMEGO dokumentu, nie osobne dokumenty) / w PDF '
+    'jest formularz wydania materiałów z nagłówkiem, w którym jedno z pól to nazwa działu - '
+    'dokładnie "Elektryka" lub "Hydraulika" (czasem odręcznie, czasem drukowane). Nagłówek '
+    'zwykle jest tylko na pierwszej stronie. Odczytaj WYŁĄCZNIE tę wartość, nie analizuj tabeli '
+    'pozycji ani innych pól nagłówka.\n\n'
     'Zwróć WYŁĄCZNIE obiekt JSON, bez markdown, bez komentarzy: '
     '{"dzial":"elektryka","confidence":97.5} albo {"dzial":"hydraulika","confidence":88.0}. '
     'Pole "dzial" MUSI być dokładnie jedną z tych dwóch wartości (małymi literami, bez polskich '
@@ -35,6 +44,13 @@ _VALID_DZIALY = ("elektryka", "hydraulika")
 _FALLBACK_DZIAL = "elektryka"
 
 
+def _is_valid_classification_response(text: str) -> bool:
+    parsed = extract_json(text)
+    if not isinstance(parsed, dict):
+        return False
+    return str(parsed.get("dzial") or "").strip().lower() in _VALID_DZIALY
+
+
 @dataclass
 class ClassifyResult:
     dzial: str
@@ -44,9 +60,31 @@ class ClassifyResult:
 
 
 async def classify_document(
-    file_bytes: bytes, mime: str, chain: Optional[list[OCRChainStep]] = None,
+    files: list[tuple[bytes, str]], chain: Optional[list[OCRChainStep]] = None,
+    log_context: Optional[Mapping[str, object]] = None,
+    event_callback: Optional[OCRChainEventCallback] = None,
+    cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> ClassifyResult:
-    chain_result = await run_ocr_chain(file_bytes, mime, CLASSIFY_PROMPT, chain=chain)
+    # thinking_level="low" (2026-08-04, na zyczenie uzytkownika - przetwarzanie calego dokumentu
+    # trwalo 2-3 minuty). Jest to tez jawne zabezpieczenie ustawienia dla pierwszego z dwoch
+    # sekwencyjnych zapytan; pozostale etapy korzystaja z takiej samej wartosci domyslnej.
+    try:
+        chain_result = await run_ocr_chain(
+            files, CLASSIFY_PROMPT, chain=chain if chain is not None else classify_ocr_chain(),
+            thinking_level="low",
+            response_validator=_is_valid_classification_response,
+            log_context={**dict(log_context or {}), "ai_stage": "classification"},
+            event_callback=event_callback,
+            cooldown_store=cooldown_store,
+        )
+    except AllProvidersFailedError as exc:
+        # Zachowujemy bezpieczny fallback, ale dopiero po sprawdzeniu pozostalych modeli.
+        if exc.last_invalid_text is not None:
+            return ClassifyResult(
+                dzial=_FALLBACK_DZIAL, confidence=0.0,
+                used_provider=exc.last_invalid_label or "brak poprawnej odpowiedzi", fallback=True,
+            )
+        raise
     parsed = extract_json(chain_result.text)
 
     dzial = None

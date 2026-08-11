@@ -4,10 +4,10 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
-from app.core.db_types import PortableJSON
 
 
 class ProductModel(Base):
@@ -25,7 +25,7 @@ class ProductModel(Base):
     grupa: Mapped[str] = mapped_column(String, nullable=False, default="")
     dzial: Mapped[str] = mapped_column(String, nullable=False, default="elektryka", index=True)
     status: Mapped[str] = mapped_column(String, nullable=False, default="generyczny")
-    atrybuty: Mapped[dict] = mapped_column(PortableJSON, nullable=False, default=dict)
+    atrybuty: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     kolor_domniemany: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     aliasy: Mapped[list["ProductAliasModel"]] = relationship(

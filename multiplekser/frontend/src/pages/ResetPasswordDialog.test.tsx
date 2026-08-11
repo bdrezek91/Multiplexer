@@ -12,7 +12,7 @@ vi.mock('../api/users', async () => {
 })
 
 const testUser: CurrentUser = {
-  id: 'u1', email: 'test@test.local', rola: 'elektryk', magazyny_dostepne: [], active: true,
+  id: 'u1', email: 'test@test.local', rola: 'magazynier', magazyny_dostepne: [], active: true,
 }
 
 function renderDialog() {

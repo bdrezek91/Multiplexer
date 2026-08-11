@@ -13,17 +13,19 @@ Roznice wobec pipeline.py (Elektryka), wszystkie 1:1 ze zrodla:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Optional
+from dataclasses import dataclass, field
+from typing import Any, Mapping, Optional
 
 from app.modules.matcher import MatchResult, match_against_catalog_hydraulika
 from app.modules.products import Catalog
 
-from .chain import OCRChainStep, run_ocr_chain
+from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, run_ocr_chain
+from .cooldown import OCRCooldownStore
 from .form_rows_hydraulika import snap_to_known_item_hydraulika
-from .parsing import extract_json, validate_item
+from .parsing import extract_json, is_actionable_item, is_valid_ocr_response, validate_item
 from .pipeline_elektryka import OCRUnparsableResponseError, normalize_project_number
 from .prompt import AI_OCR_PROMPT_HYDRAULIKA
+from .verification_image import discover_hydraulika_quantity_marks
 
 
 @dataclass
@@ -45,6 +47,7 @@ class OCRResultHydraulika:
     pozycje: list[OCRItemHydraulika]
     used_provider: str
     rejected_count: int
+    quantity_marks: dict[str, tuple[bool, bool]] = field(default_factory=dict)
 
 
 def _pick_raw_qty(item: dict, field_name: str) -> Optional[str]:
@@ -84,13 +87,26 @@ def _build_item_hydraulika(item: dict, catalog: Catalog, magazyn: Optional[str])
 
 
 async def recognize_document_hydraulika(
-    file_bytes: bytes,
-    mime: str,
+    files: list[tuple[bytes, str]],
     catalog: Catalog,
     magazyn: Optional[str] = None,
     chain: Optional[list[OCRChainStep]] = None,
+    log_context: Optional[Mapping[str, object]] = None,
+    event_callback: Optional[OCRChainEventCallback] = None,
+    cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> OCRResultHydraulika:
-    chain_result = await run_ocr_chain(file_bytes, mime, AI_OCR_PROMPT_HYDRAULIKA, chain=chain)
+    try:
+        chain_result = await run_ocr_chain(
+            files, AI_OCR_PROMPT_HYDRAULIKA, chain=chain,
+            response_validator=is_valid_ocr_response,
+            log_context={**dict(log_context or {}), "ai_stage": "full_ocr_hydraulika"},
+            event_callback=event_callback,
+            cooldown_store=cooldown_store,
+        )
+    except AllProvidersFailedError as exc:
+        if exc.last_invalid_text is not None:
+            raise OCRUnparsableResponseError(exc.last_invalid_text) from exc
+        raise
     parsed: Any = extract_json(chain_result.text)
     if parsed is None:
         raise OCRUnparsableResponseError(chain_result.text)
@@ -102,12 +118,31 @@ async def recognize_document_hydraulika(
         pn = parsed.get("numer_projektu")
         numer_projektu = normalize_project_number(str(pn).strip()) if pn else None
 
-    valid_items = [it for it in raw_items if validate_item(it)]
-    rejected_count = len(raw_items) - len(valid_items)
+    schema_items = [it for it in raw_items if validate_item(it)]
+    valid_items = [it for it in schema_items if is_actionable_item(it)]
+    rejected_count = len(raw_items) - len(schema_items)
 
     pozycje = [_build_item_hydraulika(it, catalog, magazyn) for it in valid_items]
+
+    # Glowny model czasem pomija caly zaznaczony wiersz (szczegolnie trójniki i węże na dole
+    # drugiej strony). Niebieski znacznik wykryty lokalnie dodaje brakujaca pozycje z pustymi
+    # ilosciami; zbiorcza kontrola w tasks.py odczyta potem liczby z waskiego wycinka.
+    quantity_marks = discover_hydraulika_quantity_marks(files)
+    existing_names = {item.rozpoznana_nazwa for item in pozycje}
+    for name in quantity_marks:
+        snapped_name = snap_to_known_item_hydraulika(name).name
+        if snapped_name in existing_names:
+            continue
+        pozycje.append(_build_item_hydraulika({
+            "nazwa": name,
+            "ilosc_wydana": None,
+            "ilosc_zuzyta": None,
+            "ma_oznaczenie": True,
+        }, catalog, magazyn))
+        existing_names.add(snapped_name)
 
     return OCRResultHydraulika(
         numer_projektu=numer_projektu, pozycje=pozycje,
         used_provider=chain_result.used_label, rejected_count=rejected_count,
+        quantity_marks=quantity_marks,
     )

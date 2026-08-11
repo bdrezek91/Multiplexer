@@ -1,10 +1,10 @@
 """
 Etap 7: OCR przeniesiony na potok asynchroniczny (POST /documents + Celery), stary synchroniczny
 /ocr/recognize z Etapu 6 usuniety (byl swiadomym, tymczasowym ryzykiem - blokowal request HTTP).
-/match wymaga zalogowanego uzytkownika; parametr `magazyn` (tu i w /documents) ograniczony do
-`magazyny_dostepne` przypisanych uzytkownikowi (patrz app/modules/users/deps.py:check_magazyn_access
-- admin bez ograniczen). CRUD /products chroniony w app/modules/products/router.py (odczyt kazdy
-zalogowany, zapis tylko admin).
+/match wymaga zalogowanego uzytkownika. Parametr `magazyn` (tu i w /documents) jest dostepny dla
+obu rol (`admin` i `magazynier`) bez ograniczenia do `magazyny_dostepne` - aktualna decyzja jest
+udokumentowana w app/modules/users/deps.py:check_magazyn_access. CRUD /products chroniony w
+app/modules/products/router.py (odczyt kazdy zalogowany, zapis tylko admin).
 """
 import logging
 from typing import Literal

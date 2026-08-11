@@ -6,7 +6,6 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.modules.matcher import magazyn_key
 
 from . import repository
 from .models import UserModel
@@ -39,10 +38,7 @@ def require_admin(user: UserModel = Depends(get_current_user)) -> UserModel:
 
 
 def check_magazyn_access(user: UserModel, magazyn: str | None) -> None:
-    """Uzywane wszedzie tam, gdzie endpoint przyjmuje magazyn (np. /match, /ocr/recognize) -
-    admin bez ograniczen, inne role tylko w ramach magazyny_dostepne."""
-    if not magazyn or user.rola == "admin":
-        return
-    allowed = {magazyn_key(m) for m in (user.magazyny_dostepne or [])}
-    if magazyn_key(magazyn) not in allowed:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Brak dostępu do magazynu {magazyn!r}")
+    """Uzywane wszedzie tam, gdzie endpoint przyjmuje magazyn (np. /match, /documents) - na
+    zyczenie uzytkownika (2026-08-04) magazynier ma teraz taki sam, pelny dostep do obu
+    magazynow jak admin, wiec ograniczenie do `magazyny_dostepne` zostalo usuniete."""
+    return

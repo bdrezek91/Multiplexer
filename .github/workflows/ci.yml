@@ -27,7 +27,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       # Wymagany od Etapu "quick winy" - rate limiting logowania (/auth/token) trzyma liczniki
-      # w Redis, wiec logowanie w prawie kazdym tescie (fixtures admin_headers/elektryk_headers)
+      # w Redis, wiec logowanie w prawie kazdym tescie (fixtures admin_headers/magazynier_headers)
       # tez tego wymaga - patrz backend/tests/conftest.py: _reset_rate_limiter.
       redis:
         image: redis:7

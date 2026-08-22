@@ -65,6 +65,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?ustaw JWT_SECRET_KEY w .env - patrz RAPORT_ETAP_5.md}
+      DOCUMENT_RETENTION_LIMIT: ${DOCUMENT_RETENTION_LIMIT:-20}
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
     depends_on:
       postgres:
@@ -92,6 +93,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DOCUMENT_RETENTION_LIMIT: ${DOCUMENT_RETENTION_LIMIT:-20}
       GEMINI_API_KEY_FREE: ${GEMINI_API_KEY_FREE:-}
       GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
       # Opcjonalny - ostatni krok w lancuchu OCR (patrz ocr/chain.py), uzywany WYLACZNIE gdy
@@ -132,6 +134,9 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - default
+      - multiplekser-shared
     depends_on:
       - web
     restart: unless-stopped
@@ -141,3 +146,13 @@ volumes:
   minio_data:
   caddy_data:
   caddy_config:
+
+networks:
+  default:
+  # Siec dzielona z innymi stosami compose na tym samym VPS (np. kalkulator-terminu), zeby
+  # Caddy mogl reverse-proxowac do ich kontenerow po nazwie. Utworz ja raz recznie:
+  #   docker network create multiplekser-shared
+  # i podepnij analogicznie serwis `kalkulator-web` w compose kalkulatora (external: true,
+  # ta sama nazwa sieci) - patrz Caddyfile, blok /kalkulator-terminu.
+  multiplekser-shared:
+    external: true

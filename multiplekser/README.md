@@ -127,3 +127,34 @@ Kolejne zmiany w kodzie (po `git push` na branch) wdraza sie na serwerze przez:
 git pull
 docker compose -f docker-compose.prod.yml up -d --build   # przebudowuje tylko zmienione uslugi
 ```
+
+**Inna aplikacja pod ta sama domena, na innej sciezce** (np. `/kalkulator-terminu`, bez osobnej
+subdomeny/certyfikatu) - Caddy juz ma wpis `handle_path` w `Caddyfile` wskazujacy na kontener
+`kalkulator-web:8000`. Zeby to zadzialalo, kontener tamtej aplikacji musi byc w tej samej sieci
+Dockera co `caddy` z tego stosu:
+
+```bash
+docker network create multiplekser-shared   # raz, jesli jeszcze nie istnieje
+docker compose -f docker-compose.prod.yml up -d   # dopina caddy do sieci wspoldzielonej
+```
+
+W `docker-compose.yml` tamtej aplikacji dodaj identyczny wpis sieci przy jej serwisie (tu:
+`kalkulator-web`) i podepnij go do tej samej sieci zewnetrznej:
+```yaml
+services:
+  kalkulator-web:
+    # ... reszta bez zmian ...
+    networks:
+      - default
+      - multiplekser-shared
+
+networks:
+  default:
+  multiplekser-shared:
+    external: true
+```
+Potem `docker compose up -d` w katalogu tamtej aplikacji. Uwaga: `handle_path` usuwa prefiks
+sciezki przed przekazaniem zadania dalej, wiec aplikacja musi dzialac poprawnie bez zalozenia,
+ze stoi na "/" (wzgledne linki/assety, bez twardo wpisanej sciezki bazowej) - jesli generuje
+bezwzgledne URL-e zakladajace root, trzeba jej wlasna konfiguracje "base path"/"prefix" ustawic
+na `/kalkulator-terminu`.

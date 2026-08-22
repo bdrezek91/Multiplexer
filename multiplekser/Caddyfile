@@ -3,5 +3,25 @@
 # automatycznie wystawil zaufany certyfikat HTTPS (Let's Encrypt), bez zadnej dodatkowej
 # konfiguracji. Wartosc domyslna ":80" dziala od razu po samym IP serwera, ale bez szyfrowania.
 {$DOMAIN} {
-	reverse_proxy web:80
+	# Kalkulator terminu - osobny projekt (kontener `kalkulator-web`), wystawiony pod
+	# /kalkulator-terminu na tej samej domenie co Multiplekser (bez osobnej subdomeny).
+	# handle_path usuwa prefiks /kalkulator-terminu przed przekazaniem zadania dalej, wiec
+	# aplikacja kalkulatora widzi zadania tak, jakby stala pod "/" - wymaga, zeby kalkulator
+	# nie generowal wlasnych bezwzglednych URLi zakladajacych root (patrz uwaga w README.md).
+	# Kontener `kalkulator-web` musi byc podpiety do tej samej sieci Dockera co `caddy` -
+	# patrz siec `multiplekser-shared` w docker-compose.prod.yml.
+	handle_path /kalkulator-terminu/* {
+		reverse_proxy kalkulator-web:8000
+	}
+
+	# Kalkulator serwuje wlasne pliki statyczne (Whitenoise) pod bezwzglednym /static/ (Django
+	# STATIC_URL), niezaleznie od prefiksu /kalkulator-terminu/ ktorego strona jest wystawiona -
+	# stad osobny blok bez path-strippingu, zeby CSS/JS kalkulatora sie ladowaly.
+	handle /static/* {
+		reverse_proxy kalkulator-web:8000
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
 }

@@ -5,6 +5,11 @@ import logging
 
 from sqlalchemy.orm import Session, selectinload
 
+# Rejestracja tabel wskazywanych przez klucze obce jest wymagana takze w samodzielnym CLI,
+# ktore (w przeciwienstwie do FastAPI) nie importuje automatycznie modulow users/products.
+from app.modules.products.models import ProductModel as _ProductModel  # noqa: F401
+from app.modules.users.models import UserModel as _UserModel  # noqa: F401
+
 from .models import DocumentModel
 from .storage import FileStorage
 

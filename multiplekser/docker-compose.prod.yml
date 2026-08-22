@@ -132,6 +132,9 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - default
+      - multiplekser-shared
     depends_on:
       - web
     restart: unless-stopped
@@ -141,3 +144,13 @@ volumes:
   minio_data:
   caddy_data:
   caddy_config:
+
+networks:
+  default:
+  # Siec dzielona z innymi stosami compose na tym samym VPS (np. kalkulator-terminu), zeby
+  # Caddy mogl reverse-proxowac do ich kontenerow po nazwie. Utworz ja raz recznie:
+  #   docker network create multiplekser-shared
+  # i podepnij analogicznie serwis `kalkulator-web` w compose kalkulatora (external: true,
+  # ta sama nazwa sieci) - patrz Caddyfile, blok /kalkulator-terminu.
+  multiplekser-shared:
+    external: true

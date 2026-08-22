@@ -14,6 +14,13 @@
 		reverse_proxy kalkulator-web:8000
 	}
 
+	# Kalkulator serwuje wlasne pliki statyczne (Whitenoise) pod bezwzglednym /static/ (Django
+	# STATIC_URL), niezaleznie od prefiksu /kalkulator-terminu/ ktorego strona jest wystawiona -
+	# stad osobny blok bez path-strippingu, zeby CSS/JS kalkulatora sie ladowaly.
+	handle /static/* {
+		reverse_proxy kalkulator-web:8000
+	}
+
 	handle {
 		reverse_proxy web:80
 	}

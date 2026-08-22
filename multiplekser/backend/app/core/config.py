@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "multiplekser-dokumenty"
 
+    # Maksymalna liczba najnowszych analiz przechowywanych razem z plikami zrodlowymi.
+    # Retencja usuwa tylko zakonczone dokumenty (done/error); queued/processing sa chronione.
+    document_retention_limit: int = 20
+
     # UWAGA: wartosc domyslna jest TYLKO do dewelopmentu lokalnego - w produkcji MUSI byc
     # nadpisana zmienna srodowiskowa JWT_SECRET_KEY (losowy, dlugi sekret).
     jwt_secret_key: str = "dev-insecure-secret-change-me-in-production"

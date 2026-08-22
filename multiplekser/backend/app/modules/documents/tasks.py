@@ -19,6 +19,7 @@ from typing import Mapping, Optional
 from sqlalchemy.orm import Session
 
 from app.core.celery_app import celery_app
+from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
@@ -35,6 +36,7 @@ from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 
 from . import repository
+from .retention import prune_documents
 
 logger = logging.getLogger(__name__)
 
@@ -247,6 +249,13 @@ def run_ocr_task(document_id: str, session: Session) -> None:
     except Exception as exc:  # zabezpieczenie - blad nie moze zniknac w workerze bez sladu w Document.status
         repository.mark_error(session, document, f"Nieoczekiwany blad: {exc}")
         logger.exception("OCR - nieoczekiwany blad", extra={"document_id": document_id})
+    finally:
+        try:
+            prune_documents(session, get_storage(), limit=settings.document_retention_limit)
+        except Exception:
+            # Awaria sprzatania nie moze zmienic wyniku poprawnie zakonczonej analizy.
+            session.rollback()
+            logger.exception("Retencja dokumentow nie powiodla sie")
 
 
 @celery_app.task(name="documents.process_ocr")

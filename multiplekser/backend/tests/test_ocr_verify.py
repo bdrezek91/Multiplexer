@@ -248,3 +248,52 @@ async def test_task_uzupelnia_jedna_brakujaca_kolumne_i_nie_nadpisuje_odczytanej
     assert items[1]["ilosc_wydana"] == 2  # nie 9 z kontrolnego modelu
     assert items[1]["ilosc_zuzyta"] == 3
     assert items[2]["ilosc_wydana"] is None
+
+
+async def test_obie_puste_ilosci_bez_potwierdzenia_pikseli_pomijaja_kontrole(monkeypatch):
+    """Glowny model zglosil ma_oznaczenie=true (stad pozycja w ogole istnieje z pustymi
+    iloscami), ale pikselowy detektor przejrzal ta strone i nic tu nie znalazl - to falszywy
+    alarm modelu na zabalaganionej kartce (skreslenia/poprawki), nie warto placic za kontrole."""
+    from app.modules.documents.tasks import _verify_ambiguous_items
+
+    items = [
+        {"rozpoznana_nazwa": "Pozycja zaznaczona", "ilosc_wydana": None, "ilosc_zuzyta": None,
+         "ilosc_finalna": None},
+        {"rozpoznana_nazwa": "Pozycja pusta", "ilosc_wydana": None, "ilosc_zuzyta": None,
+         "ilosc_finalna": None},
+    ]
+    batch = AsyncMock(return_value=[VerifyResult(3, None)])
+    monkeypatch.setattr("app.modules.documents.tasks.verify_ambiguous_quantities", batch)
+
+    await _verify_ambiguous_items(
+        [(b"pdf", "application/pdf")], items, "doc-1", lambda event: None,
+        cooldown_store=object(), dzial="hydraulika",
+        quantity_marks={"Pozycja zaznaczona": (True, False)},
+    )
+
+    batch.assert_awaited_once()
+    assert batch.await_args.args[1] == ["Pozycja zaznaczona"]
+    assert items[0]["ilosc_finalna"] == 3
+    assert items[1]["ilosc_wydana"] is None
+    assert items[1]["ilosc_finalna"] is None
+
+
+async def test_obie_puste_ilosci_ufaja_modelowi_gdy_detektor_nic_nie_znalazl_na_dokumencie(monkeypatch):
+    """Pusty slownik quantity_marks (detektor nie znalazl ani jednego zaznaczenia na calym
+    dokumencie) zwykle znaczy, ze nie zdazyl przeanalizowac strony (np. przeplatane puste
+    strony skanu, patrz RAPORT_OCR_NIEZAWODNOSC_3) - wtedy nie ma czym potwierdzac, wracamy do
+    zaufania modelowi jak przed ta zmiana."""
+    from app.modules.documents.tasks import _verify_ambiguous_items
+
+    items = [{"rozpoznana_nazwa": "Pozycja A", "ilosc_wydana": None, "ilosc_zuzyta": None,
+              "ilosc_finalna": None}]
+    batch = AsyncMock(return_value=[VerifyResult(1, None)])
+    monkeypatch.setattr("app.modules.documents.tasks.verify_ambiguous_quantities", batch)
+
+    await _verify_ambiguous_items(
+        [(b"pdf", "application/pdf")], items, "doc-1", lambda event: None,
+        cooldown_store=object(), dzial="hydraulika", quantity_marks={},
+    )
+
+    batch.assert_awaited_once()
+    assert batch.await_args.args[1] == ["Pozycja A"]

@@ -118,8 +118,20 @@ async def _verify_ambiguous_items(
 ) -> None:
     """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
     ptaszka przy pierwszym przebiegu) - jedna zbiorcza kontrola wszystkich wierszy. Nierozpoznane
-    pozycje przechodza razem do kolejnego modelu, bez rownoleglego zalewania darmowego API."""
+    pozycje przechodza razem do kolejnego modelu, bez rownoleglego zalewania darmowego API.
+
+    Pozycja z obiema pustymi ilosciami trafia tu wylacznie dzieki wlasnej deklaracji glownego
+    modelu ("ma_oznaczenie=true", patrz is_actionable_item) - na kartkach z duzo poprawek/
+    skreslen model potrafi to zglosic dla wierszy, ktore sa w rzeczywistosci puste. Gdy mamy
+    niezalezny, pikselowy detektor zaznaczen (quantity_marks, Hydraulika) i faktycznie cos
+    znalazl na tej stronie, traktujemy go jako druga opinie: obie puste ilosci eskaluja do
+    kontroli tylko jesli piksele potwierdzaja zaznaczenie w ktoryms polu - inaczej to szum
+    deklaracji modelu, nie warto placic 6 probami/modelami za sprawdzenie pustego wiersza.
+    Brak lokalnego detektora (Elektryka) albo pusty wynik (detektor nic nie znalazl na calym
+    dokumencie - najpewniej nie zdazyl przeanalizowac strony) - bez zmian, ufamy modelowi jak
+    dotad, zeby nie gubic prawdziwych, ale bladych zaznaczen."""
     marks = quantity_marks or {}
+    detector_confirmed_something = bool(marks)
     targets = []
     for index, item in enumerate(items):
         has_wydana, has_zuzyta = marks.get(item["rozpoznana_nazwa"], (False, False))
@@ -128,7 +140,10 @@ async def _verify_ambiguous_items(
             (item["ilosc_wydana"] is None and has_wydana)
             or (item["ilosc_zuzyta"] is None and has_zuzyta)
         )
-        if both_missing or marked_column_missing:
+        both_missing_and_trusted = both_missing and (
+            not detector_confirmed_something or has_wydana or has_zuzyta
+        )
+        if both_missing_and_trusted or marked_column_missing:
             targets.append(index)
     if not targets:
         return

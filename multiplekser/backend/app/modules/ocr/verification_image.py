@@ -453,8 +453,14 @@ def discover_hydraulika_quantity_marks(
         for row_index, name in enumerate(rows):
             if name.startswith("__"):
                 continue
-            top = min(image.height, lines[row_index] + 3)
-            bottom = max(top, min(image.height, lines[row_index + 1] - 3))
+            # Odstep od linii wiersza (nie stale 3px) - odrecznie zaznaczenie/liczba czesto
+            # nachodzi na linijke siatki, wiec waski margines lapal atrament z sasiedniego,
+            # pustego wiersza jako falszywe zaznaczenie (patrz zgloszenie: puste wiersze tuz
+            # obok realnie zaznaczonych byly systematycznie oznaczane jako "V").
+            row_height = lines[row_index + 1] - lines[row_index]
+            margin = max(3, round(row_height * 0.18))
+            top = min(image.height, lines[row_index] + margin)
+            bottom = max(top, min(image.height, lines[row_index + 1] - margin))
             counts: list[int] = []
             for left, right in ((wydana_left, split), (split, zuzyta_right)):
                 cell = image.crop((left, top, right, bottom)).convert("RGB")
@@ -462,7 +468,7 @@ def discover_hydraulika_quantity_marks(
                     1 for red, green, blue in cell.getdata()
                     if blue >= red + 18 and blue >= green + 10 and blue < 245
                 ))
-            has_wydana, has_zuzyta = counts[0] >= 12, counts[1] >= 12
+            has_wydana, has_zuzyta = counts[0] >= 16, counts[1] >= 16
             if has_wydana or has_zuzyta:
                 marked[name] = (has_wydana, has_zuzyta)
     return marked

@@ -1,57 +1,82 @@
-# Raport — nadmierna eskalacja do "Dodatkowej kontroli ilości" na kartkach z poprawkami
+# Raport — wyłączenie pikselowego detektora zaznaczeń dla Hydrauliki
 
-Zgłoszenie od użytkownika: na jednej wydawce Hydraulika (dużo odręcznych poprawek/skreśleń,
-nadpisanych cyfr) "Dodatkowa kontrola ilości" objęła ~19 pozycji naraz i przeszła przez 6 prób/
-modeli w ~80 sekund, kończąc się "Bez wyniku" dla 5 z nich.
+## Zgłoszenie
 
-## Przyczyna
+Na dwóch różnych wydawkach Hydraulika "Dodatkowa kontrola ilości" obejmowała kilkanaście-kilkadziesiąt
+pozycji naraz, wielokrotnie kończąc się "Bez wyniku", mimo że duża część tych pozycji na papierze
+jest po prostu pusta.
 
-`_verify_ambiguous_items()` (`documents/tasks.py`) eskaluje do kosztownej, wielomodelowej
-kontroli każdą pozycję z pustymi obiema ilościami (`ilosc_wydana`/`ilosc_zuzyta` = `null`).
-Taka pozycja w ogóle istnieje w wyniku tylko dzięki temu, że główny model OCR sam zgłosił
-`ma_oznaczenie: true` (patrz `is_actionable_item()`, `ocr/parsing.py`) — to jedyny sposób, by
-wiersz bez odczytanej liczby przeszedł filtr "pomiń puste wiersze szablonu".
+## Diagnoza (trzy kolejne, coraz głębsze poprawki tej samej sesji)
 
-System ufał tej samopotwierdzonej deklaracji bez żadnej niezależnej weryfikacji. Na kartkach z
-dużą liczbą poprawek/skreśleń model potrafi zgłosić `ma_oznaczenie=true` dla wierszy, które w
-rzeczywistości są puste — myli go bałagan w sąsiedztwie, nie realne zaznaczenie w komórce
-ilości. Zweryfikowane na przesłanej przez użytkownika wydawce: znaczna część z 19 eskalowanych
-pozycji była pusta na papierze.
+1. **Pierwsza próba**: zawężenie marginesu przy liniach wiersza + podniesienie progu liczby
+   pikseli w `discover_hydraulika_quantity_marks()` (`verification_image.py`) — pomogło na
+   pierwszym zgłoszonym dokumencie (przeciek atramentu do bezpośrednio sąsiadującego wiersza),
+   ale nie rozwiązało problemu ogólnie.
+2. **Druga próba**: `_verify_ambiguous_items()` (`documents/tasks.py`) przestał bezkrytycznie
+   ufać samej deklaracji `ma_oznaczenie=true` głównego modelu OCR — zaczął wymagać potwierdzenia
+   przez detektor pikselowy. Na kolejnym zgłoszonym dokumencie okazało się to nieskuteczne:
+   detektor "potwierdzał" niemal każdy pusty wiersz (45 z 45 na jednej stronie), a jednocześnie
+   **przegapiał realne zaznaczenia** — ryzyko cichej utraty prawdziwej ilości.
+3. **Diagnoza źródłowa** (na żywym kodzie, na przesłanym przez użytkownika PDF-ie): wypróbowano
+   hipotezę "złe granice kolumn przez skos zdjęcia telefonem" — potwierdzona częściowo (prawdziwe
+   linie kolumn były przesunięte o 64–105px względem sztywnych procentów szerokości strony), ale
+   **poprawienie granic kolumn nic nie zmieniło w wynikach**. Prawdziwa przyczyna: na tej
+   konkretnej kartce fizycznie **nie istnieje wiersz "Blat kuchenny 1650x600"**, który
+   `_HYDRAULIKA_PAGES` (stały, zakodowany na sztywno układ wierszy) zakłada jako obecny — dodany
+   wcześniej specjalnie dla INNEGO dokumentu (`RAPORT_OCR_NIEZAWODNOSC_3.md`). W obiegu są więc
+   **co najmniej dwie różne wersje papierowej wydawki Hydraulika**. Na kartce bez tego wiersza
+   cała reszta strony wychodzi przesunięta o jeden wiersz względem tego, czego kod oczekuje — stąd
+   pozornie losowy wzorzec: fałszywe zaznaczenie nad prawdziwym, przegapione zaznaczenie w
+   prawdziwym miejscu, fałszywe zaznaczenie pod.
+
+## Decyzja
+
+Twardo zakodowany, jeden fizyczny układ wierszy nie może poprawnie obsłużyć wielu wersji tej
+samej kartki krążących jednocześnie w firmie — to fundamentalne założenie mechanizmu, nie
+kwestia progu/marginesu do dostrojenia. Za zgodą użytkownika: **cały pikselowy detektor
+zaznaczeń dla Hydrauliki został wyłączony**, zamiast kolejnej punktowej łatki.
 
 ## Co zostało zrobione
 
-`documents/tasks.py: _verify_ambiguous_items()` — pozycja z obiema pustymi iloścami eskaluje do
-kontroli teraz tylko gdy:
-- lokalny pikselowy detektor zaznaczeń (`quantity_marks`, Hydraulika,
-  `discover_hydraulika_quantity_marks`) **potwierdza** zaznaczenie w którejś kolumnie, **lub**
-- detektor nie znalazł nic na całym dokumencie (pusty słownik `quantity_marks`) — zwykle znaczy,
-  że nie zdążył przeanalizować strony (znany, wcześniej opisany przypadek: przeplatane puste
-  strony skanu, `RAPORT_OCR_NIEZAWODNOSC_3.md`) — wtedy nie ma czym potwierdzać, więc zachowanie
-  wraca do zaufania modelowi jak dotąd (bez regresji dla Elektryki, która w ogóle nie ma tego
-  detektora, i dla przypadków gdy detektor Hydrauliki zawiedzie).
+- `ocr/pipeline_hydraulika.py` — usunięty krok wywołujący `discover_hydraulika_quantity_marks()`
+  i dopisujący do wyniku pozycje "wykryte lokalnie, pominięte przez AI"; usunięte pole
+  `quantity_marks` z `OCRResultHydraulika`.
+- `ocr/verification_image.py` — usunięta cała funkcja `discover_hydraulika_quantity_marks()` (i
+  pomocnicze `discover_marked_hydraulika_rows()`), łącznie z nieudaną poprawką granic kolumn z
+  punktu 3 powyżej. `_find_row_lines()`/`_HYDRAULIKA_PAGES`/`prepare_verification_files()`
+  **zostają bez zmian** — to osobny, wciąż działający mechanizm (wycinanie already-zidentyfikowanych
+  po nazwie wierszy do dodatkowej kontroli AI), niezwiązany z pikselowym wykrywaniem koloru.
+- `documents/tasks.py` — `_verify_ambiguous_items()` wraca do prostej logiki sprzed wszystkich
+  trzech poprawek: pozycja z pustymi obiema ilościami eskaluje do kontroli na podstawie samej
+  deklaracji głównego modelu, bez dodatkowej weryfikacji pikselami (tak jak zawsze działało to
+  dla Elektryki, która nigdy nie miała tego detektora). Parametr `quantity_marks` zostaje w
+  sygnaturze dla zgodności z istniejącym mechanizmem `marked_column_missing` (weryfikacja
+  brakującej pojedynczej kolumny) i testami — po prostu nikt już go nie wypełnia w produkcji.
 
-Sprawdzanie brakującej **pojedynczej** kolumny (`marked_column_missing`) — gdy druga kolumna ma
-już odczytaną wartość — jest bez zmian, to osobna, już wcześniej zawężona ścieżka.
+## Efekt
 
-## Ryzyko świadomie zaakceptowane
-
-Bardzo blade/małe zaznaczenie, które model AI słusznie wyłapał, ale które nie przekroczy progu
-pikselowego detektora, nie trafi już do dodatkowej kontroli (rzadki false negative zamiast
-obecnego nadmiaru false positive). Uznane za lepszy kompromis niż płacenie za kontrolę pustych
-wierszy przy każdej bardziej zabazgranej kartce.
+- Zniknięcie fałszywych, "widmowych" pozycji w "Dodatkowej kontroli ilości" wynikających z
+  niedopasowania fizycznego układu kartki do kodu.
+- Koszt: na kartkach z dużą liczbą poprawek/skreśleń "Dodatkowa kontrola ilości" może ponownie
+  obejmować więcej pozycji niż faktycznie zaznaczonych (ufamy z powrotem samej deklaracji
+  głównego modelu) — zaakceptowane świadomie jako mniejsze zło niż ryzyko cichej utraty
+  prawdziwej ilości przez zawodny detektor.
 
 ## Testy
 
-- `tests/test_ocr_verify.py` — 2 nowe testy: potwierdzenie pikseli wymagane gdy detektor coś
-  znalazł na dokumencie; zaufanie modelowi zachowane gdy detektor nic nie znalazł (pusty
-  słownik). Wszystkie 3 istniejące testy `_verify_ambiguous_items` bez zmian, nadal przechodzą.
-- **Pełna suita: 224 → 226 testów backendu (+2), zero regresji** (pozostałe błędy w pełnym
-  przebiegu to wyłącznie brak Postgresa w środowisku deweloperskim, niezwiązane ze zmianą).
+- Usunięte testy specyficzne dla wyłączonego mechanizmu (`test_lokalnie_wykryty_trojnik_...` w
+  `test_ocr_pipeline_hydraulika.py`, asercje `discover_hydraulika_quantity_marks`/
+  `discover_marked_hydraulika_rows` w `test_ocr_verify.py`).
+- Nowy test w `test_ocr_verify.py` (`test_obie_puste_ilosci_eskaluja_nawet_bez_quantity_marks`)
+  blokuje powrotną regresję do "wymagania potwierdzenia pikselami".
+- **Pełna suita: 345 testów przechodzi** (3 niepowiązane błędy w `test_catalog_db.py` to efekt
+  uboczny ręcznie postawionej testowej bazy w środowisku deweloperskim tej sesji — diff w ogóle
+  nie dotyka modułu `products`/`catalog`).
 
 ## Jak zweryfikować
 
 ```bash
 cd backend
-pytest tests/test_ocr_verify.py -v
+pytest tests/test_ocr_verify.py tests/test_ocr_pipeline_hydraulika.py tests/test_documents_task.py -v
 pytest tests/ -q
 ```

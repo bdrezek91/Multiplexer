@@ -120,18 +120,15 @@ async def _verify_ambiguous_items(
     ptaszka przy pierwszym przebiegu) - jedna zbiorcza kontrola wszystkich wierszy. Nierozpoznane
     pozycje przechodza razem do kolejnego modelu, bez rownoleglego zalewania darmowego API.
 
-    Pozycja z obiema pustymi ilosciami trafia tu wylacznie dzieki wlasnej deklaracji glownego
-    modelu ("ma_oznaczenie=true", patrz is_actionable_item) - na kartkach z duzo poprawek/
-    skreslen model potrafi to zglosic dla wierszy, ktore sa w rzeczywistosci puste. Gdy mamy
-    niezalezny, pikselowy detektor zaznaczen (quantity_marks, Hydraulika) i faktycznie cos
-    znalazl na tej stronie, traktujemy go jako druga opinie: obie puste ilosci eskaluja do
-    kontroli tylko jesli piksele potwierdzaja zaznaczenie w ktoryms polu - inaczej to szum
-    deklaracji modelu, nie warto placic 6 probami/modelami za sprawdzenie pustego wiersza.
-    Brak lokalnego detektora (Elektryka) albo pusty wynik (detektor nic nie znalazl na calym
-    dokumencie - najpewniej nie zdazyl przeanalizowac strony) - bez zmian, ufamy modelowi jak
-    dotad, zeby nie gubic prawdziwych, ale bladych zaznaczen."""
+    Pozycja z obiema pustymi iloscami trafia tu wylacznie dzieki wlasnej deklaracji glownego
+    modelu ("ma_oznaczenie=true", patrz is_actionable_item). `quantity_marks` (dawniej: pikselowy
+    detektor niebieskich zaznaczen dla Hydrauliki) jest wygaszony u zrodla - patrz
+    pipeline_hydraulika.py i docs/RAPORT_OCR_NIEZAWODNOSC_4.md (zakladal jeden, staly fizyczny
+    uklad wierszy kartki, a w obiegu jest ich co najmniej dwa) - wiec ten parametr zawsze
+    przychodzi pusty/`None` z produkcji, zostawiony w sygnaturze wylacznie dla zgodnosci
+    wstecznej z testami. Ufamy deklaracji glownego modelu bez dodatkowej weryfikacji, tak jak
+    dla Elektryki."""
     marks = quantity_marks or {}
-    detector_confirmed_something = bool(marks)
     targets = []
     for index, item in enumerate(items):
         has_wydana, has_zuzyta = marks.get(item["rozpoznana_nazwa"], (False, False))
@@ -140,10 +137,7 @@ async def _verify_ambiguous_items(
             (item["ilosc_wydana"] is None and has_wydana)
             or (item["ilosc_zuzyta"] is None and has_zuzyta)
         )
-        both_missing_and_trusted = both_missing and (
-            not detector_confirmed_something or has_wydana or has_zuzyta
-        )
-        if both_missing_and_trusted or marked_column_missing:
+        if both_missing or marked_column_missing:
             targets.append(index)
     if not targets:
         return
@@ -240,7 +234,6 @@ def run_ocr_task(document_id: str, session: Session) -> None:
 
         asyncio.run(_verify_ambiguous_items(
             files, items, document_id, save_ai_event, cooldown_store, dzial,
-            quantity_marks=getattr(result, "quantity_marks", None),
         ))
 
         repository.mark_done(

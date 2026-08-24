@@ -426,57 +426,16 @@ def _compose_crops(crops: list[tuple[str, str, Image.Image]]) -> bytes:
     return output.getvalue()
 
 
-def discover_hydraulika_quantity_marks(
-    files: list[tuple[bytes, str]],
-) -> dict[str, tuple[bool, bool]]:
-    """Wykrywa niebieskie oznaczenia osobno w kolumnach wydanej i zuzytej.
-
-    Formularz ma czarny/szary druk, a pracownicy wypelniaja go niebieskim dlugopisem. Analiza
-    dotyczy tylko srodkowych kolumn ilosci, wiec poprawki nazw i notatki na marginesie nie sa
-    mylone z iloscia. To bezpieczna siatka dla trójników i węży z dolu drugiej strony.
-    """
-    pages = _render_pages(files)
-    marked: dict[str, tuple[bool, bool]] = {}
-    # Granice (poczatek wydanej, podzial kolumn, koniec zuzytej) sa lekko inne przez skos skanu.
-    quantity_bounds = ((0.38, 0.545, 0.68), (0.40, 0.565, 0.70))
-    for page_index, rows in enumerate(_HYDRAULIKA_PAGES):
-        if page_index >= len(pages):
-            break
-        image = pages[page_index]
-        lines = _find_row_lines(image, len(rows))
-        if lines is None:
-            continue
-        wydana_start, column_split, zuzyta_end = quantity_bounds[page_index]
-        wydana_left = round(image.width * wydana_start)
-        split = round(image.width * column_split)
-        zuzyta_right = round(image.width * zuzyta_end)
-        for row_index, name in enumerate(rows):
-            if name.startswith("__"):
-                continue
-            # Odstep od linii wiersza (nie stale 3px) - odrecznie zaznaczenie/liczba czesto
-            # nachodzi na linijke siatki, wiec waski margines lapal atrament z sasiedniego,
-            # pustego wiersza jako falszywe zaznaczenie (patrz zgloszenie: puste wiersze tuz
-            # obok realnie zaznaczonych byly systematycznie oznaczane jako "V").
-            row_height = lines[row_index + 1] - lines[row_index]
-            margin = max(3, round(row_height * 0.18))
-            top = min(image.height, lines[row_index] + margin)
-            bottom = max(top, min(image.height, lines[row_index + 1] - margin))
-            counts: list[int] = []
-            for left, right in ((wydana_left, split), (split, zuzyta_right)):
-                cell = image.crop((left, top, right, bottom)).convert("RGB")
-                counts.append(sum(
-                    1 for red, green, blue in cell.getdata()
-                    if blue >= red + 18 and blue >= green + 10 and blue < 245
-                ))
-            has_wydana, has_zuzyta = counts[0] >= 16, counts[1] >= 16
-            if has_wydana or has_zuzyta:
-                marked[name] = (has_wydana, has_zuzyta)
-    return marked
-
-
-def discover_marked_hydraulika_rows(files: list[tuple[bytes, str]]) -> list[str]:
-    """Wstecznie zgodna lista nazw wierszy zawierajacych znak w dowolnej kolumnie."""
-    return list(discover_hydraulika_quantity_marks(files))
+# Lokalny pikselowy detektor niebieskich zaznaczen (discover_hydraulika_quantity_marks) zostal
+# usuniety 2026-08-24 - zakladal jeden, staly fizyczny uklad wierszy kartki (_HYDRAULIKA_PAGES),
+# a w obiegu sa co najmniej dwie rozne wersje papierowej wydawki Hydraulika (z i bez wiersza
+# "Blat kuchenny 1650x600"). Na kartce z innym ukladem cala reszta strony wychodzila przesunieta
+# o jeden wiersz, co dawalo pozornie losowe falszywe zaznaczenia/pominiecia - trzeci taki
+# przypadek po dwoch wczesniejszych poprawkach (docs/RAPORT_OCR_NIEZAWODNOSC_3.md), whack-a-mole
+# bez konca dopoki formularz nie ma jednego, ustalonego ukladu. Patrz docs/RAPORT_OCR_NIEZAWODNOSC_4.md.
+# _find_row_lines/_HYDRAULIKA_PAGES ponizej zostaja - sa nadal uzywane przez
+# prepare_verification_files (wycinanie konkretnych, juz zidentyfikowanych po nazwie wierszy do
+# dodatkowej kontroli AI), co jest innym, wciaz dzialajacym mechanizmem.
 
 
 def prepare_verification_files(

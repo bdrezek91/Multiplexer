@@ -84,8 +84,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (!response.ok) {
     let detail = response.statusText
     try {
-      const data = (await response.json()) as { detail?: string }
-      if (data.detail) detail = data.detail
+      const data: unknown = await response.json()
+      detail = extractErrorDetail(data, detail)
     } catch {
       // odpowiedz bez cialka JSON (np. 204/pusta) - zostaje statusText
     }
@@ -97,6 +97,23 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
+}
+
+// FastAPI zwraca "detail" jako zwykly string dla naszych recznych HTTPException, ale jako
+// tablice obiektow bledow walidacji Pydantic (np. przy Field(min_length=...)) dla 422 ktorych
+// nie przechwycilismy sami - bez tej normalizacji tablica trafiala wprost do React (setError),
+// a proba wyrenderowania obiektu jako dziecka JSX walila caly komponent na bialy ekran.
+function extractErrorDetail(data: unknown, fallback: string): string {
+  if (data == null || typeof data !== 'object' || !('detail' in data)) return fallback
+  const detail = (data as { detail?: unknown }).detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => (item && typeof item === 'object' && 'msg' in item ? String((item as { msg?: unknown }).msg) : null))
+      .filter((msg): msg is string => Boolean(msg))
+    if (messages.length > 0) return messages.join('; ')
+  }
+  return fallback
 }
 
 function filenameFromContentDisposition(header: string | null): string | null {
@@ -125,8 +142,8 @@ export async function apiRequestBlob(
   if (!response.ok) {
     let detail = response.statusText
     try {
-      const data = (await response.json()) as { detail?: string }
-      if (data.detail) detail = data.detail
+      const data: unknown = await response.json()
+      detail = extractErrorDetail(data, detail)
     } catch {
       // odpowiedz bez cialka JSON - zostaje statusText
     }

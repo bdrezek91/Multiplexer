@@ -128,6 +128,15 @@ git pull
 docker compose -f docker-compose.prod.yml up -d --build   # przebudowuje tylko zmienione uslugi
 ```
 
+**Uwaga - zmiana w `DEFAULT_SPECIAL_RULES`** (`matcher/special_rules.py`, np. nowa/zmieniona regula
+R3/R6/override) **wymaga dodatkowo ponownego importu do bazy**, inaczej sam rebuild kontenera nie
+wystarczy - Matcher czyta reguly z tabeli w Postgresie (`rules_from_db()`), nie wprost z kodu:
+```bash
+docker compose -f docker-compose.prod.yml exec backend python -m scripts.import_special_rules
+```
+Bezpieczne do uruchomienia w kazdej chwili - idempotentny (klucz naturalny `rule_type`+`pattern`),
+nic nie kasuje.
+
 **Inna aplikacja pod ta sama domena, na innej sciezce** (np. `/kalkulator-terminu`, bez osobnej
 subdomeny/certyfikatu) - Caddy juz ma wpis `handle_path` w `Caddyfile` wskazujacy na kontener
 `kalkulator-web:8000`. Zeby to zadzialalo, kontener tamtej aplikacji musi byc w tej samej sieci

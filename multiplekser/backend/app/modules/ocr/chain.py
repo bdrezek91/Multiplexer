@@ -102,8 +102,9 @@ def classify_ocr_chain() -> list[OCRChainStep]:
 
 def quantity_verification_chain() -> list[OCRChainStep]:
     """Lancuch dla dodatkowej kontroli ilosci pominietych przez glowny odczyt pozycji (Krok
-    verify.py, verify_ambiguous_quantities()) - wspolny dla Elektryki i Hydrauliki (dzial wybiera
-    tylko uklad wycinka, nie lancuch modeli - patrz verification_image.py). W odroznieniu od
+    verify.py, verify_ambiguous_quantities()) - wspolny dla Elektryki i Hydrauliki, dziala
+    zawsze na pelnym obrazie dokumentu (wycinanie konkretnych wierszy usuniete 2026-08-31,
+    patrz docstring verify.py). W odroznieniu od
     default_ocr_chain() BEZ platnych krokow: to sprawdzenie kilku pojedynczych, juz niejasnych
     komorek, nie caly dokument, a placony fallback (Gemini platny, OpenAI) tu nie jest tego
     warty - user i tak zweryzykuje niejasna pozycje na oryginale, jesli zaden darmowy model jej

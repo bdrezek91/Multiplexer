@@ -1,11 +1,7 @@
-from io import BytesIO
 from unittest.mock import AsyncMock
-
-from PIL import Image, ImageDraw
 
 from app.modules.ocr.chain import OCRChainStep
 from app.modules.ocr.providers import OCRProvider
-from app.modules.ocr.verification_image import prepare_verification_files
 from app.modules.ocr.verify import VerifyResult, verify_ambiguous_quantities
 
 
@@ -30,10 +26,6 @@ async def test_jedno_zapytanie_obsluguje_wiele_pozycji(monkeypatch):
         "app.modules.ocr.verify.quantity_verification_chain",
         lambda: [OCRChainStep("Model pierwszy", provider, "model-a", "klucz")],
     )
-    monkeypatch.setattr(
-        "app.modules.ocr.verify.prepare_verification_files",
-        lambda files, targets, dzial: ([(b"wycinki", "image/jpeg")], True),
-    )
 
     results = await verify_ambiguous_quantities(
         [(b"caly-pdf", "application/pdf")], ["Pozycja A", "Pozycja B"], "elektryka",
@@ -41,7 +33,9 @@ async def test_jedno_zapytanie_obsluguje_wiele_pozycji(monkeypatch):
 
     assert [result.ilosc_wydana for result in results] == [2, 1]
     assert len(provider.calls) == 1
-    assert provider.calls[0]["files"] == [(b"wycinki", "image/jpeg")]
+    # Zawsze caly, niezmieniony dokument - wycinanie konkretnych wierszy usuniete (patrz
+    # docstring verify.py: uklad papierowej wydawki rozni sie za kazdym razem).
+    assert provider.calls[0]["files"] == [(b"caly-pdf", "application/pdf")]
     assert "Pozycja A" in provider.calls[0]["prompt"]
     assert "Pozycja B" in provider.calls[0]["prompt"]
 
@@ -63,11 +57,6 @@ async def test_null_przechodzi_do_nastepnego_modelu_tylko_dla_nierozpoznanej_poz
             OCRChainStep("Model drugi", second, "model-b", "klucz-b"),
         ],
     )
-    monkeypatch.setattr(
-        "app.modules.ocr.verify.prepare_verification_files",
-        lambda files, targets, dzial: (files, False),
-    )
-
     results = await verify_ambiguous_quantities(
         [(b"dokument", "image/jpeg")], ["Pozycja A", "Pozycja B"], "hydraulika",
     )
@@ -88,11 +77,6 @@ async def test_same_nulle_sa_odrzucone_i_log_konczy_sie_bez_wyniku(monkeypatch):
         "app.modules.ocr.verify.quantity_verification_chain",
         lambda: [OCRChainStep("Model pierwszy", provider, "model-a", "klucz")],
     )
-    monkeypatch.setattr(
-        "app.modules.ocr.verify.prepare_verification_files",
-        lambda files, targets, dzial: (files, False),
-    )
-
     result = await verify_ambiguous_quantities(
         [(b"dokument", "image/jpeg")], ["Pozycja A"], "hydraulika",
         event_callback=events.append,
@@ -102,60 +86,6 @@ async def test_same_nulle_sa_odrzucone_i_log_konczy_sie_bez_wyniku(monkeypatch):
     assert [event["status"] for event in events] == ["attempt", "rejected", "no_result"]
     assert events[1]["reason"] == "model nie odczytal zadnej ilosci dla sprawdzanych pozycji"
     assert "Pozycja A" in str(events[2]["reason"])
-
-
-def test_formularz_elektryczny_jest_zamieniany_na_jeden_obraz_z_wycinkiem():
-    width, row_height, first_line, row_count = 1000, 30, 100, 48
-    image = Image.new("RGB", (width, first_line + row_height * row_count + 100), "white")
-    draw = ImageDraw.Draw(image)
-    for row in range(row_count + 1):
-        y = first_line + row * row_height
-        draw.line((80, y, 850, y), fill="black", width=3)
-    # Kilka pionowych krawedzi i znak w docelowym wierszu upodabniaja obraz do tabeli.
-    for x in (80, 600, 720, 850):
-        draw.line((x, first_line, x, first_line + row_height * row_count), fill="black", width=3)
-    draw.text((640, first_line + 15 * row_height + 7), "2 V", fill="black")
-    source = BytesIO()
-    image.save(source, format="JPEG", quality=95)
-
-    files, cropped = prepare_verification_files(
-        [(source.getvalue(), "image/jpeg")],
-        [("1", "Gniazdo podwójne polskie białe")],
-        "elektryka",
-    )
-
-    assert cropped is True
-    assert len(files) == 1
-    assert files[0][1] == "image/jpeg"
-    with Image.open(BytesIO(files[0][0])) as result:
-        assert result.height < image.height
-        # Naglowek celu + tylko jeden wiersz tabeli; sasiednie wiersze nie moga wejsc do obrazu.
-        assert result.height < 120
-        assert result.width <= image.width + 20
-
-
-def test_hydraulika_wycina_tylko_docelowy_wiersz():
-    width, row_height, first_line, row_count = 1000, 30, 100, 44
-    image = Image.new("RGB", (width, first_line + row_height * row_count + 100), "white")
-    draw = ImageDraw.Draw(image)
-    for row in range(row_count + 1):
-        y = first_line + row * row_height
-        draw.line((80, y, 850, y), fill="black", width=3)
-    for x in (80, 390, 600, 720, 850):
-        draw.line((x, first_line, x, first_line + row_height * row_count), fill="black", width=3)
-    # Bateria umywalkowa jest szostym wierszem po pieciu wierszach naglowka.
-    draw.text((430, first_line + 6 * row_height + 7), "1 V", fill=(20, 40, 210))
-    source = BytesIO()
-    image.save(source, format="JPEG", quality=95)
-    input_files = [(source.getvalue(), "image/jpeg")]
-
-    files, cropped = prepare_verification_files(
-        input_files, [("1", "Bateria umywalkowa")], "hydraulika",
-    )
-
-    assert cropped is True
-    with Image.open(BytesIO(files[0][0])) as result:
-        assert result.height < 120
 
 
 async def test_task_wysyla_wszystkie_braki_jednym_wywolaniem_i_uzupelnia_items(monkeypatch):

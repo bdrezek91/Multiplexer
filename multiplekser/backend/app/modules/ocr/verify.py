@@ -1,9 +1,21 @@
 """Zbiorcza, semantyczna kontrola ilosci pominietych przez glowny OCR.
 
-Wszystkie niejasne wiersze trafiaja do jednego zapytania na model. Dla aktualnego formularza
-Elektryka wejscie jest dodatkowo zamieniane na jeden obraz z wycinkami docelowych wierszy
-(verification_image.py). Odpowiedz z samymi null NIE jest sukcesem: taki model zostaje odrzucony,
-a nierozpoznane pozycje przechodza zbiorczo do nastepnego kroku lancucha.
+Wszystkie niejasne wiersze trafiaja do jednego zapytania na model, zawsze na PELNYM,
+niezmienionym obrazie dokumentu (bez wycinania konkretnych wierszy - patrz nizej dlaczego).
+Odpowiedz z samymi null NIE jest sukcesem: taki model zostaje odrzucony, a nierozpoznane
+pozycje przechodza zbiorczo do nastepnego kroku lancucha.
+
+Wczesniej ta funkcja (przez verification_image.py: prepare_verification_files) probowala
+wycinac z obrazu konkretny wiersz na podstawie zakodowanego na sztywno, domniemanego ukladu
+fizycznego kartki (numer strony + numer wiersza per nazwa pozycji). Usuniete calkowicie
+(2026-08-31, na zyczenie uzytkownika) - papierowa wydawka rozni sie za kazdym razem (rozne
+wersje formularza, rozne rewizje z biegiem czasu), wiec jakikolwiek sztywny uklad wierszy jest
+z zalozenia niemozliwy do trwalego utrzymania. Trzy kolejne, coraz gorsze awarie tego samego typu
+w Hydraulice (patrz docs/RAPORT_OCR_NIEZAWODNOSC_3.md, _4.md) i potwierdzone ~55% braku pokrycia
+w mapie dla Elektryki (153 pozycje w aktualnym szablonie vs 69 w mapie wycinkow) pokazaly, ze to
+nie byl przypadek do punktowej naprawy, tylko zle zalozenie architektoniczne. Kontrola dziala
+teraz zawsze na pelnym obrazie - mniej precyzyjne "zoomowanie" przy bardzo zageszczonych
+kartkach, ale zero ryzyka zlego dopasowania wiersza.
 
 Lancuch (`quantity_verification_chain()`, patrz chain.py) jest na zyczenie uzytkownika (2026-08-07)
 WYLACZNIE darmowy - pozycja, ktorej nie odczyta zaden z czterech darmowych modeli Gemini, zostaje
@@ -24,7 +36,6 @@ from .chain import (
 )
 from .cooldown import OCRCooldownStore
 from .parsing import extract_json, parse_float_loose
-from .verification_image import prepare_verification_files
 
 _NO_QUANTITY_REASON = "model nie odczytal zadnej ilosci dla sprawdzanych pozycji"
 
@@ -130,7 +141,9 @@ async def verify_ambiguous_quantities(
     if not targets:
         return []
 
-    verification_files, cropped = prepare_verification_files(files, targets, dzial)
+    # Zawsze pelny, niezmieniony obraz - patrz docstring modulu, dlaczego wycinanie
+    # konkretnych wierszy zostalo calkowicie usuniete.
+    verification_files, cropped = files, False
     unresolved = dict(targets)
     found: dict[str, VerifyResult] = {}
     steps = quantity_verification_chain()

@@ -55,6 +55,10 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault()
     setError(null)
+    if (!isEditing && password.length < 8) {
+      setError('Hasło musi mieć minimum 8 znaków')
+      return
+    }
     mutation.mutate()
   }
 
@@ -78,6 +82,7 @@ export function UserFormDialog({ open, onClose, user, isSelf }: Props) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                inputProps={{ minLength: 8 }}
                 helperText="Minimum 8 znaków"
               />
             )}

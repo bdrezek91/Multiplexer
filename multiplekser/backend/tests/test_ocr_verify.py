@@ -5,11 +5,7 @@ from PIL import Image, ImageDraw
 
 from app.modules.ocr.chain import OCRChainStep
 from app.modules.ocr.providers import OCRProvider
-from app.modules.ocr.verification_image import (
-    discover_hydraulika_quantity_marks,
-    discover_marked_hydraulika_rows,
-    prepare_verification_files,
-)
+from app.modules.ocr.verification_image import prepare_verification_files
 from app.modules.ocr.verify import VerifyResult, verify_ambiguous_quantities
 
 
@@ -138,7 +134,7 @@ def test_formularz_elektryczny_jest_zamieniany_na_jeden_obraz_z_wycinkiem():
         assert result.width <= image.width + 20
 
 
-def test_hydraulika_wykrywa_niebieski_znak_i_wycina_tylko_docelowy_wiersz():
+def test_hydraulika_wycina_tylko_docelowy_wiersz():
     width, row_height, first_line, row_count = 1000, 30, 100, 44
     image = Image.new("RGB", (width, first_line + row_height * row_count + 100), "white")
     draw = ImageDraw.Draw(image)
@@ -153,8 +149,6 @@ def test_hydraulika_wykrywa_niebieski_znak_i_wycina_tylko_docelowy_wiersz():
     image.save(source, format="JPEG", quality=95)
     input_files = [(source.getvalue(), "image/jpeg")]
 
-    assert "Bateria umywalkowa" in discover_marked_hydraulika_rows(input_files)
-    assert discover_hydraulika_quantity_marks(input_files)["Bateria umywalkowa"] == (True, False)
     files, cropped = prepare_verification_files(
         input_files, [("1", "Bateria umywalkowa")], "hydraulika",
     )
@@ -248,3 +242,23 @@ async def test_task_uzupelnia_jedna_brakujaca_kolumne_i_nie_nadpisuje_odczytanej
     assert items[1]["ilosc_wydana"] == 2  # nie 9 z kontrolnego modelu
     assert items[1]["ilosc_zuzyta"] == 3
     assert items[2]["ilosc_wydana"] is None
+
+
+async def test_obie_puste_ilosci_eskaluja_nawet_bez_quantity_marks(monkeypatch):
+    """quantity_marks jest wygaszony u zrodla (pipeline_hydraulika.py juz go nie generuje,
+    patrz docs/RAPORT_OCR_NIEZAWODNOSC_4.md) - pozycja z obiema pustymi iloscami eskaluje do
+    kontroli na podstawie samej deklaracji glownego modelu, bez dodatkowej weryfikacji."""
+    from app.modules.documents.tasks import _verify_ambiguous_items
+
+    items = [{"rozpoznana_nazwa": "Pozycja A", "ilosc_wydana": None, "ilosc_zuzyta": None,
+              "ilosc_finalna": None}]
+    batch = AsyncMock(return_value=[VerifyResult(1, None)])
+    monkeypatch.setattr("app.modules.documents.tasks.verify_ambiguous_quantities", batch)
+
+    await _verify_ambiguous_items(
+        [(b"pdf", "application/pdf")], items, "doc-1", lambda event: None,
+        cooldown_store=object(), dzial="hydraulika",
+    )
+
+    batch.assert_awaited_once()
+    assert batch.await_args.args[1] == ["Pozycja A"]

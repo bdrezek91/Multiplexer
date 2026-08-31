@@ -120,7 +120,16 @@ async def _verify_ambiguous_items(
 ) -> None:
     """Dla pozycji z pusta ilosc w OBU kolumnach (typowy przypadek: "1" nierozroznialna od
     ptaszka przy pierwszym przebiegu) - jedna zbiorcza kontrola wszystkich wierszy. Nierozpoznane
-    pozycje przechodza razem do kolejnego modelu, bez rownoleglego zalewania darmowego API."""
+    pozycje przechodza razem do kolejnego modelu, bez rownoleglego zalewania darmowego API.
+
+    Pozycja z obiema pustymi iloscami trafia tu wylacznie dzieki wlasnej deklaracji glownego
+    modelu ("ma_oznaczenie=true", patrz is_actionable_item). `quantity_marks` (dawniej: pikselowy
+    detektor niebieskich zaznaczen dla Hydrauliki) jest wygaszony u zrodla - patrz
+    pipeline_hydraulika.py i docs/RAPORT_OCR_NIEZAWODNOSC_4.md (zakladal jeden, staly fizyczny
+    uklad wierszy kartki, a w obiegu jest ich co najmniej dwa) - wiec ten parametr zawsze
+    przychodzi pusty/`None` z produkcji, zostawiony w sygnaturze wylacznie dla zgodnosci
+    wstecznej z testami. Ufamy deklaracji glownego modelu bez dodatkowej weryfikacji, tak jak
+    dla Elektryki."""
     marks = quantity_marks or {}
     targets = []
     for index, item in enumerate(items):
@@ -227,7 +236,6 @@ def run_ocr_task(document_id: str, session: Session) -> None:
 
         asyncio.run(_verify_ambiguous_items(
             files, items, document_id, save_ai_event, cooldown_store, dzial,
-            quantity_marks=getattr(result, "quantity_marks", None),
         ))
 
         repository.mark_done(

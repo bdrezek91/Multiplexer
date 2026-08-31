@@ -10,10 +10,20 @@ Roznice wobec pipeline.py (Elektryka), wszystkie 1:1 ze zrodla:
   (patrz docstring form_rows_hydraulika.py),
 - match_against_catalog_hydraulika() zamiast match_against_catalog() - bez special_rules
   (DEFAULT_SPECIAL_RULES_HYDRAULIKA jest pusta, patrz matcher/core.py).
+
+Lokalny pikselowy detektor niebieskich zaznaczen (discover_hydraulika_quantity_marks,
+verification_image.py) byl tu wczesniej uzywany jako siatka bezpieczenstwa dla wierszy
+pominietych przez glowny model. Wylaczony (2026-08-24) - zaklada jeden, staly fizyczny uklad
+wierszy kartki (_HYDRAULIKA_PAGES), a w obiegu sa co najmniej dwie rozne wersje papierowej
+wydawki (z i bez wiersza "Blat kuchenny 1650x600"). Na kartce bez tego wiersza cala reszta
+strony wychodzi przesunieta o jeden wiersz, co dawalo pozornie losowe falszywe
+zaznaczenia/pominiecia - trzeci taki przypadek po dwoch wczesniejszych poprawkach
+(RAPORT_OCR_NIEZAWODNOSC_3.md), whack-a-mole bez konca dopoki formularz nie ma jednego,
+ustalonego ukladu. Patrz docs/RAPORT_OCR_NIEZAWODNOSC_4.md.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
 from app.modules.matcher import MatchResult, match_against_catalog_hydraulika
@@ -25,7 +35,6 @@ from .form_rows_hydraulika import snap_to_known_item_hydraulika
 from .parsing import extract_json, is_actionable_item, is_valid_ocr_response, validate_item
 from .pipeline_elektryka import OCRUnparsableResponseError, normalize_project_number
 from .prompt import AI_OCR_PROMPT_HYDRAULIKA
-from .verification_image import discover_hydraulika_quantity_marks
 
 
 @dataclass
@@ -47,7 +56,6 @@ class OCRResultHydraulika:
     pozycje: list[OCRItemHydraulika]
     used_provider: str
     rejected_count: int
-    quantity_marks: dict[str, tuple[bool, bool]] = field(default_factory=dict)
 
 
 def _pick_raw_qty(item: dict, field_name: str) -> Optional[str]:
@@ -124,25 +132,7 @@ async def recognize_document_hydraulika(
 
     pozycje = [_build_item_hydraulika(it, catalog, magazyn) for it in valid_items]
 
-    # Glowny model czasem pomija caly zaznaczony wiersz (szczegolnie trójniki i węże na dole
-    # drugiej strony). Niebieski znacznik wykryty lokalnie dodaje brakujaca pozycje z pustymi
-    # ilosciami; zbiorcza kontrola w tasks.py odczyta potem liczby z waskiego wycinka.
-    quantity_marks = discover_hydraulika_quantity_marks(files)
-    existing_names = {item.rozpoznana_nazwa for item in pozycje}
-    for name in quantity_marks:
-        snapped_name = snap_to_known_item_hydraulika(name).name
-        if snapped_name in existing_names:
-            continue
-        pozycje.append(_build_item_hydraulika({
-            "nazwa": name,
-            "ilosc_wydana": None,
-            "ilosc_zuzyta": None,
-            "ma_oznaczenie": True,
-        }, catalog, magazyn))
-        existing_names.add(snapped_name)
-
     return OCRResultHydraulika(
         numer_projektu=numer_projektu, pozycje=pozycje,
         used_provider=chain_result.used_label, rejected_count=rejected_count,
-        quantity_marks=quantity_marks,
     )

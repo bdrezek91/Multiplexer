@@ -68,6 +68,27 @@ describe('apiRequest', () => {
     })
   })
 
+  it('przy 422 z tablica bledow walidacji Pydantic zwraca czytelny string, nie tablice obiektow', async () => {
+    // Realny przypadek: FastAPI/Pydantic (np. Field(min_length=8)) zwraca detail jako tablice
+    // {loc, msg, type}, nie zwykly string jak nasze reczne HTTPException. Bez normalizacji ta
+    // tablica trafiala wprost do stanu React (UserFormDialog) i walila komponent na bialy ekran
+    // przy probie wyrenderowania obiektu jako dziecka JSX.
+    tokenStorage.setTokens('access-1', 'refresh-1')
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(422, {
+        detail: [
+          { loc: ['body', 'password'], msg: 'String should have at least 8 characters', type: 'string_too_short' },
+        ],
+      }),
+    )
+
+    await expect(apiRequest('/users')).rejects.toMatchObject({
+      status: 422,
+      detail: 'String should have at least 8 characters',
+    })
+  })
+
   it('bez tokenu w localStorage nie dolacza naglowka Authorization', async () => {
     const fetchMock = vi.mocked(fetch)
     fetchMock.mockResolvedValueOnce(jsonResponse(200, {}))

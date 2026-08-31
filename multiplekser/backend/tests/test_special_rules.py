@@ -73,6 +73,21 @@ def test_ocr_override_peszel(catalog):
     assert r.kod == "RURA KARBOWANA FI16"
 
 
+@pytest.mark.parametrize("nazwa", [
+    "Taśma LED 5M",
+    "Taśma LED 10M",
+    "Taśma LED zielona",
+    "Zestaw taśma LED",
+    "tasma led",
+])
+def test_kazda_tasma_led_wymuszona_na_tasme_do_dekorow(catalog, nazwa):
+    """Na zyczenie uzytkownika (2026-08-31): dowolny wariant/kolor/dlugosc tasmy LED z kartki
+    zawsze mapuje sie na jeden, ten sam kod - bez wzgledu na to, co dokladnie ktos dopisal."""
+    r = match_against_catalog(nazwa, catalog)
+    assert r.kod == "TAŚMA LED DO DEKORÓW"
+    assert r.quality == "ok"
+
+
 def test_r5_wariant_magazynowy_podstawia_kod(catalog):
     r_zabrze = match_against_catalog("Bezpiecznik 25A Niemiecki", catalog, magazyn="Zabrze")
     r_czekanow = match_against_catalog("Bezpiecznik 25A Niemiecki", catalog, magazyn="Czekanów")

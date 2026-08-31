@@ -37,6 +37,12 @@ _KORYT_DIM_RE = re.compile(r"(\d+)\s*[xX]\s*(\d+)")
 _ZESTAW_KODY = {"czarny": "ZESTAW LAMPY SZYNOWE CZARNE", "biały": "ZESTAW LAMPY SZYNOWE BIAŁE"}
 _VERY_LOW_RATIO = 0.2
 
+# Na zyczenie uzytkownika (2026-08-31): kazda "tasma led" wymuszana jest w special_rules.py
+# (SpecialRule override, wzorzec "tasma led") na ten kod - tu tylko dolaczamy automatyczny
+# zasilacz, patrz uzycie ponizej.
+_TASMA_LED_KOD = "TAŚMA LED DO DEKORÓW"
+_ZASILACZ_LED_KOD = "ZASILACZ LED 75W"
+
 
 @dataclass
 class GeneratorItem:
@@ -189,6 +195,11 @@ def generate_output(
         jm = match.jm_override or "SZT"
         if match.quality == QUALITY_OK and match.kod:
             add_kod(match.kod, it.qty, jm, item_order)
+            if match.kod == _TASMA_LED_KOD:
+                # Na zyczenie uzytkownika (2026-08-31): kazde wystapienie tasmy LED wymaga
+                # zasilacza - doliczany automatycznie, 1 szt za KAZDE wystapienie (nie za metraz),
+                # sumowane przez add_kod jesli tasma LED pojawi sie w dokumencie wiecej niz raz.
+                add_kod(_ZASILACZ_LED_KOD, 1.0, "SZT", item_order)
             continue
 
         if it.off_form and match.quality == QUALITY_BAD:

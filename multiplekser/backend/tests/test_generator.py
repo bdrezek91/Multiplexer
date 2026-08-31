@@ -121,6 +121,28 @@ def test_szynoprzewod_zero_metrow_usuwa_wpis(catalog):
     assert not any("ZESTAW LAMPY SZYNOWE" in line for line in result.lines)
 
 
+# ---- Tasma LED -> zawsze automatyczny zasilacz (na zyczenie uzytkownika, 2026-08-31) ----
+
+def test_tasma_led_dolicza_automatycznie_zasilacz(catalog):
+    items = [GeneratorItem(name="Taśma LED 5M", qty=3)]
+    result = generate_output(items, catalog, magazyn=None)
+    by_kod = _lines_by_kod(result.lines)
+    assert by_kod["TAŚMA LED DO DEKORÓW"] == "TAŚMA LED DO DEKORÓW;3;;M;"
+    assert by_kod["ZASILACZ LED 75W"] == "ZASILACZ LED 75W;1;;SZT;"
+
+
+def test_tasma_led_kilka_wystapien_sumuje_zasilacze_1_na_kazde(catalog):
+    items = [
+        GeneratorItem(name="Taśma LED 5M", qty=5),
+        GeneratorItem(name="Taśma LED zielona", qty=2),
+    ]
+    result = generate_output(items, catalog, magazyn=None)
+    by_kod = _lines_by_kod(result.lines)
+    # 1 szt zasilacza ZA KAZDE wystapienie (nie za metraz) - tu dwa wystapienia = 2 szt.
+    assert by_kod["TAŚMA LED DO DEKORÓW"] == "TAŚMA LED DO DEKORÓW;7;;M;"
+    assert by_kod["ZASILACZ LED 75W"] == "ZASILACZ LED 75W;2;;SZT;"
+
+
 # ---- R4: wkret ocynk -> opakowania (Math.ceil, rowniez ponizej 50 szt) ----
 
 def test_wkret_ocynk_math_ceil_ponizej_progu(catalog):

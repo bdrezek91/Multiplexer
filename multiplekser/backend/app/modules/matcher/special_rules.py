@@ -109,6 +109,18 @@ DEFAULT_SPECIAL_RULES: list[SpecialRule] = [
         priority=72,
         description="OCR override: 'peszel' (nazwa potoczna) -> rura karbowana FI16.",
     ),
+    SpecialRule(
+        rule_type="override",
+        pattern=r"tasma\s*led",
+        target_kod="TAŚMA LED DO DEKORÓW",
+        normalize=True,
+        priority=73,
+        description=(
+            "Kazda 'tasma led' (dowolny wariant/kolor/dlugosc na kartce) -> TASMA LED DO "
+            "DEKOROW, jm=m (na zyczenie uzytkownika, 2026-08-31). Automatyczne doliczenie "
+            "'Zasilacz LED 75W' - patrz generator/core_elektryka.py, ten sam kod wyzwala dopisek."
+        ),
+    ),
 ]
 
 

@@ -94,6 +94,12 @@ class DocumentItemModel(Base):
     form_note: Mapped[str] = mapped_column(String, nullable=False, default="")
     uwagi: Mapped[str] = mapped_column(String, nullable=False, default="")
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Ustawiane w documents/tasks.py: _verify_ambiguous_items(), gdy glowny model nie odczytal
+    # ilosci pewnie i dopiero osobny, kontrolny model AI (verify_ambiguous_quantities) ja ustalil.
+    # Sygnal dla UI/operatora - ta konkretna ilosc pochodzi z drugiej, mniej pewnej probie
+    # odczytu, wiec zasluguje na dokladniejsza recznana weryfikacje niz reszta dokumentu
+    # (patrz walidacja architektury 2026-08-31, rekomendacja "widoczny sygnal niepewnosci w UI").
+    ilosc_z_dodatkowej_kontroli: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     document: Mapped["DocumentModel"] = relationship(back_populates="items")
 

@@ -79,6 +79,7 @@ def _item_to_schema(it: DocumentItemModel) -> DocumentItemOut:
         form_note=it.form_note,
         uwagi=it.uwagi,
         confidence=it.confidence,
+        ilosc_z_dodatkowej_kontroli=it.ilosc_z_dodatkowej_kontroli,
     )
 
 

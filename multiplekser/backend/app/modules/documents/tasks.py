@@ -155,6 +155,9 @@ async def _verify_ambiguous_items(
     for idx, result in zip(targets, results):
         if not result.found_anything:
             continue
+        # Sygnal dla UI (patrz DocumentItemModel.ilosc_z_dodatkowej_kontroli) - ta ilosc
+        # pochodzi z drugiej, mniej pewnej probie odczytu, nie z glownego modelu.
+        items[idx]["ilosc_z_dodatkowej_kontroli"] = True
         # Kontrola uzupelnia tylko brakujaca kolumne. Poprawny wynik glownego OCR nie moze
         # zostac wyzerowany, gdy model kontrolny odczyta tylko druga z dwoch wartosci.
         if items[idx]["ilosc_wydana"] is None and result.ilosc_wydana is not None:
@@ -232,6 +235,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "match_kod": it.match.kod,
                 "match_nazwa": it.match.nazwa,
                 "match_jm": it.match.jm_override,
+                "ilosc_z_dodatkowej_kontroli": False,
             })
 
         asyncio.run(_verify_ambiguous_items(

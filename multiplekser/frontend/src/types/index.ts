@@ -50,6 +50,10 @@ export interface DocumentItem {
   form_note: string
   uwagi: string
   confidence: number | null
+  // Ilosc ustalona przez druga, mniej pewna probe odczytu (dodatkowa kontrola AI dla pozycji,
+  // ktorych glowny model nie odczytal pewnie), nie przez glowny model OCR - patrz
+  // backend/app/modules/documents/tasks.py: _verify_ambiguous_items().
+  ilosc_z_dodatkowej_kontroli: boolean
 }
 
 export interface AITraceEvent {

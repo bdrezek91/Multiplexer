@@ -553,6 +553,15 @@ export function DocumentDetailPage() {
                           {item.needs_review && (
                             <Chip size="small" label="do weryfikacji" sx={{ ml: 1 }} />
                           )}
+                          {item.ilosc_z_dodatkowej_kontroli && (
+                            <Chip
+                              size="small"
+                              color="warning"
+                              variant="outlined"
+                              label="ilość z dodatkowej kontroli AI - sprawdź ręcznie"
+                              sx={{ ml: 1 }}
+                            />
+                          )}
                           {item.form_note && (
                             <Typography variant="caption" display="block" color="text.secondary">
                               {item.form_note}

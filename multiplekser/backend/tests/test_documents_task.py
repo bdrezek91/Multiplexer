@@ -328,6 +328,31 @@ def test_run_ocr_task_druga_proba_uzupelnia_pomijeta_ilosc(
     assert document.status == "done"
     assert document.items[0].ilosc_wydana == 1.0
     assert document.items[0].ilosc_finalna == 1.0
+    # Sygnal dla UI (walidacja architektury 2026-08-31) - ta ilosc pochodzi z dodatkowej
+    # kontroli, nie z glownego modelu, wiec operator powinien ja zweryfikowac dokladniej.
+    assert document.items[0].ilosc_z_dodatkowej_kontroli is True
+
+
+def test_run_ocr_task_ilosc_z_glownego_modelu_nie_ma_flagi_dodatkowej_kontroli(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_hydraulika_json,
+):
+    """Kontrastowy przypadek: pozycja odczytana pewnie za pierwszym razem (bez eskalacji do
+    verify_ambiguous_quantities) nie powinna nigdy dostac flagi 'z dodatkowej kontroli'."""
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = '{"dzial":"hydraulika","confidence":93.0}'
+    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": 1, "confidence": 99}]}'
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+    ):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert document.items[0].ilosc_wydana == 1.0
+    assert document.items[0].ilosc_z_dodatkowej_kontroli is False
 
 
 def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(

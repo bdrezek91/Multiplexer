@@ -1,0 +1,93 @@
+name: Multiplekser CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "multiplekser/**"
+      - ".github/workflows/multiplekser-ci.yml"
+  pull_request:
+    paths:
+      - "multiplekser/**"
+      - ".github/workflows/multiplekser-ci.yml"
+
+defaults:
+  run:
+    working-directory: multiplekser
+
+jobs:
+  backend:
+    # Rekomendacja z walidacji architektury (2026-08-31): pelna suita testow backendu
+    # wymaga prawdziwego Postgresa (testy katalogu/produktow/dokumentow uzywaja realnych
+    # zapytan SQLAlchemy, nie sa mockowane) - bez tego CI nie wykrylby regresji, ktore
+    # wymagaja rzeczywistej bazy (np. unikalnosc kod+dzial, indeksy, kaskady FK).
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: multiplekser
+          POSTGRES_PASSWORD: multiplekser_dev
+          POSTGRES_DB: multiplekser_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U multiplekser"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: multiplekser/backend/requirements.txt
+
+      - name: Zainstaluj poppler-utils (renderowanie PDF w OCR/weryfikacji)
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
+      - name: Zainstaluj zaleznosci backendu
+        working-directory: multiplekser/backend
+        run: pip install -r requirements.txt
+
+      - name: Migracje Alembic
+        working-directory: multiplekser/backend
+        run: alembic upgrade head
+
+      - name: Testy backendu
+        working-directory: multiplekser/backend
+        run: pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: multiplekser/frontend/package-lock.json
+
+      - name: Zainstaluj zaleznosci frontendu
+        working-directory: multiplekser/frontend
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: multiplekser/frontend
+        run: npx tsc --noEmit -p .
+
+      - name: Testy frontendu
+        working-directory: multiplekser/frontend
+        run: npm test

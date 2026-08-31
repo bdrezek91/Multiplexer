@@ -22,6 +22,7 @@ class DocumentItemOut(BaseModel):
     form_note: str
     uwagi: str
     confidence: float | None
+    ilosc_z_dodatkowej_kontroli: bool
 
 
 class AITraceEventOut(BaseModel):

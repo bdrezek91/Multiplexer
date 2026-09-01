@@ -58,6 +58,7 @@ const documentDetail: DocumentDetail = {
       form_note: '',
       uwagi: '',
       confidence: 0.95,
+      ilosc_z_dodatkowej_kontroli: false,
     },
   ],
 }
@@ -177,7 +178,7 @@ describe('DocumentDetailPage - AddItemRow', () => {
       id: 'item2', rozpoznana_nazwa: 'Bojler 80 L', ilosc_wydana: null, ilosc_zuzyta: null,
       ilosc_finalna: 2, match_kod: 'BOJLER 80 L', match_nazwa: 'Bojler 80 L', match_jm: 'SZT',
       match_quality: 'ok', match_score: 1, off_form: false, needs_review: false, form_note: '',
-      uwagi: 'Dodano ręcznie', confidence: null,
+      uwagi: 'Dodano ręcznie', confidence: null, ilosc_z_dodatkowej_kontroli: false,
     })
 
     renderPage()

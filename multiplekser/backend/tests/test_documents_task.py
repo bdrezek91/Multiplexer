@@ -355,6 +355,55 @@ def test_run_ocr_task_ilosc_z_glownego_modelu_nie_ma_flagi_dodatkowej_kontroli(
     assert document.items[0].ilosc_z_dodatkowej_kontroli is False
 
 
+def test_run_ocr_task_tasma_led_dodaje_widoczny_zasilacz(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Na zyczenie uzytkownika (2026-08-31): zasilacz ma byc widoczny od razu na stronie
+    weryfikacji jako normalna, zapisana pozycja - nie tylko doliczany przy generowaniu TXT."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+
+    ai_response = (
+        '{"pozycje": ['
+        '{"nazwa": "Taśma LED 5M", "ilosc_wydana": "3", "confidence": 98},'
+        '{"nazwa": "Taśma LED zielona", "ilosc_wydana": "2", "confidence": 98}'
+        ']}'
+    )
+    with _mock_recognize(ai_response):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    # 2 pozycje tasmy z kartki + 1 automatycznie dodany zasilacz (2 wystapienia = 2 szt.).
+    assert len(document.items) == 3
+    zasilacz = next(it for it in document.items if it.match_kod == "ZASILACZ LED 75W")
+    assert zasilacz.rozpoznana_nazwa == "Zasilacz LED 75W"
+    assert zasilacz.ilosc_finalna == 2.0
+    assert zasilacz.match_quality == "ok"
+    assert zasilacz.matched_product_id is not None
+
+
+def test_run_ocr_task_bez_tasmy_led_nie_dodaje_zasilacza(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+
+    ai_response = (
+        '{"pozycje": [{"nazwa": "Wtyczka odbiornikowa 32A (niebieska) 1F", '
+        '"ilosc_wydana": "1", "confidence": 98}]}'
+    )
+    with _mock_recognize(ai_response):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert len(document.items) == 1
+    assert all(it.match_kod != "ZASILACZ LED 75W" for it in document.items)
+
+
 def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(
     db_session, admin_user, mocked_storage, gemini_key_configured, baza_hydraulika_json,
 ):

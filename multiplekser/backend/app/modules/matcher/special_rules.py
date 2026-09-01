@@ -118,7 +118,8 @@ DEFAULT_SPECIAL_RULES: list[SpecialRule] = [
         description=(
             "Kazda 'tasma led' (dowolny wariant/kolor/dlugosc na kartce) -> TASMA LED DO "
             "DEKOROW, jm=m (na zyczenie uzytkownika, 2026-08-31). Automatyczne doliczenie "
-            "'Zasilacz LED 75W' - patrz generator/core_elektryka.py, ten sam kod wyzwala dopisek."
+            "'Zasilacz LED 75W' jako osobnej, zapisanej pozycji dokumentu - patrz "
+            "documents/tasks.py: _append_auto_zasilacz_led()."
         ),
     ),
 ]

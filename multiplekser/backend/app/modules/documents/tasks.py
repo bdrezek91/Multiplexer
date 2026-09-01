@@ -23,6 +23,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
+from app.modules.matcher.result import QUALITY_OK
 from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback
 from app.modules.ocr.classify import classify_document
 from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
@@ -169,6 +170,44 @@ async def _verify_ambiguous_items(
         )
 
 
+# Na zyczenie uzytkownika (2026-08-31): kazda "tasma led" (wymuszana w special_rules.py na
+# kod TASMA_LED_KOD) potrzebuje zasilacza - jedna sztuka ZA KAZDE wystapienie w dokumencie.
+# Dopisywane tu, jako normalna, PERSYSTOWANA pozycja dokumentu (widoczna od razu na stronie
+# weryfikacji, edytowalna jak kazda inna), nie tylko przy generowaniu TXT - stad NIE ma
+# odpowiednika tej logiki w generatorze (patrz core_elektryka.py - usunieta stamtad, zeby nie
+# doliczyc zasilacza podwojnie: raz tutaj jako zapisana pozycja, raz przy generowaniu).
+_TASMA_LED_KOD = "TAŚMA LED DO DEKORÓW"
+_ZASILACZ_LED_KOD = "ZASILACZ LED 75W"
+
+
+def _append_auto_zasilacz_led(items: list[dict], dzial: str, session: Session) -> None:
+    if dzial != "elektryka":
+        return
+    count = sum(1 for it in items if it.get("match_kod") == _TASMA_LED_KOD)
+    if count == 0:
+        return
+    items.append({
+        "rozpoznana_nazwa": "Zasilacz LED 75W",
+        "ilosc_wydana": None,
+        "ilosc_zuzyta": None,
+        "ilosc_finalna": float(count),
+        "match_quality": QUALITY_OK,
+        "match_score": 1.0,
+        "off_form": False,
+        "needs_review": False,
+        "form_note": (
+            "Dodano automatycznie - 1 szt. za każde wystąpienie taśmy LED w tym dokumencie."
+        ),
+        "uwagi": "",
+        "confidence": None,
+        "matched_product_id": _resolve_product_id(session, _ZASILACZ_LED_KOD),
+        "match_kod": _ZASILACZ_LED_KOD,
+        "match_nazwa": "Zasilacz LED 75W",
+        "match_jm": "SZT",
+        "ilosc_z_dodatkowej_kontroli": False,
+    })
+
+
 def _download_and_prepare(get_storage, file_key: str, mime: str) -> tuple[bytes, str]:
     """Pobiera jeden plik ze storage i przygotowuje do wyslania do AI - PDF wysylany natywnie,
     obraz najpierw przeskalowany (patrz ocr/image.py, dlaczego)."""
@@ -241,6 +280,8 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         asyncio.run(_verify_ambiguous_items(
             files, items, document_id, save_ai_event, cooldown_store, dzial,
         ))
+
+        _append_auto_zasilacz_led(items, dzial, session)
 
         repository.mark_done(
             session, document,

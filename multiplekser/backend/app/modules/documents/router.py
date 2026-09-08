@@ -368,6 +368,45 @@ def _report_to_schema(report: DocumentReportModel) -> DocumentReportOut:
     )
 
 
+@router.get("/{document_id}/file")
+def get_document_file(
+    document_id: str,
+    page: int = 1,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+):
+    """Podglad/pobranie oryginalnego skanu (na zyczenie uzytkownika, 2026-09-08) - `page=1` to
+    zawsze pierwsza strona (`file_key`/`mime` wprost na Document), `page=2+` to kolejne strony
+    dokumentu wieloplikowego (`extra_files`, patrz DocumentModel.extra_files). Content-Disposition
+    "inline" (nie "attachment") - przegladarka od razu pokazuje PDF/zdjecie, uzytkownik moze
+    pobrac je sam z wlasnego podgladu przegladarki jesli chce."""
+    document = repository.get_document(session, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
+    _check_owner_or_admin(document, user)
+
+    if page < 1:
+        raise HTTPException(status_code=404, detail="Nieprawidlowy numer strony")
+    if page == 1:
+        file_key, mime = document.file_key, document.mime
+    else:
+        extra = sorted(document.extra_files, key=lambda f: f.sequence)
+        index = page - 2
+        if index < 0 or index >= len(extra):
+            raise HTTPException(status_code=404, detail="Nieprawidlowy numer strony")
+        file_key, mime = extra[index].file_key, extra[index].mime
+
+    storage = get_storage()
+    try:
+        raw = storage.download(file_key)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Plik nie zostal znaleziony w storage")
+
+    ascii_fallback = document.original_filename.encode("ascii", "replace").decode("ascii")
+    disposition = f"inline; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(document.original_filename)}"
+    return Response(content=raw, media_type=mime, headers={"Content-Disposition": disposition})
+
+
 @router.post("/{document_id}/reports", response_model=DocumentReportOut, status_code=201)
 def create_document_report(
     document_id: str,

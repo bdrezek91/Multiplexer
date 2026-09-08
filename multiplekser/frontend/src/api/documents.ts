@@ -80,3 +80,9 @@ export function resolveDocumentReport(reportId: string): Promise<DocumentReport>
     method: 'PATCH',
   })
 }
+
+// Podglad/pobranie oryginalnego skanu (na zyczenie uzytkownika, 2026-09-08) - endpoint wymaga
+// tokenu, wiec nie moze byc zwyklym <a href>, stad pobranie jako blob (jak generateDocument).
+export function getDocumentFile(documentId: string, page = 1): Promise<{ blob: Blob; filename: string | null }> {
+  return apiRequestBlob(`/documents/${encodeURIComponent(documentId)}/file?page=${page}`)
+}

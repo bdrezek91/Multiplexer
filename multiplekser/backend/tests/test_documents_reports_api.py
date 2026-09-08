@@ -117,3 +117,30 @@ def test_resolve_report_nieznane_zgloszenie_zwraca_404(client, admin_headers):
         "/documents/reports/00000000-0000-0000-0000-000000000000/resolve", headers=admin_headers,
     )
     assert r.status_code == 404
+
+
+def test_get_document_file_zwraca_oryginalny_skan(client, admin_headers, mocked_storage):
+    raw = _fake_jpeg()
+    files = {"plik": ("skan.jpg", raw, "image/jpeg")}
+    with _no_delay():
+        created = client.post("/documents", files=files, headers=admin_headers).json()
+
+    r = client.get(f"/documents/{created['id']}/file", headers=admin_headers)
+    assert r.status_code == 200
+    assert r.content == raw
+    assert r.headers["content-type"] == "image/jpeg"
+    assert "inline" in r.headers["content-disposition"]
+
+
+def test_get_document_file_bez_dostepu_zwraca_403(client, admin_headers, magazynier_headers, mocked_storage):
+    document_id = _create_document(client, admin_headers, mocked_storage)
+
+    r = client.get(f"/documents/{document_id}/file", headers=magazynier_headers)
+    assert r.status_code == 403
+
+
+def test_get_document_file_nieznana_strona_zwraca_404(client, admin_headers, mocked_storage):
+    document_id = _create_document(client, admin_headers, mocked_storage)
+
+    r = client.get(f"/documents/{document_id}/file?page=2", headers=admin_headers)
+    assert r.status_code == 404

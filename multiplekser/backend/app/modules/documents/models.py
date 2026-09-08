@@ -117,3 +117,28 @@ class DocumentFileModel(Base):
     mime: Mapped[str] = mapped_column(String, nullable=False)
 
     document: Mapped["DocumentModel"] = relationship(back_populates="extra_files")
+
+
+# "open" -> "resolved" - admin oznacza recznie po poprawieniu problemu (patrz repository.py).
+DOCUMENT_REPORT_STATUSES = ("open", "resolved")
+
+
+class DocumentReportModel(Base):
+    """Zgloszenie problemu na konkretnym dokumencie (2026-09-08, na zyczenie uzytkownika) -
+    magazynier/admin ogladajacy skan opisuje co jest zle (np. zle dopasowanie, zla ilosc), admin
+    widzi to na osobnej liscie i moze oznaczyc jako rozwiazane. Zgloszenie NIE kopiuje tresci
+    dokumentu (zdjecia/pozycji) - to celowe: dokument juz ma wszystko (skan + rozpoznane pozycje
+    zaraz po OCR, niezaleznie czy ktos juz wygenerowal TXT), wiec zgloszenie tylko linkuje do
+    niego przez document_id."""
+    __tablename__ = "document_report"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document.id"), nullable=False, index=True)
+    reported_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("app_user.id"), nullable=False)
+    opis: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="open", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    document: Mapped["DocumentModel"] = relationship()
+    reported_by: Mapped["UserModel"] = relationship()

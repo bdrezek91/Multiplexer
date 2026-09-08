@@ -115,3 +115,20 @@ export type UserCreateInput = Omit<UserInput, 'active'> & { password: string }
 export interface GenerateRequest {
   first_wydawka: boolean
 }
+
+export type DocumentReportStatus = 'open' | 'resolved'
+
+export interface DocumentReport {
+  id: string
+  document_id: string
+  document_original_filename: string
+  reported_by_email: string
+  opis: string
+  status: DocumentReportStatus
+  created_at: string
+  resolved_at: string | null
+}
+
+export interface DocumentReportCreate {
+  opis: string
+}

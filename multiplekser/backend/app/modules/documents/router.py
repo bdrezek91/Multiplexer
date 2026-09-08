@@ -32,18 +32,20 @@ from app.modules.matcher import (
 )
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
-from app.modules.users import get_current_user
+from app.modules.users import get_current_user, require_admin
 from app.modules.users.deps import check_magazyn_access
 from app.modules.users.models import UserModel
 
 from . import repository
-from .models import DocumentItemModel, DocumentModel
+from .models import DocumentItemModel, DocumentModel, DocumentReportModel
 from .schemas import (
     DocumentCreatedOut,
     DocumentItemOut,
     DocumentItemAddIn,
     DocumentItemUpdateIn,
     DocumentOut,
+    DocumentReportCreateIn,
+    DocumentReportOut,
     GenerateRequest,
     MagazynUpdateIn,
 )
@@ -351,6 +353,66 @@ def update_document_magazyn(
     session.commit()
     session.refresh(document)
     return _to_schema(document)
+
+
+def _report_to_schema(report: DocumentReportModel) -> DocumentReportOut:
+    return DocumentReportOut(
+        id=str(report.id),
+        document_id=str(report.document_id),
+        document_original_filename=report.document.original_filename,
+        reported_by_email=report.reported_by.email,
+        opis=report.opis,
+        status=report.status,
+        created_at=report.created_at,
+        resolved_at=report.resolved_at,
+    )
+
+
+@router.post("/{document_id}/reports", response_model=DocumentReportOut, status_code=201)
+def create_document_report(
+    document_id: str,
+    body: DocumentReportCreateIn,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+):
+    """Zgloszenie problemu na dokumencie (na zyczenie uzytkownika, 2026-09-08) - dowolny
+    zalogowany uzytkownik z dostepem do dokumentu opisuje co jest zle, admin widzi to na
+    osobnej liscie (GET /documents/reports)."""
+    document = repository.get_document(session, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
+    _check_owner_or_admin(document, user)
+
+    report = repository.create_report(
+        session, document_id=document.id, reported_by_id=user.id, opis=body.opis,
+    )
+    return _report_to_schema(report)
+
+
+@router.get("/reports/list", response_model=list[DocumentReportOut])
+def list_document_reports(
+    status: str | None = None,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(require_admin),
+):
+    """Lista zgloszen problemow (tylko admin) - domyslnie wszystkie, `?status=open|resolved`
+    filtruje."""
+    reports = repository.list_reports(session, status=status)
+    return [_report_to_schema(r) for r in reports]
+
+
+@router.patch("/reports/{report_id}/resolve", response_model=DocumentReportOut)
+def resolve_document_report(
+    report_id: str,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(require_admin),
+):
+    """Oznaczenie zgloszenia jako rozwiazane (tylko admin)."""
+    report = repository.get_report(session, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail=f"Zgloszenie {report_id!r} nie istnieje")
+    report = repository.resolve_report(session, report)
+    return _report_to_schema(report)
 
 
 @router.post("/{document_id}/generate")

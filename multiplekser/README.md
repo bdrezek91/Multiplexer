@@ -137,6 +137,13 @@ docker compose -f docker-compose.prod.yml exec backend python -m scripts.import_
 Bezpieczne do uruchomienia w kazdej chwili - idempotentny (klucz naturalny `rule_type`+`pattern`),
 nic nie kasuje.
 
+**Uwaga - nowa migracja Alembic** (np. nowa kolumna/tabela dodana w kodzie) **wymaga dodatkowo
+jej recznego zastosowania na serwerze** po rebuildzie, inaczej backend startuje na starym
+schemacie bazy:
+```bash
+docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+```
+
 **Inna aplikacja pod ta sama domena, na innej sciezce** (np. `/kalkulator-terminu`, bez osobnej
 subdomeny/certyfikatu) - Caddy juz ma wpis `handle_path` w `Caddyfile` wskazujacy na kontener
 `kalkulator-web:8000`. Zeby to zadzialalo, kontener tamtej aplikacji musi byc w tej samej sieci

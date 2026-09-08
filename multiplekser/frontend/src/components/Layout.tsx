@@ -39,6 +39,11 @@ export function Layout({ children }: { children: ReactNode }) {
               Użytkownicy
             </Button>
           )}
+          {user?.rola === 'admin' && (
+            <Button sx={navButtonSx} component={RouterLink} to="/reports">
+              Zgłoszenia
+            </Button>
+          )}
           <Box flexGrow={1} />
           {user && (
             <>

@@ -6,7 +6,9 @@ from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
 
-from .models import DocumentFileModel, DocumentItemModel, DocumentModel
+from datetime import datetime, timezone
+
+from .models import DocumentFileModel, DocumentItemModel, DocumentModel, DocumentReportModel
 
 
 class DocumentNotFoundError(Exception):
@@ -174,6 +176,54 @@ def update_item(
 def set_magazyn(session: Session, document: DocumentModel, magazyn: Optional[str]) -> None:
     document.magazyn = magazyn
     session.commit()
+
+
+def create_report(
+    session: Session,
+    *,
+    document_id,
+    reported_by_id,
+    opis: str,
+) -> DocumentReportModel:
+    report = DocumentReportModel(
+        document_id=document_id,
+        reported_by_id=reported_by_id,
+        opis=opis,
+        status="open",
+    )
+    session.add(report)
+    session.commit()
+    session.refresh(report)
+    return report
+
+
+def list_reports(session: Session, *, status: Optional[str] = None) -> list[DocumentReportModel]:
+    query = session.query(DocumentReportModel).options(
+        selectinload(DocumentReportModel.document), selectinload(DocumentReportModel.reported_by),
+    )
+    if status is not None:
+        query = query.filter(DocumentReportModel.status == status)
+    return query.order_by(DocumentReportModel.created_at.desc()).all()
+
+
+def get_report(session: Session, report_id) -> Optional[DocumentReportModel]:
+    uid = _to_uuid(report_id)
+    if uid is None:
+        return None
+    return (
+        session.query(DocumentReportModel)
+        .options(selectinload(DocumentReportModel.document), selectinload(DocumentReportModel.reported_by))
+        .filter(DocumentReportModel.id == uid)
+        .first()
+    )
+
+
+def resolve_report(session: Session, report: DocumentReportModel) -> DocumentReportModel:
+    report.status = "resolved"
+    report.resolved_at = datetime.now(timezone.utc)
+    session.commit()
+    session.refresh(report)
+    return report
 
 
 def add_manual_item(

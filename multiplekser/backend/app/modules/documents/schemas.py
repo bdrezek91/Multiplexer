@@ -90,3 +90,20 @@ class MagazynUpdateIn(BaseModel):
     """Zmiana magazynu PO zakonczonym OCR (np. gdy nie wybrano go przy uploadzie) - Krok
     Hydraulika-6. `null` kasuje magazyn (dokument bez magazynu)."""
     magazyn: str | None = None
+
+
+class DocumentReportCreateIn(BaseModel):
+    """Zgloszenie problemu na dokumencie (2026-09-08) - wolny tekst opisujacy co jest zle na
+    tym konkretnym skanie (np. zle dopasowanie, zla ilosc)."""
+    opis: str = Field(min_length=1, max_length=4000)
+
+
+class DocumentReportOut(BaseModel):
+    id: str
+    document_id: str
+    document_original_filename: str
+    reported_by_email: str
+    opis: str
+    status: str
+    created_at: datetime
+    resolved_at: datetime | None

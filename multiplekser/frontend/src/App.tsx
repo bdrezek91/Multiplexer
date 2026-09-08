@@ -10,6 +10,7 @@ const DocumentDetailPage = lazy(() => import('./pages/DocumentDetailPage').then(
   default: module.DocumentDetailPage,
 })))
 const UsersPage = lazy(() => import('./pages/UsersPage').then((module) => ({ default: module.UsersPage })))
+const ReportsPage = lazy(() => import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage })))
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
                   <Route path="/documents/:id" element={<DocumentDetailPage />} />
                   <Route path="/products" element={<ProductsPage />} />
                   <Route path="/users" element={<RequireAdmin><UsersPage /></RequireAdmin>} />
+                  <Route path="/reports" element={<RequireAdmin><ReportsPage /></RequireAdmin>} />
                   <Route path="*" element={<Navigate to="/documents" replace />} />
                 </Routes>
               </Layout>

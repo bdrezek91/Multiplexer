@@ -1,5 +1,15 @@
 import { apiRequest, apiRequestBlob } from './client'
-import type { DocumentCreated, DocumentDetail, DocumentItem, DocumentItemAdd, DocumentItemUpdate, GenerateRequest } from '../types'
+import type {
+  DocumentCreated,
+  DocumentDetail,
+  DocumentItem,
+  DocumentItemAdd,
+  DocumentItemUpdate,
+  DocumentReport,
+  DocumentReportCreate,
+  DocumentReportStatus,
+  GenerateRequest,
+} from '../types'
 
 export function listDocuments(): Promise<DocumentDetail[]> {
   return apiRequest<DocumentDetail[]>('/documents')
@@ -49,4 +59,24 @@ export async function generateDocument(
   body: GenerateRequest,
 ): Promise<{ blob: Blob; filename: string | null }> {
   return apiRequestBlob(`/documents/${encodeURIComponent(documentId)}/generate`, { method: 'POST', body })
+}
+
+// "Zglos problem" (2026-09-08, na zyczenie uzytkownika) - opis wolnym tekstem, link do
+// dokumentu jest automatyczny (documentId w URL) - patrz backend/app/modules/documents/router.py.
+export function createDocumentReport(documentId: string, body: DocumentReportCreate): Promise<DocumentReport> {
+  return apiRequest<DocumentReport>(`/documents/${encodeURIComponent(documentId)}/reports`, {
+    method: 'POST',
+    body,
+  })
+}
+
+export function listDocumentReports(status?: DocumentReportStatus): Promise<DocumentReport[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : ''
+  return apiRequest<DocumentReport[]>(`/documents/reports/list${query}`)
+}
+
+export function resolveDocumentReport(reportId: string): Promise<DocumentReport> {
+  return apiRequest<DocumentReport>(`/documents/reports/${encodeURIComponent(reportId)}/resolve`, {
+    method: 'PATCH',
+  })
 }

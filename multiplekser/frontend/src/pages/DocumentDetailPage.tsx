@@ -5,6 +5,10 @@ import {
   Button,
   Checkbox,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   IconButton,
   Paper,
@@ -23,11 +27,19 @@ import {
 import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import DownloadIcon from '@mui/icons-material/Download'
+import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import { alpha } from '@mui/material/styles'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState, type FocusEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { addDocumentItem, generateDocument, getDocument, updateDocumentItem, updateDocumentMagazyn } from '../api/documents'
+import {
+  addDocumentItem,
+  createDocumentReport,
+  generateDocument,
+  getDocument,
+  updateDocumentItem,
+  updateDocumentMagazyn,
+} from '../api/documents'
 import { listProducts } from '../api/products'
 import { StatusChip } from '../components/StatusChip'
 import { DzialChip } from '../components/DzialChip'
@@ -341,6 +353,77 @@ function AddItemRow({ documentId, dzial }: { documentId: string; dzial: Dzial })
   )
 }
 
+// "Zglos problem" (2026-09-08, na zyczenie uzytkownika) - dowolny opis, link do dokumentu jest
+// automatyczny (endpoint POST /documents/{id}/reports). Zgloszenie NIE kopiuje tresci
+// dokumentu - odnosi sie do stanu dokumentu takim, jaki jest w tym momencie (zaraz po odczycie
+// OCR, niezaleznie czy ktos juz wygenerowal plik Optima), bo dokument juz przechowuje wszystko.
+function ReportProblemDialog({ documentId }: { documentId: string }) {
+  const [open, setOpen] = useState(false)
+  const [opis, setOpis] = useState('')
+
+  const mutation = useMutation({
+    mutationFn: () => createDocumentReport(documentId, { opis: opis.trim() }),
+    onSuccess: () => {
+      setOpen(false)
+      setOpis('')
+    },
+  })
+
+  const handleClose = () => {
+    if (mutation.isPending) return
+    setOpen(false)
+    mutation.reset()
+  }
+
+  return (
+    <>
+      <Button
+        variant="outlined"
+        color="warning"
+        startIcon={<ReportProblemIcon />}
+        onClick={() => setOpen(true)}
+      >
+        Zgłoś problem
+      </Button>
+      <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
+        <DialogTitle>Zgłoś problem na tym dokumencie</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Opisz co jest nie tak (np. źle rozpoznane pozycje lub ilości). Zgłoszenie trafi do
+            administratora razem z linkiem do tego dokumentu.
+          </Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={3}
+            value={opis}
+            onChange={(e) => setOpis(e.target.value)}
+            placeholder="Opisz problem..."
+            disabled={mutation.isPending}
+          />
+          {mutation.isError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {mutation.error instanceof ApiError ? mutation.error.detail : 'Nie udało się zgłosić problemu'}
+            </Alert>
+          )}
+          {mutation.isSuccess && <Alert severity="success" sx={{ mt: 2 }}>Zgłoszenie wysłane.</Alert>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose} disabled={mutation.isPending}>Anuluj</Button>
+          <Button
+            variant="contained"
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending || opis.trim().length === 0}
+          >
+            Wyślij
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  )
+}
+
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -454,9 +537,10 @@ export function DocumentDetailPage() {
                   </Typography>
                 )}
               </Box>
-              <Stack direction="row" spacing={1}>
+              <Stack direction="row" spacing={1} alignItems="center">
                 <DzialChip dzial={document.dzial} confidence={document.dzial_confidence} />
                 <StatusChip status={document.status} />
+                <ReportProblemDialog documentId={documentId} />
               </Stack>
             </Stack>
 

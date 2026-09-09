@@ -5,9 +5,33 @@ from __future__ import annotations
 from io import BytesIO
 from typing import Optional
 
+import fitz
 from PIL import Image
 
 from app.core.config import settings
+
+# DPI renderowania stron PDF do obrazow (2026-09-09, patrz historia czatu - dwustronicowy
+# zeskanowany PDF, model zgubil gorna czesc pierwszej strony przy natywnym odczycie PDF przez
+# Gemini). 200 DPI daje ostry tekst formularza przy rozsadnym rozmiarze pliku (obraz i tak
+# przechodzi jeszcze przez downscale_image ponizej).
+_PDF_RENDER_DPI = 200
+
+
+def pdf_to_page_images(pdf_bytes: bytes) -> list[bytes]:
+    """Rozbija PDF na osobne obrazy PNG, po jednym na strone - kazda strona trafia PONIZEJ do AI
+    jako OSOBNA czesc zapytania, dokladnie tak jak juz sprawdzony przypadek "kilka zdjec z
+    telefonu = kilka stron jednej wydawki" (patrz ocr/providers.py, tasks.py). Natywne wysylanie
+    calego wielostronicowego PDF jako jednego pliku bylo mniej niezawodne - model potrafil
+    zgubic fragment tresci (np. gorna czesc pierwszej strony) na gestym, dwustronicowym
+    dokumencie."""
+    zoom = _PDF_RENDER_DPI / 72
+    matrix = fitz.Matrix(zoom, zoom)
+    pages: list[bytes] = []
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        for page in doc:
+            pix = page.get_pixmap(matrix=matrix)
+            pages.append(pix.tobytes("png"))
+    return pages
 
 
 def downscale_image(file_bytes: bytes, max_side: Optional[int] = None, quality: Optional[int] = None) -> bytes:

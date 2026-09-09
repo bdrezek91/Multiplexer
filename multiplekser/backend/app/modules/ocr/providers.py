@@ -36,10 +36,13 @@ class OCRProvider(ABC):
 
 
 class GeminiProvider(OCRProvider):
-    """Port geminiRecognize() z monolitu - PDF wysylany natywnie, obrazy jako inline_data.
-    Wiele plikow trafia jako wiele czesci `inline_data` w JEDNYM zapytaniu (Gemini wspiera to
-    natywnie) - prompt (patrz prompt.py) instruuje model, ze wtedy to kolejne strony jednego
-    dokumentu, nie osobne dokumenty."""
+    """Port geminiRecognize() z monolitu - kazdy plik trafia jako `inline_data`. PDF NIE jest
+    wysylany natywnie do tej klasy - jest rozbijany na osobne obrazy per strona ZANIM tu trafi
+    (patrz documents/tasks.py: _download_and_prepare/ocr/image.py: pdf_to_page_images, 2026-09-09
+    - natywne wysylanie calego wielostronicowego PDF bylo mniej niezawodne, model potrafil zgubic
+    fragment tresci na gestym dokumencie). Wiele plikow trafia jako wiele czesci `inline_data` w
+    JEDNYM zapytaniu (Gemini wspiera to natywnie) - prompt (patrz prompt.py) instruuje model, ze
+    wtedy to kolejne strony jednego dokumentu, nie osobne dokumenty."""
 
     async def recognize(
         self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,

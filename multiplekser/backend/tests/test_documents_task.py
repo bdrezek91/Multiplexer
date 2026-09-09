@@ -83,6 +83,58 @@ def test_run_ocr_task_dwa_pliki_wysyla_oba_w_jednym_zapytaniu(
     assert saved.extra_files[0].file_key == key2
 
 
+def _fake_two_page_pdf_bytes() -> bytes:
+    """PDF ze skanera z dwiema stronami - realny przypadek (patrz historia czatu 2026-09-09:
+    dwustronicowy PDF, model zgubil gorna czesc pierwszej strony przy natywnym odczycie calego
+    pliku PDF)."""
+    import fitz
+
+    doc = fitz.open()
+    for text in ("strona 1", "strona 2"):
+        page = doc.new_page()
+        page.insert_text((72, 72), text)
+    buf = BytesIO(doc.tobytes())
+    doc.close()
+    return buf.getvalue()
+
+
+def test_run_ocr_task_pdf_wielostronicowy_rozbity_na_osobne_obrazy(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Wielostronicowy PDF NIE jest wysylany natywnie jako jeden plik - kazda strona trafia jako
+    OSOBNY obraz (patrz ocr/image.py: pdf_to_page_images i tasks.py: _download_and_prepare) -
+    ten sam, juz sprawdzony mechanizm co "kilka zdjec z telefonu" powyzej. Natywny PDF byl mniej
+    niezawodny na gestych, wielostronicowych dokumentach (model gubil fragmenty tresci)."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+
+    key = f"documents/test/{admin_user.id}-skan.pdf"
+    get_storage().upload(key, _fake_two_page_pdf_bytes(), "application/pdf")
+    document = doc_repo.create_document(
+        db_session, user_id=admin_user.id, file_key=key, mime="application/pdf",
+        original_filename="skan.pdf",
+    )
+
+    classify_response = '{"dzial":"elektryka","confidence":98.0}'
+    ocr_response = (
+        '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    )
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+    ) as mock_recognize:
+        run_ocr_task(str(document.id), db_session)
+
+    for call in mock_recognize.call_args_list:
+        files = call.kwargs["files"]
+        assert len(files) == 2  # dwie strony PDF = dwie osobne czesci zapytania
+        for _file_bytes, mime in files:
+            assert mime == "image/jpeg"  # rozbite na obrazy, nie natywny "application/pdf"
+
+    saved = doc_repo.get_document(db_session, str(document.id))
+    assert saved.status == "done"
+
+
 def test_run_ocr_task_sukces_zapisuje_pozycje(
     db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
 ):

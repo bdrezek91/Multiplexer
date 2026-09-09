@@ -27,7 +27,7 @@ from app.modules.matcher.result import QUALITY_OK
 from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback
 from app.modules.ocr.classify import classify_document
 from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
-from app.modules.ocr.image import downscale_image
+from app.modules.ocr.image import downscale_image, pdf_to_page_images
 from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
@@ -208,13 +208,16 @@ def _append_auto_zasilacz_led(items: list[dict], dzial: str, session: Session) -
     })
 
 
-def _download_and_prepare(get_storage, file_key: str, mime: str) -> tuple[bytes, str]:
-    """Pobiera jeden plik ze storage i przygotowuje do wyslania do AI - PDF wysylany natywnie,
-    obraz najpierw przeskalowany (patrz ocr/image.py, dlaczego)."""
+def _download_and_prepare(get_storage, file_key: str, mime: str) -> list[tuple[bytes, str]]:
+    """Pobiera jeden plik ze storage i przygotowuje do wyslania do AI. PDF jest rozbijany na
+    OSOBNE obrazy, po jednym na strone (patrz ocr/image.py: pdf_to_page_images, dlaczego -
+    natywne wysylanie calego PDF jako jednego pliku bylo mniej niezawodne na gestych,
+    wielostronicowych dokumentach) - stad lista, nie pojedynczy plik. Zwykly obraz zostaje
+    pojedynczym elementem listy, tylko przeskalowanym (patrz ocr/image.py, dlaczego)."""
     raw = get_storage().download(file_key)
     if mime == _PDF_MIME:
-        return raw, _PDF_MIME
-    return downscale_image(raw), "image/jpeg"
+        return [(downscale_image(page), "image/jpeg") for page in pdf_to_page_images(raw)]
+    return [(downscale_image(raw), "image/jpeg")]
 
 
 def run_ocr_task(document_id: str, session: Session) -> None:
@@ -234,15 +237,14 @@ def run_ocr_task(document_id: str, session: Session) -> None:
 
     try:
         # Wiele plikow = wiele osobnych stron TEGO SAMEGO dokumentu (np. dwa zdjecia z telefonu
-        # jednej papierowej wydawki, ktorej nie da sie zmiescic na jednym zdjeciu tak jak wielo-
-        # stronicowy PDF ze skanera) - patrz historia czatu. Pierwszy plik to zawsze
+        # jednej papierowej wydawki, ktorej nie da sie zmiescic na jednym zdjeciu, albo kolejne
+        # strony wielostronicowego PDF ze skanera rozbite na obrazy - patrz _download_and_prepare
+        # powyzej i historia czatu) - patrz tez ocr/providers.py. Pierwszy plik to zawsze
         # document.file_key/mime (wsteczna zgodnosc), kolejne to document.extra_files w kolejnosci
-        # `sequence`. Wszystkie razem trafiaja do Gemini w jednym zapytaniu (ocr/providers.py).
-        files = [_download_and_prepare(get_storage, document.file_key, document.mime)]
-        files += [
-            _download_and_prepare(get_storage, extra.file_key, extra.mime)
-            for extra in document.extra_files
-        ]
+        # `sequence`. Wszystkie razem trafiaja do Gemini w jednym zapytaniu.
+        files = list(_download_and_prepare(get_storage, document.file_key, document.mime))
+        for extra in document.extra_files:
+            files += _download_and_prepare(get_storage, extra.file_key, extra.mime)
 
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher

@@ -99,9 +99,10 @@ _PODOBNE_WIERSZE_DOPISEK = (
 # (falszywa) pewnoscia, wiec bledna wartosc nigdy nie trafila do dodatkowej kontroli.
 _PUSTY_WIERSZ_DOPISEK = (
     ' PUSTY WIERSZ NIGDY NIE DOSTAJE CUDZEJ ILOŚCI: zanim zwrócisz jakąkolwiek liczbę dla '
-    'wiersza, sprawdź czy odręczny ślad (cyfra/ptaszek/skreślenie) leży FIZYCZNIE wewnątrz linii '
-    'siatki TEGO KONKRETNEGO wiersza, a nie sąsiedniego nad lub pod nim. Jeśli komórka ilości '
-    'danego wiersza jest wizualnie pusta (sam druk, bez odręcznego śladu) - ta pozycja NIE MA '
+    'wiersza, sprawdź czy ślad wartości (cyfra odręczna LUB wydrukowana, ptaszek, skreślenie) '
+    'leży FIZYCZNIE wewnątrz linii siatki TEGO KONKRETNEGO wiersza, a nie sąsiedniego nad lub '
+    'pod nim. Jeśli komórka ilości danego wiersza jest wizualnie pusta (sama struktura '
+    'formularza - linia siatki, bez jakiejkolwiek cyfry czy innego śladu) - ta pozycja NIE MA '
     'ilości, NAWET JEŚLI sąsiedni wiersz (wyżej lub niżej) ma wyraźne zaznaczenie o konkretnej '
     'wartości. Nigdy nie przypisuj liczby z sąsiedniej, zaznaczonej komórki do pustej komórki '
     'obok tylko dlatego, że są blisko siebie na obrazie - to zdarza się nawet między wierszami o '
@@ -115,13 +116,30 @@ AI_OCR_PROMPT_HYDRAULIKA = 'Jesteś przemysłowym silnikiem OCR do dokumentów m
 # Rozroznienie pustego wiersza szablonu od wiersza z widocznym, lecz nieczytelnym znakiem.
 # Bez tej flagi model potrafil zwrocic wiele drukowanych, pustych wierszy; dodatkowa kontrola
 # probowala je potem "uzupelnic" liczbami skopiowanymi z sasiednich pozycji.
+#
+# Poprawka 2026-09-09 (realny przypadek produkcyjny): niektore projekty Elektryki maja
+# gotowy, standardowy "zestaw bazowy" wydrukowany/wpisany komputerowo wprost w komorki ilosci
+# formularza (ten sam font co reszta dokumentu, NIE odrecznie) - to sa realne, obowiazujace
+# ilosci do wydania, nie dekoracja szablonu. Pierwotne sformulowanie ("naprawde widac odreczny
+# slad") kazalo modelowi traktowac TAKIE komorki jak puste (bo "sam druk nie jest
+# oznaczeniem") i pomijac cale wiersze - w dwoch kolejnych, realnych dokumentach model przez to
+# zgubil kilkanascie pozycji z gory pierwszej strony. Rozroznienie musi byc "pusta komorka" vs
+# "komorka z jakakolwiek liczba" (odreczna LUB wydrukowana), nie "odreczna" vs "drukowana" -
+# drukiem/nieoznaczeniem pozostaja wylacznie STRUKTURA formularza (linie tabeli, etykiety
+# nazw/jednostek, naglowki kolumn), nigdy cyfra faktycznie wpisana w komorke ilosci.
 _MARK_CONTRACT = (
     'STATUS WIERSZA: dla KAŻDEJ zwracanej pozycji dodaj pole logiczne "ma_oznaczenie". Ustaw '
-    'true tylko wtedy, gdy w co najmniej jednej komórce ilości naprawdę widać odręczny ślad: '
-    'cyfrę, ptaszek, skreślenie lub inny znak. Sam druk, nazwa materiału i linie tabeli nie są '
-    'oznaczeniem. Wiersz bez żadnego odręcznego śladu w obu komórkach ilości POMIŃ całkowicie. '
-    'Jeżeli ślad jest widoczny, ale cyfry nie da się odczytać z 99% pewnością, zwróć ten wiersz '
-    'z "ma_oznaczenie":true i obiema ilościami null — wtedy trafi do dodatkowej kontroli.'
+    'true tylko wtedy, gdy w co najmniej jednej komórce ilości naprawdę widać jakikolwiek ślad '
+    'wartości: cyfrę (odręczną LUB wydrukowaną/wpisaną komputerowo bezpośrednio w tej komórce), '
+    'ptaszek, skreślenie lub inny znak. Niektóre projekty mają gotowy zestaw bazowy z ilościami '
+    'wydrukowanymi wprost w komórkach tym samym fontem co reszta formularza - to SĄ realne, '
+    'obowiązujące ilości, dokładnie tak samo jak liczby wpisane odręcznie długopisem, NIGDY nie '
+    'traktuj ich jak puste/nieoznaczone tylko dlatego że nie są odręczne. "Sam druk" bez wartości '
+    '- czyli STRUKTURA formularza: linie tabeli, nazwa materiału, jednostka, nagłówki kolumn - '
+    'nie jest oznaczeniem. Wiersz bez żadnej wartości (odręcznej ani wydrukowanej) w obu '
+    'komórkach ilości POMIŃ całkowicie. Jeżeli ślad jest widoczny, ale cyfry nie da się odczytać '
+    'z 99% pewnością, zwróć ten wiersz z "ma_oznaczenie":true i obiema ilościami null — wtedy '
+    'trafi do dodatkowej kontroli.'
 )
 
 

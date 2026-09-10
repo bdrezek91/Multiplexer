@@ -122,7 +122,51 @@ DEFAULT_SPECIAL_RULES: list[SpecialRule] = [
             "documents/tasks.py: _append_auto_zasilacz_led()."
         ),
     ),
+    # "Gniazdo podwojne [kolor] [kraj] podtynkowe" nie ma wlasnego kodu w Optimie - fizycznie
+    # sklada sie z DWOCH pojedynczych gniazd podtynkowych z klapka (na zyczenie uzytkownika,
+    # 2026-09-10). Override ustawia poprawny kod pojedynczego gniazda w danym kolorze/kraju;
+    # PODWOJENIE ilosci (x2) dzieje sie NIE tutaj (MatchResult nie niesie ilosci), tylko w
+    # documents/tasks.py: _podwoj_ilosc_gniazda_podwojnego_podtynkowego() po dopasowaniu - ten
+    # sam wzorzec co auto-doliczany zasilacz LED. Wymaga jawnego slowa kraju (niemiec.../polsk...)
+    # w tekscie - bez niego nie zgadujemy, ktory wariant kraju wstawic (patrz opis nizej).
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\bgniazdo\b)(?=.*\bpodw[oó]jne\b)(?=.*\bpodtynk)(?=.*\bbia[łl])(?=.*niemiec)",
+        target_kod="GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE NIEMIECKIE",
+        priority=74,
+        description="Gniazdo podwojne biale niemieckie podtynkowe -> pojedyncze biale niemieckie z klapka (ilosc x2, patrz tasks.py).",
+    ),
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\bgniazdo\b)(?=.*\bpodw[oó]jne\b)(?=.*\bpodtynk)(?=.*grafit)(?=.*niemiec)",
+        target_kod="GNIAZDO 16A PODTYNKOWE Z KLAPKĄ GRAFIT NIEMIECKIE",
+        priority=75,
+        description="Gniazdo podwojne grafit niemieckie podtynkowe -> pojedyncze grafit niemieckie z klapka (ilosc x2, patrz tasks.py).",
+    ),
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\bgniazdo\b)(?=.*\bpodw[oó]jne\b)(?=.*\bpodtynk)(?=.*\bbia[łl])(?=.*polsk)",
+        target_kod="GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE POLSKIE",
+        priority=76,
+        description="Gniazdo podwojne biale polskie podtynkowe -> pojedyncze biale polskie z klapka (ilosc x2, patrz tasks.py).",
+    ),
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\bgniazdo\b)(?=.*\bpodw[oó]jne\b)(?=.*\bpodtynk)(?=.*grafit)(?=.*polsk)",
+        target_kod="GNIAZDO 16A PODTYNKOWE Z KLAPKĄ GRAFIT POLSKIE",
+        priority=77,
+        description="Gniazdo podwojne grafit polskie podtynkowe -> pojedyncze grafit polskie z klapka (ilosc x2, patrz tasks.py).",
+    ),
 ]
+
+# Kody docelowe powyzszych 4 regul "podwojne podtynkowe" - tasks.py: _podwoj_ilosc_gniazda_
+# podwojnego_podtynkowego() sprawdza po nich, czy dana pozycja wymaga podwojenia ilosci.
+GNIAZDO_PODTYNKOWE_Z_KLAPKA_KODY = frozenset({
+    "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE NIEMIECKIE",
+    "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ GRAFIT NIEMIECKIE",
+    "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE POLSKIE",
+    "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ GRAFIT POLSKIE",
+})
 
 
 def _snap_to_step(value: float, steps: list[float]) -> float:

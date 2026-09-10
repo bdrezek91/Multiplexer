@@ -456,6 +456,55 @@ def test_run_ocr_task_bez_tasmy_led_nie_dodaje_zasilacza(
     assert all(it.match_kod != "ZASILACZ LED 75W" for it in document.items)
 
 
+def test_run_ocr_task_gniazdo_podwojne_podtynkowe_podwaja_ilosc(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Na zyczenie uzytkownika (2026-09-10): 'gniazdo podwojne ... podtynkowe' nie ma wlasnego
+    kodu w Optimie - to fizycznie DWA pojedyncze gniazda podtynkowe z klapka, wiec ilosc musi
+    zostac automatycznie podwojona (special_rules.py samo w sobie nie moze tego zrobic, bo
+    MatchResult nie niesie ilosci - patrz _podwoj_ilosc_gniazda_podwojnego_podtynkowego)."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+
+    ai_response = (
+        '{"pozycje": ['
+        '{"nazwa": "Gniazdo podwójne niemieckie białe podtynkowe", "ilosc_wydana": "1", "confidence": 98}'
+        ']}'
+    )
+    with _mock_recognize(ai_response):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert len(document.items) == 1
+    item = document.items[0]
+    assert item.match_kod == "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE NIEMIECKIE"
+    assert item.ilosc_wydana == 2.0
+    assert item.ilosc_finalna == 2.0
+
+
+def test_run_ocr_task_gniazdo_pojedyncze_podtynkowe_nie_podwaja_ilosci(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+
+    ai_response = (
+        '{"pozycje": ['
+        '{"nazwa": "Gniazdo pojedyncze niemieckie białe podtynkowe", "ilosc_wydana": "1", "confidence": 98}'
+        ']}'
+    )
+    with _mock_recognize(ai_response):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    item = document.items[0]
+    assert item.match_kod == "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE NIEMIECKIE"
+    assert item.ilosc_wydana == 1.0
+
+
 def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(
     db_session, admin_user, mocked_storage, gemini_key_configured, baza_hydraulika_json,
 ):

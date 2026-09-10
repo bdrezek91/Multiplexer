@@ -98,6 +98,31 @@ def test_r5_wariant_magazynowy_podstawia_kod(catalog):
     assert r_brak.kod == "BEZPIECZNIK 25A NIEMIECKI"
 
 
+@pytest.mark.parametrize("nazwa,oczekiwany_kod", [
+    ("Gniazdo podwójne niemieckie białe podtynkowe", "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE NIEMIECKIE"),
+    ("Gniazdo podwójne grafit niemieckie podtynkowe", "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ GRAFIT NIEMIECKIE"),
+    ("Gniazdo podwójne polskie białe podtynkowe", "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE POLSKIE"),
+    ("Gniazdo podwójne grafit polskie podtynkowe", "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ GRAFIT POLSKIE"),
+])
+def test_gniazdo_podwojne_podtynkowe_mapuje_na_pojedyncze_z_klapka(catalog, nazwa, oczekiwany_kod):
+    """Na zyczenie uzytkownika (2026-09-10): gniazdo podwojne podtynkowe nie ma wlasnego kodu w
+    Optimie - sklada sie fizycznie z DWOCH pojedynczych gniazd z klapka. Matcher ustawia kod
+    POJEDYNCZEGO gniazda w odpowiednim kolorze/kraju - podwojenie ILOSCI dzieje sie osobno,
+    w documents/tasks.py (MatchResult nie niesie ilosci), patrz test_documents_task.py.
+    `.strip()` bo katalog ma dla wariantu "GRAFIT POLSKIE" spacje koncowa w samym kodzie Optima
+    (dane zrodlowe, nie blad kodu - Catalog.find_by_kod juz toleruje to przez fallback trim)."""
+    r = match_against_catalog(nazwa, catalog)
+    assert r.kod.strip() == oczekiwany_kod
+    assert r.quality == "ok"
+
+
+def test_gniazdo_pojedyncze_podtynkowe_nie_jest_dotkniete_regula(catalog):
+    """Kontrola negatywna - zwykle POJEDYNCZE gniazdo podtynkowe (bez 'podwójne' w tekście) nie
+    powinno wpasc w regule 'podwojne podtynkowe' (ktora wymaga slowa 'podwojne')."""
+    r = match_against_catalog("Gniazdo pojedyncze niemieckie białe podtynkowe", catalog)
+    assert r.kod == "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE NIEMIECKIE"
+
+
 def test_stary_r1b_gniazdo_grafit_pokryty_regula_ogolna(catalog):
     """Stary, waski R1b z monolitu (twardo zakodowany tylko dla 'gniazdo z klapka grafit')
     NIE zostal przeniesiony do special_rules - ten test potwierdza, ze generalna regula

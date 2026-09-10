@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from typing import Mapping, Optional
 
@@ -23,6 +24,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
+from app.modules.matcher.special_rules import GNIAZDO_PODTYNKOWE_Z_KLAPKA_KODY
 from app.modules.matcher.result import QUALITY_OK
 from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback
 from app.modules.ocr.classify import classify_document
@@ -208,6 +210,32 @@ def _append_auto_zasilacz_led(items: list[dict], dzial: str, session: Session) -
     })
 
 
+# Na zyczenie uzytkownika (2026-09-10): "Gniazdo podwojne [kolor] [kraj] podtynkowe" nie ma
+# wlasnego kodu w Optimie - fizycznie sklada sie z DWOCH pojedynczych gniazd podtynkowych z
+# klapka. special_rules.py juz ustawil poprawny kod POJEDYNCZEGO gniazda (patrz
+# GNIAZDO_PODTYNKOWE_Z_KLAPKA_KODY) - tu tylko PODWAJAMY ilosc, bo MatchResult (uzywany przy
+# dopasowywaniu) nie niesie ze soba ilosci, wiec special_rules.py nie moze tego zrobic sam.
+_PODWOJNE_WZORZEC = re.compile(r"\bpodw[oó]jne\b", re.IGNORECASE)
+
+
+def _podwoj_ilosc_gniazda_podwojnego_podtynkowego(items: list[dict]) -> None:
+    for it in items:
+        kod = it.get("match_kod")
+        # `.strip()` - jeden z kodow w katalogu ("...GRAFIT POLSKIE") ma spacje koncowa w samych
+        # danych zrodlowych (Catalog.find_by_kod juz to toleruje przez fallback trim przy
+        # dopasowywaniu, tu porownujemy tak samo, zeby nie ominac tego wariantu).
+        if kod is None or kod.strip() not in GNIAZDO_PODTYNKOWE_Z_KLAPKA_KODY:
+            continue
+        if not _PODWOJNE_WZORZEC.search(it.get("rozpoznana_nazwa") or ""):
+            continue
+        for pole in ("ilosc_wydana", "ilosc_zuzyta", "ilosc_finalna"):
+            wartosc = it.get(pole)
+            if wartosc is not None:
+                it[pole] = wartosc * 2
+        dopisek = "Gniazdo podwójne = 2x gniazdo pojedyncze podtynkowe z klapką - ilość podwojona automatycznie."
+        it["uwagi"] = f"{it['uwagi']} {dopisek}".strip() if it.get("uwagi") else dopisek
+
+
 def _download_and_prepare(get_storage, file_key: str, mime: str) -> list[tuple[bytes, str]]:
     """Pobiera jeden plik ze storage i przygotowuje do wyslania do AI. PDF jest rozbijany na
     OSOBNE obrazy, po jednym na strone (patrz ocr/image.py: pdf_to_page_images, dlaczego -
@@ -284,6 +312,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         ))
 
         _append_auto_zasilacz_led(items, dzial, session)
+        _podwoj_ilosc_gniazda_podwojnego_podtynkowego(items)
 
         repository.mark_done(
             session, document,

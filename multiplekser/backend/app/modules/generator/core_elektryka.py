@@ -33,6 +33,8 @@ _LAMPA_SZYNO_RE = re.compile(
 _SZYNO_MB_RE = re.compile(r"szynoprz[e]?[wv][oó]d\s*(czarn\w*|bia[łl]\w*)\s*(\d+)\s*mb?", re.IGNORECASE)
 _KORYT_RE = re.compile(r"koryt", re.IGNORECASE)
 _KORYT_DIM_RE = re.compile(r"(\d+)\s*[xX]\s*(\d+)")
+_PUSZKA_PUSTA_86X86_RE = re.compile(r"puszk\w*\s*pust\w*\s*86\s*[xX]\s*86\b", re.IGNORECASE)
+_PUSZKA_PUSTA_86X86_KOD = {"black": "PUSZKA PUSTA 86X86 CZARNA", "white": "PUSZKA PUSTA 86X86"}
 
 _ZESTAW_KODY = {"czarny": "ZESTAW LAMPY SZYNOWE CZARNE", "biały": "ZESTAW LAMPY SZYNOWE BIAŁE"}
 _VERY_LOW_RATIO = 0.2
@@ -78,6 +80,18 @@ def _tray_kod_for(name: str, current_color: str) -> Optional[str] | dict:
     if current_color == "black" and key == "60x90":
         return {"blocked": True}
     return None
+
+
+def _puszka_kod_for(name: str, current_color: str) -> Optional[str]:
+    """"Puszka pusta 86x86" nie ma koloru wpisanego na formularzu (w przeciwienstwie do korytek,
+    gdzie kolor jest zawsze podany wprost na kartce) - mimo to fizycznie istnieje w obu kolorach
+    w Optimie. Na zyczenie uzytkownika (2026-09-15, realny przypadek produkcyjny - dokument
+    "czarny" dostal biala puszke): przyjmuje kolor dominujacy calego projektu, tak samo jak
+    korytka (_tray_kod_for powyzej). "Puszka pusta 86x45" NIE ma odpowiednika w Optimie w zadnym
+    kolorze (sprawdzone w katalogu) - celowo poza zakresem tej funkcji."""
+    if not _PUSZKA_PUSTA_86X86_RE.search(name):
+        return None
+    return _PUSZKA_PUSTA_86X86_KOD["black" if current_color == "black" else "white"]
 
 
 def generate_output(
@@ -162,6 +176,11 @@ def generate_output(
             continue
         if isinstance(tray, str):
             add_kod(tray, it.qty, "M", item_order)
+            continue
+
+        puszka_kod = _puszka_kod_for(it.name, current_color)
+        if puszka_kod:
+            add_kod(puszka_kod, it.qty, "SZT", item_order)
             continue
 
         # Reczna korekta (PATCH .../items/{item_id}) albo juz-dobre dopasowanie z pierwszego OCR

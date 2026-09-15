@@ -178,6 +178,35 @@ def test_korytko_czarne_60x90_brak_dopasowania_bez_zgadywania(catalog):
     assert not any("KORYTKO" in l and "BRAK" not in l for l in result.lines)
 
 
+# ---- Puszka pusta 86x86: mapowanie na kolor dominujacy, ten sam wzorzec co korytka ----
+
+def test_puszka_pusta_86x86_mapowana_na_kolor_dominujacy(catalog):
+    """Na zyczenie uzytkownika (2026-09-15, realny przypadek produkcyjny) - "Puszka pusta 86x86"
+    nie ma koloru na formularzu, ale fizycznie istnieje w obu kolorach w Optimie. W dokumencie
+    "czarnym" (przewaga czarnego osprzetu) ma dostac czarny kod, nie domyslny bialy."""
+    items = [
+        GeneratorItem(name="Wyłącznik jednobiegunowy czarny", qty=3),
+        GeneratorItem(name="Wyłącznik krzyżowy czarny", qty=2),
+        GeneratorItem(name="Puszka pusta 86x86", qty=4),
+    ]
+    result = generate_output(items, catalog, magazyn=None)
+    assert result.dominant_color == "black"
+    by_kod = _lines_by_kod(result.lines)
+    assert "PUSZKA PUSTA 86X86 CZARNA" in by_kod
+
+
+def test_puszka_pusta_86x86_bialy_projekt_zostaje_domyslna(catalog):
+    items = [
+        GeneratorItem(name="Wyłącznik jednobiegunowy biały", qty=3),
+        GeneratorItem(name="Puszka pusta 86x86", qty=4),
+    ]
+    result = generate_output(items, catalog, magazyn=None)
+    assert result.dominant_color == "white"
+    by_kod = _lines_by_kod(result.lines)
+    assert "PUSZKA PUSTA 86X86" in by_kod
+    assert "PUSZKA PUSTA 86X86 CZARNA" not in by_kod
+
+
 # ---- offForm downgrade + fallback "Elektryka" linia ----
 
 def test_offform_z_niskim_ratio_dostaje_fallback_elektryka(catalog):

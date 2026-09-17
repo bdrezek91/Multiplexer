@@ -17,6 +17,7 @@ vi.mock('../api/documents', async () => {
     addDocumentItem: vi.fn(),
     createOptimaLink: vi.fn(),
     revokeOptimaLink: vi.fn(),
+    updateDocumentMetadane: vi.fn(),
   }
 })
 vi.mock('../api/products', async () => {
@@ -38,6 +39,8 @@ const documentDetail: DocumentDetail = {
   id: 'doc1',
   status: 'done',
   numer_projektu: '123',
+  pracownik: null,
+  numer_plomby: null,
   source_type: 'pdf',
   magazyn: null,
   dzial: 'hydraulika',

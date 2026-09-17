@@ -111,8 +111,12 @@ def mark_done(
     items: list[dict],
     dzial: Optional[str] = None,
     dzial_confidence: Optional[float] = None,
+    pracownik: Optional[str] = None,
+    numer_plomby: Optional[str] = None,
 ) -> None:
     document.numer_projektu = numer_projektu
+    document.pracownik = pracownik
+    document.numer_plomby = numer_plomby
     document.used_provider = used_provider
     document.rejected_count = rejected_count
     document.items = [DocumentItemModel(sequence=i, **item) for i, item in enumerate(items)]
@@ -178,6 +182,22 @@ def update_item(
 
 def set_magazyn(session: Session, document: DocumentModel, magazyn: Optional[str]) -> None:
     document.magazyn = magazyn
+    session.commit()
+
+
+def set_metadane(
+    session: Session,
+    document: DocumentModel,
+    *,
+    pracownik: Optional[str] = ...,
+    numer_plomby: Optional[str] = ...,
+) -> None:
+    """Reczna korekta pol odczytanych przez OCR z naglowka formularza (2026-09-17) - Ellipsis
+    jako "nie zmieniaj tego pola", tak samo jak w update_item ponizej."""
+    if pracownik is not ...:
+        document.pracownik = pracownik
+    if numer_plomby is not ...:
+        document.numer_plomby = numer_plomby
     session.commit()
 
 

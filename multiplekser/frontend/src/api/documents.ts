@@ -9,6 +9,7 @@ import type {
   DocumentReportCreate,
   DocumentReportStatus,
   GenerateRequest,
+  MetadaneUpdate,
   OptimaLink,
 } from '../types'
 
@@ -34,6 +35,15 @@ export function updateDocumentMagazyn(documentId: string, magazyn: string | null
   return apiRequest<DocumentDetail>(`/documents/${encodeURIComponent(documentId)}/magazyn`, {
     method: 'PATCH',
     body: { magazyn },
+  })
+}
+
+// Reczna korekta pracownika/numeru plomby-rozdzielni odczytanych przez OCR z naglowka
+// formularza (2026-09-17, na zyczenie uzytkownika) - tylko informacyjne pola.
+export function updateDocumentMetadane(documentId: string, body: MetadaneUpdate): Promise<DocumentDetail> {
+  return apiRequest<DocumentDetail>(`/documents/${encodeURIComponent(documentId)}/metadane`, {
+    method: 'PATCH',
+    body,
   })
 }
 

@@ -43,6 +43,32 @@ async def test_pozycja_z_glownego_formularza_dopasowana_ok(catalog, gemini_key_c
     assert item.off_form is False
 
 
+async def test_pracownik_i_numer_plomby_odczytane_z_naglowka(catalog, gemini_key_configured):
+    ai_response = (
+        '{"numer_projektu": "12/05/26", "pracownik": "Jan Kowalski", "numer_plomby": "12345", "pozycje": ['
+        '{"nazwa": "Zawór kątowy 1/2x3/4", "ilosc_wydana": "2", "ilosc_zuzyta": null, "confidence": 98}'
+        "]}"
+    )
+    with _mock_recognize(ai_response):
+        result = await recognize_document_hydraulika([(b"dane", "image/jpeg")], catalog)
+
+    assert result.pracownik == "Jan Kowalski"
+    assert result.numer_plomby == "12345"
+
+
+async def test_brak_pracownika_i_numeru_plomby_w_odpowiedzi_daje_none(catalog, gemini_key_configured):
+    ai_response = (
+        '{"numer_projektu": "12/05/26", "pozycje": ['
+        '{"nazwa": "Zawór kątowy 1/2x3/4", "ilosc_wydana": "2", "ilosc_zuzyta": null, "confidence": 98}'
+        "]}"
+    )
+    with _mock_recognize(ai_response):
+        result = await recognize_document_hydraulika([(b"dane", "image/jpeg")], catalog)
+
+    assert result.pracownik is None
+    assert result.numer_plomby is None
+
+
 async def test_pozycja_z_bazy_dodatkowej_oznaczona_do_weryfikacji(catalog, gemini_key_configured):
     ai_response = '{"pozycje": [{"nazwa": "Grzejnik 1000W", "ilosc_wydana": "1"}]}'
     with _mock_recognize(ai_response):

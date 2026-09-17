@@ -319,6 +319,7 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             numer_projektu=result.numer_projektu, used_provider=result.used_provider,
             rejected_count=result.rejected_count, items=items,
             dzial=dzial, dzial_confidence=classify_result.confidence,
+            pracownik=result.pracownik, numer_plomby=result.numer_plomby,
         )
         logger.info(
             "OCR - zakonczone sukcesem",

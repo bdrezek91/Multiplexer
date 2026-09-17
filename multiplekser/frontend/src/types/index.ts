@@ -75,6 +75,10 @@ export interface DocumentDetail {
   id: string
   status: DocumentStatus
   numer_projektu: string | null
+  // Odczytane z naglowka formularza przez OCR (2026-09-17) - informacyjne, edytowalne recznie
+  // (PATCH /documents/{id}/metadane), NIE wchodza do generowanego pliku TXT dla Optimy.
+  pracownik: string | null
+  numer_plomby: string | null
   source_type: string
   magazyn: string | null
   dzial: Dzial | null
@@ -103,6 +107,11 @@ export interface DocumentCreated {
 export interface DocumentItemUpdate {
   ilosc_finalna?: number | null
   match_kod?: string | null
+}
+
+export interface MetadaneUpdate {
+  pracownik?: string | null
+  numer_plomby?: string | null
 }
 
 export interface DocumentItemAdd {

@@ -46,6 +46,7 @@ import {
   revokeOptimaLink,
   updateDocumentItem,
   updateDocumentMagazyn,
+  updateDocumentMetadane,
 } from '../api/documents'
 import { listProducts } from '../api/products'
 import { StatusChip } from '../components/StatusChip'
@@ -135,6 +136,50 @@ function AITracePanel({ events }: { events: AITraceEvent[] }) {
         })}
       </Stack>
     </Box>
+  )
+}
+
+// Reczna korekta pracownika/numeru plomby-rozdzielni odczytanych przez OCR z naglowka
+// formularza (2026-09-17, na zyczenie uzytkownika) - to samo pole moze byc odczytane bledne,
+// wiec (tak jak reszta OCR) daje sie poprawic recznie. `key` w miejscu uzycia (jak przy
+// QtyFinalnaCell) wymusza remount przy odswiezeniu dokumentu spoza tego pola.
+function MetadaneField({
+  documentId,
+  field,
+  value,
+  label,
+}: {
+  documentId: string
+  field: 'pracownik' | 'numer_plomby'
+  value: string | null
+  label: string
+}) {
+  const queryClient = useQueryClient()
+  const [text, setText] = useState(value ?? '')
+
+  const mutation = useMutation({
+    mutationFn: (next: string | null) => updateDocumentMetadane(documentId, { [field]: next }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', documentId] }),
+  })
+
+  const handleBlur = (event: FocusEvent<HTMLInputElement>) => {
+    const raw = event.target.value.trim()
+    const next = raw === '' ? null : raw
+    if (next === (value ?? null)) return
+    mutation.mutate(next)
+  }
+
+  return (
+    <TextField
+      size="small"
+      label={label}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={handleBlur}
+      disabled={mutation.isPending}
+      placeholder="nieznany"
+      sx={{ minWidth: 200 }}
+    />
   )
 }
 
@@ -700,6 +745,24 @@ export function DocumentDetailPage() {
                 <Typography variant="body2" color="text.secondary">
                   Numer projektu: {document.numer_projektu ?? 'nieznany'}
                 </Typography>
+                {document.status === 'done' && (
+                  <Stack direction="row" spacing={1} sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
+                    <MetadaneField
+                      key={`pracownik-${document.pracownik}`}
+                      documentId={documentId}
+                      field="pracownik"
+                      value={document.pracownik}
+                      label="Pracownik"
+                    />
+                    <MetadaneField
+                      key={`numer_plomby-${document.numer_plomby}`}
+                      documentId={documentId}
+                      field="numer_plomby"
+                      value={document.numer_plomby}
+                      label="Nr plomby-rozdzielnia"
+                    />
+                  </Stack>
+                )}
                 {document.status === 'done' && (
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
                     <Typography variant="body2" color="text.secondary">

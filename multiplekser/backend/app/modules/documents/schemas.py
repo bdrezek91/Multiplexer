@@ -44,6 +44,8 @@ class DocumentOut(BaseModel):
     id: str
     status: str
     numer_projektu: str | None
+    pracownik: str | None = None
+    numer_plomby: str | None = None
     source_type: str
     magazyn: str | None
     dzial: str | None
@@ -93,6 +95,14 @@ class MagazynUpdateIn(BaseModel):
     """Zmiana magazynu PO zakonczonym OCR (np. gdy nie wybrano go przy uploadzie) - Krok
     Hydraulika-6. `null` kasuje magazyn (dokument bez magazynu)."""
     magazyn: str | None = None
+
+
+class MetadaneUpdateIn(BaseModel):
+    """Reczna korekta pol odczytanych przez OCR z naglowka formularza (2026-09-17) - pracownik i
+    numer plomby-rozdzielni bywaja odczytane bledne/niepewne, tak samo jak reszta OCR. Pole
+    nieobecne w body (`exclude_unset`) zostaje bez zmian, jawne `null` kasuje wartosc."""
+    pracownik: str | None = None
+    numer_plomby: str | None = None
 
 
 class DocumentReportCreateIn(BaseModel):

@@ -33,7 +33,7 @@ from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep,
 from .cooldown import OCRCooldownStore
 from .form_rows_hydraulika import snap_to_known_item_hydraulika
 from .parsing import extract_json, is_actionable_item, is_valid_ocr_response, validate_item
-from .pipeline_elektryka import OCRUnparsableResponseError, normalize_project_number
+from .pipeline_elektryka import OCRUnparsableResponseError, _clean_header_text, normalize_project_number
 from .prompt import AI_OCR_PROMPT_HYDRAULIKA
 
 
@@ -53,6 +53,8 @@ class OCRItemHydraulika:
 @dataclass
 class OCRResultHydraulika:
     numer_projektu: Optional[str]
+    pracownik: Optional[str]
+    numer_plomby: Optional[str]
     pozycje: list[OCRItemHydraulika]
     used_provider: str
     rejected_count: int
@@ -120,11 +122,13 @@ async def recognize_document_hydraulika(
         raise OCRUnparsableResponseError(chain_result.text)
 
     if isinstance(parsed, list):
-        raw_items, numer_projektu = parsed, None
+        raw_items, numer_projektu, pracownik, numer_plomby = parsed, None, None, None
     else:
         raw_items = parsed.get("pozycje") if isinstance(parsed.get("pozycje"), list) else []
         pn = parsed.get("numer_projektu")
         numer_projektu = normalize_project_number(str(pn).strip()) if pn else None
+        pracownik = _clean_header_text(parsed.get("pracownik"))
+        numer_plomby = _clean_header_text(parsed.get("numer_plomby"))
 
     schema_items = [it for it in raw_items if validate_item(it)]
     valid_items = [it for it in schema_items if is_actionable_item(it)]
@@ -133,6 +137,6 @@ async def recognize_document_hydraulika(
     pozycje = [_build_item_hydraulika(it, catalog, magazyn) for it in valid_items]
 
     return OCRResultHydraulika(
-        numer_projektu=numer_projektu, pozycje=pozycje,
-        used_provider=chain_result.used_label, rejected_count=rejected_count,
+        numer_projektu=numer_projektu, pracownik=pracownik, numer_plomby=numer_plomby,
+        pozycje=pozycje, used_provider=chain_result.used_label, rejected_count=rejected_count,
     )

@@ -49,6 +49,7 @@ from .schemas import (
     DocumentReportOut,
     GenerateRequest,
     MagazynUpdateIn,
+    MetadaneUpdateIn,
     OptimaLinkOut,
 )
 from .storage import get_storage
@@ -107,6 +108,8 @@ def _to_schema(document: DocumentModel) -> DocumentOut:
         id=str(document.id),
         status=document.status,
         numer_projektu=document.numer_projektu,
+        pracownik=document.pracownik,
+        numer_plomby=document.numer_plomby,
         source_type=document.source_type,
         magazyn=document.magazyn,
         dzial=document.dzial,
@@ -354,6 +357,34 @@ def update_document_magazyn(
             commit=False,
         )
     session.commit()
+    session.refresh(document)
+    return _to_schema(document)
+
+
+@router.patch("/{document_id}/metadane", response_model=DocumentOut)
+def update_document_metadane(
+    document_id: str,
+    body: MetadaneUpdateIn,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+):
+    """Reczna korekta pracownika/numeru plomby-rozdzielni odczytanych przez OCR z naglowka
+    formularza (2026-09-17, na zyczenie uzytkownika) - te pola sa tylko informacyjne (nie
+    wchodza do generowanego pliku TXT), wiec w przeciwienstwie do magazynu nie wymaga
+    ponownego dopasowania pozycji."""
+    document = repository.get_document(session, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
+    _check_owner_or_admin(document, user)
+
+    fields = body.model_dump(exclude_unset=True)
+    update_kwargs: dict = {}
+    if "pracownik" in fields:
+        update_kwargs["pracownik"] = fields["pracownik"]
+    if "numer_plomby" in fields:
+        update_kwargs["numer_plomby"] = fields["numer_plomby"]
+
+    repository.set_metadane(session, document, **update_kwargs)
     session.refresh(document)
     return _to_schema(document)
 

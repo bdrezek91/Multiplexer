@@ -28,6 +28,11 @@ class DocumentModel(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("app_user.id"), nullable=False, index=True)
 
     numer_projektu: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Odczytane z naglowka formularza przez OCR (2026-09-17, na zyczenie uzytkownika), tak samo
+    # jak numer_projektu - informacyjne, edytowalne recznie po OCR (PATCH .../metadane), NIE
+    # wchodza do generowanego pliku TXT dla Optimy (patrz generator/output_format.py).
+    pracownik: Mapped[str | None] = mapped_column(String, nullable=True)
+    numer_plomby: Mapped[str | None] = mapped_column(String, nullable=True)
     source_type: Mapped[str] = mapped_column(String, nullable=False, default="ai_scan")
     status: Mapped[str] = mapped_column(String, nullable=False, default="queued", index=True)
     magazyn: Mapped[str | None] = mapped_column(String, nullable=True)

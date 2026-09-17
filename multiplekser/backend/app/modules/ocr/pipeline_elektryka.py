@@ -63,9 +63,19 @@ class OCRItem:
 @dataclass
 class OCRResult:
     numer_projektu: Optional[str]
+    # Odczytane z naglowka formularza (2026-09-17, na zyczenie uzytkownika) - tak samo jak
+    # numer_projektu: informacyjne, edytowalne recznie po OCR (patrz PATCH .../metadane),
+    # NIE wchodza do generowanego pliku TXT dla Optimy.
+    pracownik: Optional[str]
+    numer_plomby: Optional[str]
     pozycje: list[OCRItem]
     used_provider: str
     rejected_count: int
+
+
+def _clean_header_text(value: object) -> Optional[str]:
+    text = str(value).strip() if value else ""
+    return text or None
 
 
 def _pick_raw_qty(item: dict, field_name: str) -> Optional[str]:
@@ -133,11 +143,13 @@ async def recognize_document(
         raise OCRUnparsableResponseError(chain_result.text)
 
     if isinstance(parsed, list):
-        raw_items, numer_projektu = parsed, None
+        raw_items, numer_projektu, pracownik, numer_plomby = parsed, None, None, None
     else:
         raw_items = parsed.get("pozycje") if isinstance(parsed.get("pozycje"), list) else []
         pn = parsed.get("numer_projektu")
         numer_projektu = normalize_project_number(str(pn).strip()) if pn else None
+        pracownik = _clean_header_text(parsed.get("pracownik"))
+        numer_plomby = _clean_header_text(parsed.get("numer_plomby"))
 
     schema_items = [it for it in raw_items if validate_item(it)]
     valid_items = [it for it in schema_items if is_actionable_item(it)]
@@ -146,6 +158,6 @@ async def recognize_document(
     pozycje = [_build_item(it, catalog, special_rules, magazyn) for it in valid_items]
 
     return OCRResult(
-        numer_projektu=numer_projektu, pozycje=pozycje,
-        used_provider=chain_result.used_label, rejected_count=rejected_count,
+        numer_projektu=numer_projektu, pracownik=pracownik, numer_plomby=numer_plomby,
+        pozycje=pozycje, used_provider=chain_result.used_label, rejected_count=rejected_count,
     )

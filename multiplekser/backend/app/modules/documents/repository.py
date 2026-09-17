@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from datetime import datetime, timezone
 
-from .models import DocumentFileModel, DocumentItemModel, DocumentModel, DocumentReportModel
+from .models import DocumentFileModel, DocumentItemModel, DocumentModel, DocumentReportModel, OcrRowGroupFlagModel
 
 
 class DocumentNotFoundError(Exception):
@@ -334,3 +334,33 @@ def get_document_by_optima_token(session: Session, document_id, token: str) -> O
     if not hmac.compare_digest(_hash_optima_token(token), document.optima_share_token_hash):
         return None
     return document
+
+
+def log_row_group_flag(
+    session: Session,
+    *,
+    document_id,
+    dzial: str,
+    rozpoznana_nazwa: str,
+    kind: str,
+    main_ilosc_wydana: Optional[float],
+    main_ilosc_zuzyta: Optional[float],
+    second_ilosc_wydana: Optional[float],
+    second_ilosc_zuzyta: Optional[float],
+) -> None:
+    """Trwaly log interwencji drugiej kontroli AI dla grup podobnych wierszy (2026-09-17) -
+    raport skutecznosci mechanizmu (scripts/report_row_group_flags.py). Zapisywany WYLACZNIE
+    przy rozbieznosci (patrz tasks.py: _check_row_group_alignment) - zgodnosc obu odczytow nie
+    generuje wpisu. Osobny commit (nie w tej samej transakcji co mark_done) - best-effort,
+    niepowodzenie logu nie moze zepsuc zapisu samego dokumentu."""
+    session.add(OcrRowGroupFlagModel(
+        document_id=document_id,
+        dzial=dzial,
+        rozpoznana_nazwa=rozpoznana_nazwa,
+        kind=kind,
+        main_ilosc_wydana=main_ilosc_wydana,
+        main_ilosc_zuzyta=main_ilosc_zuzyta,
+        second_ilosc_wydana=second_ilosc_wydana,
+        second_ilosc_zuzyta=second_ilosc_zuzyta,
+    ))
+    session.commit()

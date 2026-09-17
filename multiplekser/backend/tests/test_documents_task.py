@@ -135,6 +135,58 @@ def test_run_ocr_task_pdf_wielostronicowy_rozbity_na_osobne_obrazy(
     assert saved.status == "done"
 
 
+def _fake_three_page_pdf_with_blank_middle() -> bytes:
+    """Realny przypadek produkcyjny (2026-09-17): PDF ze skanera mial "widmowa", niemal calkiem
+    biala strone 2 (przebicie druku z drugiej strony kartki na cienkim papierze) miedzy dwiema
+    prawdziwymi stronami tresci - patrz ocr/image.py: is_blank_page. Strony "z tresc" maja
+    narysowana siatke formularza (nie sam tekst - zbyt maly ciezar atramentu, zeby przekroczyc
+    celowo bardzo niski prog is_blank_page), analogicznie do _synthetic_form_jpeg w
+    test_ocr_image_deskew.py."""
+    import fitz
+
+    doc = fitz.open()
+    for has_content in (True, False, True):
+        page = doc.new_page()
+        if has_content:
+            for y in range(100, 700, 30):
+                page.draw_line((50, y), (500, y), color=(0, 0, 0), width=1.5)
+            page.draw_rect(fitz.Rect(50, 100, 500, 700), color=(0, 0, 0), width=1.5)
+    buf = BytesIO(doc.tobytes())
+    doc.close()
+    return buf.getvalue()
+
+
+def test_run_ocr_task_pomija_prawie_puste_strony_pdf(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+
+    key = f"documents/test/{admin_user.id}-skan-pusta-strona.pdf"
+    get_storage().upload(key, _fake_three_page_pdf_with_blank_middle(), "application/pdf")
+    document = doc_repo.create_document(
+        db_session, user_id=admin_user.id, file_key=key, mime="application/pdf",
+        original_filename="skan.pdf",
+    )
+
+    classify_response = '{"dzial":"elektryka","confidence":98.0}'
+    ocr_response = (
+        '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
+    )
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+    ) as mock_recognize:
+        run_ocr_task(str(document.id), db_session)
+
+    for call in mock_recognize.call_args_list:
+        files = call.kwargs["files"]
+        assert len(files) == 2  # 3 strony PDF, ale prawie pusta strona srodkowa pominieta
+
+    saved = doc_repo.get_document(db_session, str(document.id))
+    assert saved.status == "done"
+
+
 def test_run_ocr_task_sukces_zapisuje_pozycje(
     db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
 ):
@@ -547,8 +599,10 @@ def test_run_ocr_task_grupa_podobnych_wierszy_wykrywa_przesuniecie(
     """Realny przypadek produkcyjny (2026-09-17): glowny model przypisal ilosc nalezaca do
     "Przewod 3x4" do sasiedniego "Przewod 3x1,5" (grupa wierszy roznaicych sie tylko
     przekrojem - patrz ocr/row_groups.py). Druga, niezalezna kontrola AI dla tej grupy wykrywa
-    rozbieznosc: oznacza bledna pozycje do recznej weryfikacji I dodaje poprawna (rowniez
-    oflagowana), zeby uzytkownik zobaczyl prawdziwa ilosc zamiast bezpowrotnie ja stracic."""
+    rozbieznosc: oznacza istniejaca (bledna) pozycje do recznej weryfikacji. CELOWO NIE dodaje
+    zgadywanej "poprawnej" pozycji - inny realny przypadek produkcyjny (tego samego dnia)
+    pokazal, ze druga kontrola tez potrafi wskazac zly wiersz tej samej grupy, wiec automatyczne
+    dodanie jej zgadniecia tylko zamienia jeden blad na dwa."""
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
     document_id = _create_document(db_session, admin_user)
@@ -575,17 +629,17 @@ def test_run_ocr_task_grupa_podobnych_wierszy_wykrywa_przesuniecie(
 
     document = doc_repo.get_document(db_session, document_id)
     assert document.status == "done"
-    by_name = {it.rozpoznana_nazwa: it for it in document.items}
-
-    wrong = by_name["Przewód 3x1,5"]
+    # Zadna nowa pozycja nie zostala dodana - tylko oflagowana ta, ktora juz byla.
+    assert len(document.items) == 1
+    wrong = document.items[0]
+    assert wrong.rozpoznana_nazwa == "Przewód 3x1,5"
     assert wrong.ilosc_wydana == 2.0  # nie nadpisujemy istniejacej pozycji - tylko flagujemy
     assert wrong.needs_review is True
     assert wrong.ilosc_z_dodatkowej_kontroli is True
 
-    correct = by_name["Przewód 3x4"]
-    assert correct.ilosc_wydana == 2.0
-    assert correct.needs_review is True
-    assert correct.ilosc_z_dodatkowej_kontroli is True
+    # Widoczny w UI (Przebieg AI) trop dla operatora, zamiast zgadywanej pozycji.
+    trace_reasons = " ".join(e.get("reason") or "" for e in document.ai_trace)
+    assert "Przewód 3x4" in trace_reasons
 
 
 def test_run_ocr_task_grupa_podobnych_wierszy_zgodnosc_nic_nie_zmienia(
@@ -623,3 +677,43 @@ def test_run_ocr_task_grupa_podobnych_wierszy_zgodnosc_nic_nie_zmienia(
     assert item.ilosc_wydana == 2.0
     assert item.needs_review is False
     assert item.ilosc_z_dodatkowej_kontroli is False
+
+
+def test_run_ocr_task_grupa_podobnych_wierszy_zapisuje_log_rozbieznosci(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Log ocr_row_group_flag (2026-09-17, raport skutecznosci - scripts/report_row_group_flags.py)
+    zapisuje wpis TYLKO przy rozbieznosci (zgodnosc nic nie zapisuje - patrz test kontrastowy
+    wyzej)."""
+    from app.modules.documents.models import OcrRowGroupFlagModel
+
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = '{"dzial":"elektryka","confidence":98.0}'
+    ocr_response = '{"pozycje": [{"nazwa": "Przewód 3x1,5", "ilosc_wydana": "2", "confidence": 98}]}'
+    group_verify_response = (
+        '{"pozycje":['
+        '{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},'
+        '{"id":"2","ilosc_wydana":null,"ilosc_zuzyta":null},'
+        '{"id":"3","ilosc_wydana":null,"ilosc_zuzyta":null},'
+        '{"id":"4","ilosc_wydana":2,"ilosc_zuzyta":null},'
+        '{"id":"5","ilosc_wydana":null,"ilosc_zuzyta":null},'
+        '{"id":"6","ilosc_wydana":null,"ilosc_zuzyta":null}'
+        ']}'
+    )
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
+    ):
+        run_ocr_task(document_id, db_session)
+
+    flags = db_session.query(OcrRowGroupFlagModel).filter(
+        OcrRowGroupFlagModel.document_id == document_id,
+    ).all()
+    kinds = {f.kind for f in flags}
+    assert kinds == {"mismatch_existing", "missing_flagged_group"}
+    missing = next(f for f in flags if f.kind == "missing_flagged_group")
+    assert missing.rozpoznana_nazwa == "Przewód 3x4"
+    assert missing.second_ilosc_wydana == 2.0

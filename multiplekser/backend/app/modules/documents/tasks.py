@@ -15,6 +15,7 @@ import asyncio
 import logging
 import re
 import time
+from datetime import datetime, timezone
 from typing import Mapping, Optional
 
 from sqlalchemy.orm import Session
@@ -29,13 +30,12 @@ from app.modules.matcher.result import QUALITY_OK
 from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback
 from app.modules.ocr.classify import classify_document
 from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
-from app.modules.ocr.image import downscale_image, pdf_to_page_images
+from app.modules.ocr.image import downscale_image, is_blank_page, pdf_to_page_images
 from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.form_rows_elektryka import FORM_ROWS as _FORM_ROWS_ELEKTRYKA
 from app.modules.ocr.form_rows_hydraulika import FORM_ROWS as _FORM_ROWS_HYDRAULIKA
 from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
-from app.modules.ocr.pipeline_elektryka import _build_item as _build_ocr_item_elektryka
-from app.modules.ocr.pipeline_hydraulika import _build_item_hydraulika, recognize_document_hydraulika
+from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
 from app.modules.ocr.providers import OCRProviderError
 from app.modules.ocr.row_groups import group_similar_rows
 from app.modules.ocr.verify import verify_ambiguous_quantities, verify_row_group_alignment
@@ -167,10 +167,8 @@ async def _check_row_group_alignment(
     files: list[tuple[bytes, str]],
     items: list[dict],
     dzial: str,
-    catalog: Catalog,
-    special_rules,
-    magazyn: Optional[str],
     session: Session,
+    document_id,
     event_callback: OCRChainEventCallback,
     cooldown_store: OCRCooldownStore,
     log_context: Mapping[str, object],
@@ -181,9 +179,13 @@ async def _check_row_group_alignment(
     dodatkowe zapytanie AI TYLKO gdy w dokumencie faktycznie wystapila taka grupa z jakakolwiek
     znaleziona iloscia (best-effort, nigdy nie blokuje calego dokumentu przy bledzie/braku
     wyniku - patrz verify_row_group_alignment). Zgodnosc obu odczytow (najczestszy przypadek) NIE
-    zmienia niczego w `items` - tylko rozbieznosc oznacza istniejaca pozycje do recznej
-    weryfikacji albo dodaje NOWA, oflagowana pozycje, jesli druga kontrola znalazla ilosc dla
-    wiersza calkowicie pominietego przez glowny odczyt (typowy obraz "ofiary" przesuniecia)."""
+    zmienia niczego w `items`. Rozbieznosc: oznacza istniejaca pozycje (i cala reszte grupy) do
+    recznej weryfikacji - NIGDY nie dodaje zgadywanej nowej pozycji (nawet gdy druga kontrola
+    "znajdzie" ilosc dla wiersza pominietego przez glowny odczyt) - realny przypadek produkcyjny
+    (2026-09-17) pokazal, ze druga kontrola bywa RÓWNIE bledna jak pierwsza (wskazuje inny, tez
+    zly wiersz tej samej grupy), wiec automatyczne dodanie jej zgadniecia tylko zamienia jeden
+    blad na dwa. Zamiast tego zostawia jawny trop w `document.ai_trace` (widoczny w UI jako
+    "Przebieg AI") - decyzje co bylo faktycznie na kartce podejmuje czlowiek na oryginale."""
     form_rows = _FORM_ROWS_HYDRAULIKA if dzial == "hydraulika" else _FORM_ROWS_ELEKTRYKA
     all_groups = group_similar_rows(form_rows)
     if not all_groups:
@@ -223,32 +225,61 @@ async def _check_row_group_alignment(
             if existing:
                 for item in existing:
                     _flag_group_mismatch(item)
+                try:
+                    repository.log_row_group_flag(
+                        session, document_id=document_id, dzial=dzial, rozpoznana_nazwa=label,
+                        kind="mismatch_existing",
+                        main_ilosc_wydana=main_wydana, main_ilosc_zuzyta=main_zuzyta,
+                        second_ilosc_wydana=second.ilosc_wydana, second_ilosc_zuzyta=second.ilosc_zuzyta,
+                    )
+                except Exception:
+                    logger.warning("Nie udalo sie zapisac logu row-group-flag", exc_info=True)
                 continue
 
             if not second.found_anything:
-                continue  # oba puste (roznica tylko np. 0 vs None) - nic do dodania
+                continue  # oba puste (roznica tylko np. 0 vs None) - nic do zrobienia
 
             # Glowny odczyt CALKOWICIE pominal ten wiersz, a druga kontrola znalazla dla niego
-            # ilosc - typowy obraz "ofiary" przesuniecia wiersza (wartosc trafila do sasiada).
-            # Reuzywamy istniejacej logiki dopasowania/snapowania (_build_item*), zeby nie
-            # duplikowac matchera - dokladnie tak samo jak dla pozycji z glownego odczytu.
-            raw_item = {
-                "nazwa": label,
-                "ilosc_wydana": second.ilosc_wydana,
-                "ilosc_zuzyta": second.ilosc_zuzyta,
-                "uwagi": "",
-                "confidence": None,
-            }
-            if dzial == "hydraulika":
-                built = _build_item_hydraulika(raw_item, catalog, magazyn)
-            else:
-                built = _build_ocr_item_elektryka(raw_item, catalog, special_rules or [], magazyn)
-            new_row = _row_dict_from_ocritem(
-                built, second.ilosc_wydana, second.ilosc_zuzyta, session, ilosc_z_dodatkowej_kontroli=True,
-            )
-            _flag_group_mismatch(new_row)
-            items.append(new_row)
-            items_by_label.setdefault(label, []).append(new_row)
+            # ilosc - typowy obraz "ofiary" przesuniecia wiersza. NIE dodajemy jednak zgadywanej
+            # pozycji: realny przypadek produkcyjny (2026-09-17) pokazal, ze druga kontrola bywa
+            # RÓWNIE bledna jak pierwsza (wskazala INNY, tez zly wiersz tej samej grupy) - dodanie
+            # jej zgadniecia jako nowej pozycji tylko zamienilo jeden blad na dwa. Zamiast
+            # fabrykowac dane, oflagowujemy do recznej weryfikacji WSZYSTKIE juz istniejace
+            # pozycje tej samej grupy i zostawiamy jawny trop w "Przebiegu AI" (widoczny w UI) -
+            # decyzje co faktycznie bylo na kartce podejmuje czlowiek na oryginale, nie zgadujemy.
+            for other_label in group:
+                for item in items_by_label.get(other_label, []):
+                    _flag_group_mismatch(item)
+            if event_callback is not None:
+                try:
+                    event_callback({
+                        "status": "no_result",
+                        "stage": "row_group_verification",
+                        "provider": None,
+                        "model": None,
+                        "label": None,
+                        "reason": (
+                            f'Druga kontrola AI sugeruje, że w tej grupie wierszy mogła zostać '
+                            f'pominięta pozycja "{label}" (możliwa ilość wydana: '
+                            f'{second.ilosc_wydana}, zużyta: {second.ilosc_zuzyta}) - NIE dodano '
+                            f'jej automatycznie (druga kontrola sama bywa niepewna), zweryfikuj '
+                            f'ręcznie na oryginale.'
+                        ),
+                        "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
+                        "target": label,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                except Exception:
+                    logger.warning("Nie udalo sie zapisac zdarzenia AI dla row-group", exc_info=True)
+            try:
+                repository.log_row_group_flag(
+                    session, document_id=document_id, dzial=dzial, rozpoznana_nazwa=label,
+                    kind="missing_flagged_group",
+                    main_ilosc_wydana=None, main_ilosc_zuzyta=None,
+                    second_ilosc_wydana=second.ilosc_wydana, second_ilosc_zuzyta=second.ilosc_zuzyta,
+                )
+            except Exception:
+                logger.warning("Nie udalo sie zapisac logu row-group-flag", exc_info=True)
 
 
 async def _verify_ambiguous_items(
@@ -381,7 +412,14 @@ def _download_and_prepare(get_storage, file_key: str, mime: str) -> list[tuple[b
     pojedynczym elementem listy, tylko przeskalowanym (patrz ocr/image.py, dlaczego)."""
     raw = get_storage().download(file_key)
     if mime == _PDF_MIME:
-        return [(downscale_image(page), "image/jpeg") for page in pdf_to_page_images(raw)]
+        pages = pdf_to_page_images(raw)
+        # Pomija prawie puste strony (2026-09-17, patrz ocr/image.py: is_blank_page) - typowo
+        # "widmowe" przebicie druku z drugiej strony kartki na cienkim papierze. Nigdy nie
+        # filtruje WSZYSTKICH stron na raz (bezpieczny fallback do niefiltrowanej listy), zeby
+        # bledna/zbyt agresywna detekcja nigdy nie zostawila dokumentu bez zadnego obrazu.
+        non_blank_pages = [page for page in pages if not is_blank_page(page)]
+        pages = non_blank_pages or pages
+        return [(downscale_image(page), "image/jpeg") for page in pages]
     return [(downscale_image(raw), "image/jpeg")]
 
 
@@ -427,10 +465,8 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             files, items, document_id, save_ai_event, cooldown_store, dzial,
         ))
 
-        catalog = Catalog.from_db(session, dzial=dzial)
-        special_rules = None if dzial == "hydraulika" else rules_from_db(session)
         asyncio.run(_check_row_group_alignment(
-            files, items, dzial, catalog, special_rules, document.magazyn, session,
+            files, items, dzial, session, document.id,
             save_ai_event, cooldown_store, {"document_id": document_id},
         ))
 

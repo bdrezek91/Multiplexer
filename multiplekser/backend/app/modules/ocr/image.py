@@ -81,6 +81,28 @@ def pdf_to_page_images(pdf_bytes: bytes) -> list[bytes]:
     return pages
 
 
+# Bardzo konserwatywny prog (2026-09-17, na zyczenie uzytkownika) - realny przypadek: skan
+# wielostronicowego PDF mial strony niemal calkiem biale ("widmowe" przebicie druku z drugiej
+# strony kartki na cienkim papierze, patrz historia czatu). Takie strony nie wnosza tresci, a ich
+# wyslanie do AI razem z prawdziwymi stronami to dodatkowy szum przy liczeniu wierszy/stron -
+# jeden z podejrzanych czynnikow w bledach "przeciekania" ilosci miedzy wierszami. Prog celowo
+# BARDZO niski (0.1% pikseli), zeby NIGDY nie odciac strony z realna, choc slabo wydrukowana,
+# trescia - lepiej wyslac dodatkowa pusta strone niz przypadkiem zgubic prawdziwa.
+_BLANK_PAGE_INK_THRESHOLD = 245  # jasnosc piksela (0-255) ponizej ktorej liczymy go jako "atrament"
+_BLANK_PAGE_MAX_INK_RATIO = 0.001
+
+
+def is_blank_page(file_bytes: bytes) -> bool:
+    """True gdy strona jest praktycznie pusta (prawie brak ciemnych pikseli) - patrz prog wyzej.
+    Bezpieczny False (nigdy nie odfiltrowuj) gdy obrazu nie da sie zdekodowac."""
+    arr = np.frombuffer(file_bytes, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_GRAYSCALE)
+    if img is None or img.size == 0:
+        return False
+    ink_pixels = int(np.count_nonzero(img < _BLANK_PAGE_INK_THRESHOLD))
+    return (ink_pixels / img.size) < _BLANK_PAGE_MAX_INK_RATIO
+
+
 def downscale_image(file_bytes: bytes, max_side: Optional[int] = None, quality: Optional[int] = None) -> bytes:
     """Zwraca bajty JPEG przeskalowane tak, ze dluzszy bok <= max_side. Obrazy juz mniejsze niz
     max_side NIE sa powiekszane (jak w oryginale JS - skalowanie tylko w dol). Prostowanie

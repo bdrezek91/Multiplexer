@@ -156,3 +156,35 @@ class DocumentReportModel(Base):
 
     document: Mapped["DocumentModel"] = relationship()
     reported_by: Mapped["UserModel"] = relationship()
+
+
+# Rodzaj interwencji drugiej kontroli AI dla grup podobnych wierszy (2026-09-17) - patrz
+# ocr/verify.py: verify_row_group_alignment, tasks.py: _check_row_group_alignment.
+ROW_GROUP_FLAG_KINDS = ("mismatch_existing", "missing_flagged_group")
+
+
+class OcrRowGroupFlagModel(Base):
+    """Log kazdej interwencji drugiej, niezaleznej kontroli AI dla grup podobnych wierszy
+    formularza (2026-09-17, na zyczenie uzytkownika - raport skutecznosci mechanizmu). Zapisywany
+    WYLACZNIE gdy druga kontrola NIE zgadza sie z glownym odczytem (patrz tasks.py) - zgodnosc
+    (najczestszy przypadek) nie generuje wpisu. `kind`: "mismatch_existing" (istniejaca pozycja
+    oflagowana do weryfikacji) albo "missing_flagged_group" (druga kontrola sugeruje pominieta
+    pozycje, ale NIE zostala dodana automatycznie - patrz tasks.py, sekcja o realnym przypadku
+    2026-09-17, gdzie druga kontrola tez sie pomylila; zamiast niej oflagowana cala reszta
+    grupy). Trzymany jako TRWALY log niezaleznie od `document.ai_trace`
+    (JSONB per-dokument z limitem 200 zdarzen, wyswietlany w UI) - ten log sluzy do zbiorczego
+    raportu (scripts/report_row_group_flags.py), nie do podgladu pojedynczego dokumentu."""
+    __tablename__ = "ocr_row_group_flag"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document.id"), nullable=False, index=True)
+    dzial: Mapped[str] = mapped_column(String, nullable=False)
+    rozpoznana_nazwa: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String, nullable=False)
+    main_ilosc_wydana: Mapped[float | None] = mapped_column(Float, nullable=True)
+    main_ilosc_zuzyta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    second_ilosc_wydana: Mapped[float | None] = mapped_column(Float, nullable=True)
+    second_ilosc_zuzyta: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    document: Mapped["DocumentModel"] = relationship()

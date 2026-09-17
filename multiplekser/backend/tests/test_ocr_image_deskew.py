@@ -50,3 +50,25 @@ def test_deskew_nie_rusza_juz_prostego_obrazu():
 
 def test_deskew_nie_wywraca_sie_na_niepoprawnych_bajtach():
     assert deskew_image(b"to nie jest obraz") == b"to nie jest obraz"
+
+
+def test_is_blank_page_pusta_biala_strona():
+    from app.modules.ocr.image import is_blank_page
+
+    buf = BytesIO()
+    Image.new("RGB", (800, 1000), "white").save(buf, format="JPEG", quality=95)
+    assert is_blank_page(buf.getvalue()) is True
+
+
+def test_is_blank_page_prawdziwy_formularz_nie_jest_pusty():
+    from app.modules.ocr.image import is_blank_page
+
+    assert is_blank_page(_synthetic_form_jpeg()) is False
+
+
+def test_is_blank_page_niepoprawny_obraz_nigdy_nie_jest_pusty():
+    from app.modules.ocr.image import is_blank_page
+
+    # Bezpieczny fallback: gdy nie da sie zdekodowac obrazu, NIGDY nie odfiltrowuj (lepiej
+    # wyslac cos bezuzytecznego do AI niz zgubic strone przez blad dekodowania).
+    assert is_blank_page(b"nie-jest-obrazem") is False

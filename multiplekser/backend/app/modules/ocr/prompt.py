@@ -98,16 +98,30 @@ _ZNACZNIKI_DOPISEK = (
 # nigdzie na kartce - model przy grupie prawie identycznych etykiet czasem "zgubil wiersz" i
 # przypisal zaznaczenie sasiedniej linii. Dopisek uczy model jawnie liczyc wiersze w takich
 # grupach zamiast polegac na samym rozpoznaniu ksztaltu zaznaczenia.
+#
+# Realny przypadek produkcyjny (2026-09-17): na jednej kartce grupy SRN/wylacznik
+# nadpradowy/oprawa LED (wszystkie JUZ wymienione ponizej jako przyklady) zostaly odczytane
+# BEZBLEDNIE, ale grupa "Przewod 3x1,5/3x2,5/3x4/5x4/..." (ta sama struktura - wiersze rozniace
+# sie tylko przekrojem) zostala pomylona o DWA wiersze - zaznaczenie nalezace do "Przewod 3x4"
+# trafilo do "Przewod 3x1,5". Wniosek: model radzi sobie znacznie lepiej z grupami WYMIENIONYMI
+# WPROST na tej liscie przykladow, niz ze strukturalnie identycznymi grupami spoza niej - stad
+# dopisanie grupy przewodow ponizej, zamiast liczyc na samo ogolne sformulowanie "rozniacych sie
+# tylko liczba".
 _PODOBNE_WIERSZE_DOPISEK = (
     ' GRUPY PODOBNYCH WIERSZY: formularz zawiera grupy kilku niemal identycznych etykiet pod '
     'rząd, różniących się tylko liczbą lub kolorem (np. "Rozdzielnica SRN 12/24/36/48", '
     '"Wyłącznik nadprądowy 10A/16A/20A/25A", "Szynoprzewód czarny/biały 1mb/2mb", "Lampa LED na '
-    'szynoprzewód biała/czarna"). To NAJCZĘSTSZE miejsce pomyłki - łatwo przypisać zaznaczenie z '
-    'jednej linii do sąsiedniej, bardzo podobnie wyglądającej. W takiej grupie policz wiersze OD '
-    'GÓRY grupy (lub od najbliższej wyraźnej linii siatki) do wiersza z zaznaczeniem, zanim '
-    'zwrócisz nazwę - upewnij się, że zaznaczenie leży dokładnie w tym samym poziomie co dana '
-    'etykieta, nie o jeden wiersz wyżej ani niżej. Jeśli nie masz pewności, które dokładnie z '
-    'kilku podobnych etykiet ma zaznaczenie - pomiń całą grupę, nie zgaduj żadnej z nich.'
+    'szynoprzewód biała/czarna", "Przewód 3x1,5/3x2,5/3x4/5x4/5x16/3x16" - kable różniące się '
+    'tylko przekrojem, "Końcówka tulejkowa 4-12/10/12/16/12" - różniące się tylko zakresem). To '
+    'NAJCZĘSTSZE miejsce pomyłki - łatwo przypisać zaznaczenie z jednej linii do sąsiedniej, '
+    'bardzo podobnie wyglądającej, NAWET GDY sąsiednie grupy tego samego typu (np. inny przekrój '
+    'kabla) zostały odczytane poprawnie - każdą taką grupę na stronie sprawdzaj z osobna, taka '
+    'sama ostrożność dotyczy WSZYSTKICH grup o tej strukturze, nie tylko wymienionych tu z nazwy. '
+    'W takiej grupie policz wiersze OD GÓRY grupy (lub od najbliższej wyraźnej linii siatki) do '
+    'wiersza z zaznaczeniem, zanim zwrócisz nazwę - upewnij się, że zaznaczenie leży dokładnie w '
+    'tym samym poziomie co dana etykieta, nie o jeden lub dwa wiersze wyżej ani niżej. Jeśli nie '
+    'masz pewności, które dokładnie z kilku podobnych etykiet ma zaznaczenie - pomiń całą grupę, '
+    'nie zgaduj żadnej z nich.'
 )
 
 # Realny przypadek produkcyjny (2026-08-24, Hydraulika): na gesto zapisanej kartce (duzo

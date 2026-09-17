@@ -254,11 +254,14 @@ def test_generate_hydraulika_dziala_wlasnym_generatorem(
     document = doc_repo.create_document(
         db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
     )
+    # "Bojler 80 L" nalezy do grupy z "Bojler 50 L" (ocr/row_groups.py) - dodatkowy odczyt to
+    # kontrola AI dla tej grupy (_check_row_group_alignment w tasks.py), potwierdzajaca wynik.
+    group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     classify_response = '{"dzial":"hydraulika","confidence":95.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
     ):
         run_ocr_task(str(document.id), db_session)
 
@@ -279,6 +282,9 @@ def test_generate_hydraulika_zachowuje_kolejnosc_z_dokumentu_zrodlowego(
     document = doc_repo.create_document(
         db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
     )
+    # "Bojler 80 L" nalezy do grupy z "Bojler 50 L" (ocr/row_groups.py) - dodatkowy odczyt to
+    # kontrola AI dla tej grupy (_check_row_group_alignment w tasks.py), potwierdzajaca wynik.
+    group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     classify_response = '{"dzial":"hydraulika","confidence":95.0}'
     ocr_response = (
         '{"pozycje": ['
@@ -288,7 +294,7 @@ def test_generate_hydraulika_zachowuje_kolejnosc_z_dokumentu_zrodlowego(
     )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
     ):
         run_ocr_task(str(document.id), db_session)
 
@@ -411,11 +417,14 @@ def test_add_item_hydraulika_dziala_na_katalogu_wlasciwego_dzialu(
     document = doc_repo.create_document(
         db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
     )
+    # "Bojler 80 L" nalezy do grupy z "Bojler 50 L" (ocr/row_groups.py) - dodatkowy odczyt to
+    # kontrola AI dla tej grupy (_check_row_group_alignment w tasks.py), potwierdzajaca wynik.
+    group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     classify_response = '{"dzial":"hydraulika","confidence":95.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
     ):
         run_ocr_task(str(document.id), db_session)
 

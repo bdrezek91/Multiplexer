@@ -31,10 +31,14 @@ from app.modules.ocr.classify import classify_document
 from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
 from app.modules.ocr.image import downscale_image, pdf_to_page_images
 from app.modules.ocr.parsing import parse_float_loose
+from app.modules.ocr.form_rows_elektryka import FORM_ROWS as _FORM_ROWS_ELEKTRYKA
+from app.modules.ocr.form_rows_hydraulika import FORM_ROWS as _FORM_ROWS_HYDRAULIKA
 from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
-from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
+from app.modules.ocr.pipeline_elektryka import _build_item as _build_ocr_item_elektryka
+from app.modules.ocr.pipeline_hydraulika import _build_item_hydraulika, recognize_document_hydraulika
 from app.modules.ocr.providers import OCRProviderError
-from app.modules.ocr.verify import verify_ambiguous_quantities
+from app.modules.ocr.row_groups import group_similar_rows
+from app.modules.ocr.verify import verify_ambiguous_quantities, verify_row_group_alignment
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 
@@ -112,6 +116,139 @@ def _classify_and_recognize(
                 extra={"document_id": str(document.id), "attempt": attempt + 1, "error": str(exc)},
             )
     raise last_exc  # wyczerpano proby - blad koncowy, jak dotad ida do Document.status="error"
+
+
+def _row_dict_from_ocritem(
+    it, ilosc_wydana_raw, ilosc_zuzyta_raw, session: Session, *, ilosc_z_dodatkowej_kontroli: bool = False,
+) -> dict:
+    """Wspolna konwersja OCRItem/OCRItemHydraulika (ksztalt identyczny w obu pipeline'ach) na
+    plaski dict przechowywany w `items` - uzywana zarowno dla glownego odczytu jak i pozycji
+    dodanych/oflagowanych przez _check_row_group_alignment ponizej."""
+    wydana = parse_float_loose(ilosc_wydana_raw) if ilosc_wydana_raw is not None else None
+    zuzyta = parse_float_loose(ilosc_zuzyta_raw) if ilosc_zuzyta_raw is not None else None
+    return {
+        "rozpoznana_nazwa": it.rozpoznana_nazwa,
+        "ilosc_wydana": wydana,
+        "ilosc_zuzyta": zuzyta,
+        # Domyslna ilosc do weryfikacji/generowania - pickQty('razem') z monolitu (zuzyta
+        # jesli podana, inaczej wydana). Uzytkownik moze nadpisac przez PATCH przed
+        # wygenerowaniem (patrz RAPORT_ETAP_9.md).
+        "ilosc_finalna": pick_qty_razem(wydana, zuzyta),
+        "match_quality": it.match.quality,
+        "match_score": it.match.ratio,
+        "off_form": it.off_form,
+        "needs_review": it.needs_review,
+        "form_note": it.form_note,
+        "uwagi": it.uwagi,
+        "confidence": it.confidence,
+        "matched_product_id": _resolve_product_id(session, it.match.kod),
+        "match_kod": it.match.kod,
+        "match_nazwa": it.match.nazwa,
+        "match_jm": it.match.jm_override,
+        "ilosc_z_dodatkowej_kontroli": ilosc_z_dodatkowej_kontroli,
+    }
+
+
+_GROUP_MISMATCH_NOTE = (
+    "Druga, niezależna kontrola AI wskazuje inną ilość dla tego wiersza (grupa podobnych "
+    "wierszy formularza, np. różniących się przekrojem/wymiarem) - możliwe przesunięcie o "
+    "jeden wiersz, zweryfikuj ręcznie na oryginale."
+)
+
+
+def _flag_group_mismatch(item: dict) -> None:
+    item["needs_review"] = True
+    item["ilosc_z_dodatkowej_kontroli"] = True
+    existing = item.get("form_note") or ""
+    item["form_note"] = f"{existing} | {_GROUP_MISMATCH_NOTE}" if existing else _GROUP_MISMATCH_NOTE
+
+
+async def _check_row_group_alignment(
+    files: list[tuple[bytes, str]],
+    items: list[dict],
+    dzial: str,
+    catalog: Catalog,
+    special_rules,
+    magazyn: Optional[str],
+    session: Session,
+    event_callback: OCRChainEventCallback,
+    cooldown_store: OCRCooldownStore,
+    log_context: Mapping[str, object],
+) -> None:
+    """Druga, niezalezna kontrola AI dla grup niemal identycznych wierszy formularza (2026-09-17,
+    realny przypadek produkcyjny: ilosc nalezaca do "Przewod 3x4" trafila do sasiedniego
+    "Przewod 3x1,5" - patrz row_groups.py i prompt.py: _PODOBNE_WIERSZE_DOPISEK). Uruchamia
+    dodatkowe zapytanie AI TYLKO gdy w dokumencie faktycznie wystapila taka grupa z jakakolwiek
+    znaleziona iloscia (best-effort, nigdy nie blokuje calego dokumentu przy bledzie/braku
+    wyniku - patrz verify_row_group_alignment). Zgodnosc obu odczytow (najczestszy przypadek) NIE
+    zmienia niczego w `items` - tylko rozbieznosc oznacza istniejaca pozycje do recznej
+    weryfikacji albo dodaje NOWA, oflagowana pozycje, jesli druga kontrola znalazla ilosc dla
+    wiersza calkowicie pominietego przez glowny odczyt (typowy obraz "ofiary" przesuniecia)."""
+    form_rows = _FORM_ROWS_HYDRAULIKA if dzial == "hydraulika" else _FORM_ROWS_ELEKTRYKA
+    all_groups = group_similar_rows(form_rows)
+    if not all_groups:
+        return
+
+    active_labels = {
+        item["rozpoznana_nazwa"] for item in items
+        if item["ilosc_wydana"] is not None or item["ilosc_zuzyta"] is not None
+    }
+    at_risk_groups = [group for group in all_groups if any(label in active_labels for label in group)]
+    if not at_risk_groups:
+        return
+
+    verify_results = await verify_row_group_alignment(
+        files, at_risk_groups, log_context=log_context,
+        event_callback=event_callback, cooldown_store=cooldown_store,
+    )
+    if not verify_results:
+        return
+
+    items_by_label: dict[str, list[dict]] = {}
+    for item in items:
+        items_by_label.setdefault(item["rozpoznana_nazwa"], []).append(item)
+
+    for group in at_risk_groups:
+        for label in group:
+            second = verify_results.get(label)
+            if second is None:
+                continue  # druga kontrola nie odpowiedziala dla tego ID - brak informacji, pomin
+
+            existing = items_by_label.get(label, [])
+            main_wydana = existing[0]["ilosc_wydana"] if existing else None
+            main_zuzyta = existing[0]["ilosc_zuzyta"] if existing else None
+            if second.ilosc_wydana == main_wydana and second.ilosc_zuzyta == main_zuzyta:
+                continue  # zgodnosc obu niezaleznych odczytow - najczestszy przypadek, bez zmian
+
+            if existing:
+                for item in existing:
+                    _flag_group_mismatch(item)
+                continue
+
+            if not second.found_anything:
+                continue  # oba puste (roznica tylko np. 0 vs None) - nic do dodania
+
+            # Glowny odczyt CALKOWICIE pominal ten wiersz, a druga kontrola znalazla dla niego
+            # ilosc - typowy obraz "ofiary" przesuniecia wiersza (wartosc trafila do sasiada).
+            # Reuzywamy istniejacej logiki dopasowania/snapowania (_build_item*), zeby nie
+            # duplikowac matchera - dokladnie tak samo jak dla pozycji z glownego odczytu.
+            raw_item = {
+                "nazwa": label,
+                "ilosc_wydana": second.ilosc_wydana,
+                "ilosc_zuzyta": second.ilosc_zuzyta,
+                "uwagi": "",
+                "confidence": None,
+            }
+            if dzial == "hydraulika":
+                built = _build_item_hydraulika(raw_item, catalog, magazyn)
+            else:
+                built = _build_ocr_item_elektryka(raw_item, catalog, special_rules or [], magazyn)
+            new_row = _row_dict_from_ocritem(
+                built, second.ilosc_wydana, second.ilosc_zuzyta, session, ilosc_z_dodatkowej_kontroli=True,
+            )
+            _flag_group_mismatch(new_row)
+            items.append(new_row)
+            items_by_label.setdefault(label, []).append(new_row)
 
 
 async def _verify_ambiguous_items(
@@ -281,34 +418,20 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             files, session, document, save_ai_event, cooldown_store,
         )
 
-        items = []
-        for it in result.pozycje:
-            wydana = parse_float_loose(it.ilosc_wydana) if it.ilosc_wydana is not None else None
-            zuzyta = parse_float_loose(it.ilosc_zuzyta) if it.ilosc_zuzyta is not None else None
-            items.append({
-                "rozpoznana_nazwa": it.rozpoznana_nazwa,
-                "ilosc_wydana": wydana,
-                "ilosc_zuzyta": zuzyta,
-                # Domyslna ilosc do weryfikacji/generowania - pickQty('razem') z monolitu (zuzyta
-                # jesli podana, inaczej wydana). Uzytkownik moze nadpisac przez PATCH przed
-                # wygenerowaniem (patrz RAPORT_ETAP_9.md).
-                "ilosc_finalna": pick_qty_razem(wydana, zuzyta),
-                "match_quality": it.match.quality,
-                "match_score": it.match.ratio,
-                "off_form": it.off_form,
-                "needs_review": it.needs_review,
-                "form_note": it.form_note,
-                "uwagi": it.uwagi,
-                "confidence": it.confidence,
-                "matched_product_id": _resolve_product_id(session, it.match.kod),
-                "match_kod": it.match.kod,
-                "match_nazwa": it.match.nazwa,
-                "match_jm": it.match.jm_override,
-                "ilosc_z_dodatkowej_kontroli": False,
-            })
+        items = [
+            _row_dict_from_ocritem(it, it.ilosc_wydana, it.ilosc_zuzyta, session)
+            for it in result.pozycje
+        ]
 
         asyncio.run(_verify_ambiguous_items(
             files, items, document_id, save_ai_event, cooldown_store, dzial,
+        ))
+
+        catalog = Catalog.from_db(session, dzial=dzial)
+        special_rules = None if dzial == "hydraulika" else rules_from_db(session)
+        asyncio.run(_check_row_group_alignment(
+            files, items, dzial, catalog, special_rules, document.magazyn, session,
+            save_ai_event, cooldown_store, {"document_id": document_id},
         ))
 
         _append_auto_zasilacz_led(items, dzial, session)

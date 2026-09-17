@@ -163,6 +163,21 @@ def _flag_group_mismatch(item: dict) -> None:
     item["form_note"] = f"{existing} | {_GROUP_MISMATCH_NOTE}" if existing else _GROUP_MISMATCH_NOTE
 
 
+def _consensus(first: dict, second: dict) -> dict:
+    """Zostawia TYLKO etykiety, dla ktorych dwie niezalezne dodatkowe kontrole (verify_first,
+    verify_second w _check_row_group_alignment) zgadzaja sie ze soba co do obu ilosci - patrz
+    uzasadnienie w miejscu wywolania. Brak zgodnosci (albo brak odpowiedzi jednej z prob dla
+    danej etykiety) oznacza "nieustalone", nie trafia do dalszej analizy."""
+    result = {}
+    for label, r1 in first.items():
+        r2 = second.get(label)
+        if r2 is None:
+            continue
+        if r1.ilosc_wydana == r2.ilosc_wydana and r1.ilosc_zuzyta == r2.ilosc_zuzyta:
+            result[label] = r1
+    return result
+
+
 async def _check_row_group_alignment(
     files: list[tuple[bytes, str]],
     items: list[dict],
@@ -199,10 +214,24 @@ async def _check_row_group_alignment(
     if not at_risk_groups:
         return
 
-    verify_results = await verify_row_group_alignment(
+    # Realny przypadek produkcyjny (2026-09-17): POJEDYNCZA druga kontrola jest sama w sobie
+    # zbyt niestabilna, zeby jej ufac - w jednym przebiegu oflagowala 5 pozycji faktycznie
+    # POPRAWNYCH (falszywe alarmy) i rownoczesnie przeoczyla prawdziwy blad (wskazala INNY zly
+    # wiersz tej samej grupy niz za pierwszym razem). Wymagamy wiec zgodnosci DWOCH niezaleznych
+    # dodatkowych odczytow ze soba, zanim cokolwiek oznaczymy - jesli druga i trzecia proba nie
+    # zgadzaja sie ze soba, to sygnal, ze sama kontrola jest niepewna dla tego wiersza, wiec
+    # ufamy glownemu odczytowi zamiast dodawac szum (patrz _consensus ponizej).
+    verify_first = await verify_row_group_alignment(
         files, at_risk_groups, log_context=log_context,
         event_callback=event_callback, cooldown_store=cooldown_store,
     )
+    if not verify_first:
+        return
+    verify_second = await verify_row_group_alignment(
+        files, at_risk_groups, log_context=log_context,
+        event_callback=event_callback, cooldown_store=cooldown_store,
+    )
+    verify_results = _consensus(verify_first, verify_second)
     if not verify_results:
         return
 

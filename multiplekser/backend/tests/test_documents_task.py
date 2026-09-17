@@ -384,7 +384,7 @@ def test_run_ocr_task_ponawia_po_przejsciowym_bledzie_i_konczy_sukcesem(
     # ocr/row_groups.py) - trzeci odczyt to dodatkowa kontrola AI dla tej grupy
     # (_check_row_group_alignment w tasks.py), potwierdzajaca ten sam wynik co glowny odczyt.
     group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
-    responses = [OCRProviderError("timeout")] * 4 + [classify_response, ocr_response, group_verify_response]
+    responses = [OCRProviderError("timeout")] * 4 + [classify_response, ocr_response, group_verify_response, group_verify_response]
     with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=responses)), \
          patch("app.modules.documents.tasks.time.sleep") as fake_sleep:
         run_ocr_task(document_id, db_session)
@@ -431,7 +431,7 @@ def test_run_ocr_task_druga_proba_uzupelnia_pomijeta_ilosc(
     group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response, group_verify_response, group_verify_response]),
     ):
         run_ocr_task(document_id, db_session)
 
@@ -460,7 +460,7 @@ def test_run_ocr_task_ilosc_z_glownego_modelu_nie_ma_flagi_dodatkowej_kontroli(
     group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
     ):
         run_ocr_task(document_id, db_session)
 
@@ -623,7 +623,7 @@ def test_run_ocr_task_grupa_podobnych_wierszy_wykrywa_przesuniecie(
     )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
     ):
         run_ocr_task(document_id, db_session)
 
@@ -665,7 +665,7 @@ def test_run_ocr_task_grupa_podobnych_wierszy_zgodnosc_nic_nie_zmienia(
     )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
     ):
         run_ocr_task(document_id, db_session)
 
@@ -705,7 +705,7 @@ def test_run_ocr_task_grupa_podobnych_wierszy_zapisuje_log_rozbieznosci(
     )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
     ):
         run_ocr_task(document_id, db_session)
 

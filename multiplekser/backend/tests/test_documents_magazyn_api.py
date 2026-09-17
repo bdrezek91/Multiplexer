@@ -86,7 +86,7 @@ def test_zmiana_magazynu_dziala_dla_hydrauliki(
     group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
     ):
         run_ocr_task(str(document.id), db_session)
 

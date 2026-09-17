@@ -261,7 +261,7 @@ def test_generate_hydraulika_dziala_wlasnym_generatorem(
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
     ):
         run_ocr_task(str(document.id), db_session)
 
@@ -294,7 +294,7 @@ def test_generate_hydraulika_zachowuje_kolejnosc_z_dokumentu_zrodlowego(
     )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
     ):
         run_ocr_task(str(document.id), db_session)
 
@@ -424,7 +424,7 @@ def test_add_item_hydraulika_dziala_na_katalogu_wlasciwego_dzialu(
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
     ):
         run_ocr_task(str(document.id), db_session)
 

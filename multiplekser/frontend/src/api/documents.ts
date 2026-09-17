@@ -9,6 +9,7 @@ import type {
   DocumentReportCreate,
   DocumentReportStatus,
   GenerateRequest,
+  OptimaLink,
 } from '../types'
 
 export function listDocuments(): Promise<DocumentDetail[]> {
@@ -85,4 +86,18 @@ export function resolveDocumentReport(reportId: string): Promise<DocumentReport>
 // tokenu, wiec nie moze byc zwyklym <a href>, stad pobranie jako blob (jak generateDocument).
 export function getDocumentFile(documentId: string, page = 1): Promise<{ blob: Blob; filename: string | null }> {
   return apiRequestBlob(`/documents/${encodeURIComponent(documentId)}/file?page=${page}`)
+}
+
+// Staly, anonimowy link do receptury TXT dla Comarch ERP Optima (2026-09-17) - Optima pobiera
+// plik zwyklym GET, bez logowania, wiec URL nie jest chroniony tokenem sesji jak reszta API.
+export function createOptimaLink(documentId: string): Promise<OptimaLink> {
+  return apiRequest<OptimaLink>(`/documents/${encodeURIComponent(documentId)}/optima-link`, {
+    method: 'POST',
+  })
+}
+
+export function revokeOptimaLink(documentId: string): Promise<void> {
+  return apiRequest<void>(`/documents/${encodeURIComponent(documentId)}/optima-link`, {
+    method: 'DELETE',
+  })
 }

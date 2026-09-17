@@ -10,7 +10,14 @@ import type { DocumentDetail, Product } from '../types'
 
 vi.mock('../api/documents', async () => {
   const actual = await vi.importActual<typeof import('../api/documents')>('../api/documents')
-  return { ...actual, getDocument: vi.fn(), updateDocumentItem: vi.fn(), addDocumentItem: vi.fn() }
+  return {
+    ...actual,
+    getDocument: vi.fn(),
+    updateDocumentItem: vi.fn(),
+    addDocumentItem: vi.fn(),
+    createOptimaLink: vi.fn(),
+    revokeOptimaLink: vi.fn(),
+  }
 })
 vi.mock('../api/products', async () => {
   const actual = await vi.importActual<typeof import('../api/products')>('../api/products')
@@ -61,6 +68,7 @@ const documentDetail: DocumentDetail = {
       ilosc_z_dodatkowej_kontroli: false,
     },
   ],
+  optima_link_active: false,
 }
 
 describe('DocumentDetailPage - przebieg AI', () => {
@@ -206,5 +214,51 @@ describe('DocumentDetailPage - AddItemRow', () => {
         ilosc_finalna: 2,
       }),
     )
+  })
+})
+
+describe('DocumentDetailPage - link Optima', () => {
+  beforeEach(() => {
+    vi.mocked(documentsApi.getDocument).mockReset()
+    vi.mocked(documentsApi.createOptimaLink).mockReset()
+    vi.mocked(documentsApi.revokeOptimaLink).mockReset()
+    vi.mocked(documentsApi.getDocument).mockResolvedValue(documentDetail)
+  })
+
+  it('pozwala wygenerowac link, skopiowac go i unieważnic', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    vi.mocked(documentsApi.createOptimaLink).mockResolvedValue({
+      url: 'https://dampolmultiplekser.pl/api/optima/recipe/doc1/abc123.txt',
+    })
+    vi.mocked(documentsApi.revokeOptimaLink).mockResolvedValue(undefined)
+
+    renderPage()
+    await screen.findByDisplayValue('RURA FI 32 50 CM')
+
+    const generateButton = await screen.findByRole('button', { name: 'Generuj link TXT dla Optimy' })
+    await user.click(generateButton)
+
+    await waitFor(() => expect(documentsApi.createOptimaLink).toHaveBeenCalledWith('doc1'))
+    expect(
+      await screen.findByDisplayValue('https://dampolmultiplekser.pl/api/optima/recipe/doc1/abc123.txt'),
+    ).toBeInTheDocument()
+
+    const copyButton = screen.getByRole('button', { name: 'Kopiuj link' })
+    await user.click(copyButton)
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(
+        'https://dampolmultiplekser.pl/api/optima/recipe/doc1/abc123.txt',
+      ),
+    )
+    expect(await screen.findByRole('button', { name: 'Skopiowano' })).toBeInTheDocument()
+
+    const revokeButton = screen.getByRole('button', { name: 'Unieważnij link' })
+    await user.click(revokeButton)
+
+    await waitFor(() => expect(documentsApi.revokeOptimaLink).toHaveBeenCalledWith('doc1'))
+    expect(await screen.findByRole('button', { name: 'Generuj link TXT dla Optimy' })).toBeInTheDocument()
   })
 })

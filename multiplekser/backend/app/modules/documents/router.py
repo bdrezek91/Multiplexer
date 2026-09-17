@@ -14,6 +14,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.db import get_db
 from app.modules.generator import (
     GeneratorItem,
@@ -48,6 +49,7 @@ from .schemas import (
     DocumentReportOut,
     GenerateRequest,
     MagazynUpdateIn,
+    OptimaLinkOut,
 )
 from .storage import get_storage
 from .tasks import dispatch_ocr_task
@@ -116,6 +118,7 @@ def _to_schema(document: DocumentModel) -> DocumentOut:
         ai_trace=document.ai_trace or [],
         created_at=document.created_at,
         items=[_item_to_schema(it) for it in _items_in_physical_order(document)],
+        optima_link_active=bool(document.optima_share_token_hash),
     )
 
 
@@ -355,6 +358,37 @@ def update_document_magazyn(
     return _to_schema(document)
 
 
+def _generate_optima_text(
+    document: DocumentModel, session: Session, *, qty_mode: str = "real", first_wydawka: bool = False,
+) -> str:
+    """Jedyne miejsce budujace tresc receptury Optima (kod;ilosc;;jm;magazyn) - uzywane zarowno
+    przez POST /{document_id}/generate (pobranie w przegladarce), jak i GET
+    /optima/recipe/{document_id}/{token}.txt (staly, anonimowy link dla Comarch ERP Optima,
+    2026-09-17) - CELOWO bez duplikowania logiki generatora/dopasowania w drugim miejscu."""
+    dzial = document.dzial or "elektryka"
+    items = [
+        GeneratorItem(
+            name=it.rozpoznana_nazwa, qty=it.ilosc_finalna, off_form=it.off_form,
+            match_kod=it.match_kod, match_nazwa=it.match_nazwa, match_jm=it.match_jm,
+            match_quality=it.match_quality, match_score=it.match_score,
+        )
+        for it in _items_in_physical_order(document)
+        if it.ilosc_finalna is not None and it.ilosc_finalna > 0
+    ]
+
+    catalog = Catalog.from_db(session, dzial=dzial)
+    if dzial == "hydraulika":
+        result = generate_output_hydraulika(items, catalog, document.magazyn, qty_mode=qty_mode)
+    else:
+        special_rules = rules_from_db(session)
+        result = generate_output(
+            items, catalog, document.magazyn, special_rules=special_rules,
+            qty_mode=qty_mode, first_wydawka=first_wydawka,
+        )
+
+    return "\n".join(result.lines)
+
+
 def _report_to_schema(report: DocumentReportModel) -> DocumentReportOut:
     return DocumentReportOut(
         id=str(report.id),
@@ -405,6 +439,43 @@ def get_document_file(
     ascii_fallback = document.original_filename.encode("ascii", "replace").decode("ascii")
     disposition = f"inline; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(document.original_filename)}"
     return Response(content=raw, media_type=mime, headers={"Content-Disposition": disposition})
+
+
+@router.post("/{document_id}/optima-link", response_model=OptimaLinkOut, status_code=201)
+def create_document_optima_link(
+    document_id: str,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+):
+    """Tworzy staly, anonimowy link do receptury TXT dla Comarch ERP Optima (2026-09-17) -
+    Optima nie potrafi zalogowac sie ani wyslac Bearer tokena, wiec pobiera plik zwyklym GET
+    pod adresem zawierajacym dlugi, losowy token (patrz GET /optima/recipe/{id}/{token}.txt,
+    optima_router.py). Wywolanie tego endpointu PONOWNIE nadpisuje token - poprzedni link
+    natychmiast przestaje dzialac (patrz repository.create_optima_share_link)."""
+    document = repository.get_document(session, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
+    _check_owner_or_admin(document, user)
+
+    token = repository.create_optima_share_link(session, document)
+    url = f"{settings.public_base_url}/api/optima/recipe/{document.id}/{token}.txt"
+    return OptimaLinkOut(url=url)
+
+
+@router.delete("/{document_id}/optima-link", status_code=204)
+def delete_document_optima_link(
+    document_id: str,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+):
+    """Uniewaznia link Optima (jesli istnieje) - po tym GET .../optima/recipe/... dla starego
+    tokena zwraca 404, tak samo jak dla dokumentu, ktory nigdy nie mial linku."""
+    document = repository.get_document(session, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
+    _check_owner_or_admin(document, user)
+
+    repository.revoke_optima_share_link(session, document)
 
 
 @router.post("/{document_id}/reports", response_model=DocumentReportOut, status_code=201)
@@ -471,28 +542,9 @@ def generate_document_output(
     if document.status != "done":
         raise HTTPException(status_code=409, detail=f"Dokument ma status {document.status!r}, oczekiwano 'done'")
 
-    dzial = document.dzial or "elektryka"
-    items = [
-        GeneratorItem(
-            name=it.rozpoznana_nazwa, qty=it.ilosc_finalna, off_form=it.off_form,
-            match_kod=it.match_kod, match_nazwa=it.match_nazwa, match_jm=it.match_jm,
-            match_quality=it.match_quality, match_score=it.match_score,
-        )
-        for it in _items_in_physical_order(document)
-        if it.ilosc_finalna is not None and it.ilosc_finalna > 0
-    ]
-
-    catalog = Catalog.from_db(session, dzial=dzial)
-    if dzial == "hydraulika":
-        result = generate_output_hydraulika(items, catalog, document.magazyn, qty_mode=body.qty_mode)
-    else:
-        special_rules = rules_from_db(session)
-        result = generate_output(
-            items, catalog, document.magazyn, special_rules=special_rules,
-            qty_mode=body.qty_mode, first_wydawka=body.first_wydawka,
-        )
-
-    text = "\n".join(result.lines)
+    text = _generate_optima_text(
+        document, session, qty_mode=body.qty_mode, first_wydawka=body.first_wydawka,
+    )
     filename = get_filename(document.numer_projektu)
     # Nazwa pliku (z numer_projektu) moze zawierac polskie znaki - naglowek HTTP musi byc
     # ASCII, wiec dajemy zarowno fallback ASCII jak i poprawny filename* (RFC 5987).

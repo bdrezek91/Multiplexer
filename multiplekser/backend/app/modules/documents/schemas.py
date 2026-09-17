@@ -55,6 +55,9 @@ class DocumentOut(BaseModel):
     ai_trace: list[AITraceEventOut] = Field(default_factory=list)
     created_at: datetime
     items: list[DocumentItemOut]
+    # Czy dokument ma aktywny link Optima (2026-09-17) - NIGDY sam token/URL (ten wraca
+    # wylacznie raz, z POST /{id}/optima-link) - patrz uzasadnienie w repository.py.
+    optima_link_active: bool = False
 
 
 class DocumentCreatedOut(BaseModel):
@@ -96,6 +99,13 @@ class DocumentReportCreateIn(BaseModel):
     """Zgloszenie problemu na dokumencie (2026-09-08) - wolny tekst opisujacy co jest zle na
     tym konkretnym skanie (np. zle dopasowanie, zla ilosc)."""
     opis: str = Field(min_length=1, max_length=4000)
+
+
+class OptimaLinkOut(BaseModel):
+    """Odpowiedz POST /{document_id}/optima-link - jedyny moment, w ktorym pelny URL (z surowym
+    tokenem) jest widoczny. Ani baza, ani zaden inny endpoint go pozniej nie zwraca - patrz
+    DocumentOut.optima_link_active (tylko flaga, bez tokena)."""
+    url: str
 
 
 class DocumentReportOut(BaseModel):

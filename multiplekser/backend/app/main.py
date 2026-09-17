@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.logging_config import configure_logging
 from app.core.rate_limit import limiter
+from app.modules.documents.optima_router import router as optima_router
 from app.modules.documents.router import router as documents_router
 from app.modules.matcher import match_against_catalog, match_against_catalog_hydraulika, rules_from_db
 from app.modules.products import Catalog
@@ -37,6 +38,7 @@ app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(products_router)
 app.include_router(documents_router)
+app.include_router(optima_router)
 
 
 # Rate limiting (patrz app/core/rate_limit.py) - limit ustawiony bezposrednio przy endpoincie

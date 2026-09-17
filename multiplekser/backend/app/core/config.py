@@ -64,5 +64,12 @@ class Settings(BaseSettings):
     ocr_image_max_side: int = 2600
     ocr_image_quality: int = 95
 
+    # Baza publicznego URL (bez koncowego "/") uzywana do budowania stalych linkow Optima
+    # (patrz documents/router.py: create_document_optima_link) - Comarch Optima pobiera
+    # receptury bezposrednim, anonimowym GET, wiec link musi byc pelnym, absolutnym adresem,
+    # nie sciezka wzgledna. W produkcji ustawic na prawdziwa domene (np.
+    # "https://dampolmultiplekser.pl") przez zmienna PUBLIC_BASE_URL.
+    public_base_url: str = "http://localhost:8000"
+
 
 settings = Settings()

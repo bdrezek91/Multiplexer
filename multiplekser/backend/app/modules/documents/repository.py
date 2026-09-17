@@ -1,6 +1,9 @@
 """Repozytorium Document/DocumentItem (Etap 7)."""
 from __future__ import annotations
 
+import hashlib
+import hmac
+import secrets
 import uuid
 from typing import Optional
 
@@ -266,3 +269,48 @@ def add_manual_item(
     session.commit()
     session.refresh(item)
     return item
+
+
+def _hash_optima_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_optima_share_link(session: Session, document: DocumentModel) -> str:
+    """Tworzy (lub podmienia) staly, anonimowy link Optima dla dokumentu - na zyczenie
+    uzytkownika (2026-09-17). Zwraca SUROWY token WYLACZNIE raz, w tym wywolaniu - w bazie
+    zostaje tylko jego SHA-256 (patrz DocumentModel.optima_share_token_hash). Wygenerowanie
+    nowego tokena celowo naklada sie na stary (nadpisuje hash) - poprzedni link natychmiast
+    przestaje dzialac, zgodnie z wymaganiem "nowy token uniewaznia stary"."""
+    token = secrets.token_urlsafe(32)
+    document.optima_share_token_hash = _hash_optima_token(token)
+    document.optima_share_created_at = datetime.now(timezone.utc)
+    session.commit()
+    return token
+
+
+def revoke_optima_share_link(session: Session, document: DocumentModel) -> None:
+    document.optima_share_token_hash = None
+    document.optima_share_created_at = None
+    session.commit()
+
+
+def get_document_by_optima_token(session: Session, document_id, token: str) -> Optional[DocumentModel]:
+    """Rozwiazuje anonimowy link Optima - zwraca dokument TYLKO gdy id istnieje, ma aktywny
+    (nie uniewazniony) link, i podany token pasuje do zapisanego hasha. Wszystkie trzy
+    przypadki niepowodzenia (zly UUID, brak aktywnego linku, zly token) zwracaja to samo None -
+    wywolujacy (router) musi zmienic to jednolicie w 404, bez ujawniania KTORY z warunkow
+    zawiodl (patrz wymaganie bezpieczenstwa: nie zdradzac czy dokument w ogole istnieje)."""
+    uid = _to_uuid(document_id)
+    if uid is None or not token:
+        return None
+    document = (
+        session.query(DocumentModel)
+        .options(selectinload(DocumentModel.items))
+        .filter(DocumentModel.id == uid)
+        .first()
+    )
+    if document is None or not document.optima_share_token_hash:
+        return None
+    if not hmac.compare_digest(_hash_optima_token(token), document.optima_share_token_hash):
+        return None
+    return document

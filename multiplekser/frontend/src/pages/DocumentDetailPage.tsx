@@ -26,8 +26,11 @@ import {
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DownloadIcon from '@mui/icons-material/Download'
 import ImageIcon from '@mui/icons-material/Image'
+import LinkIcon from '@mui/icons-material/Link'
+import LinkOffIcon from '@mui/icons-material/LinkOff'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
 import { alpha } from '@mui/material/styles'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -36,9 +39,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   addDocumentItem,
   createDocumentReport,
+  createOptimaLink,
   generateDocument,
   getDocument,
   getDocumentFile,
+  revokeOptimaLink,
   updateDocumentItem,
   updateDocumentMagazyn,
 } from '../api/documents'
@@ -467,6 +472,152 @@ function ReportProblemDialog({ documentId }: { documentId: string }) {
   )
 }
 
+// Staly, anonimowy link do receptury TXT dla Comarch ERP Optima (2026-09-17, na zyczenie
+// uzytkownika) - Optima pobiera plik zwyklym GET, bez logowania, wiec URL sam w sobie jest
+// sekretem (dlugi, losowy token). Backend NIGDY nie zwraca pelnego URL poza odpowiedzia
+// POST .../optima-link - stad `url` w lokalnym stanie: po odswiezeniu strony wiemy tylko z
+// `document.optima_link_active`, ze jakis link istnieje, ale nie jaki (patrz DocumentOut).
+function ComarchOptimaSection({
+  documentId,
+  linkActive,
+}: {
+  documentId: string
+  linkActive: boolean
+}) {
+  const queryClient = useQueryClient()
+  const [url, setUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['documents', documentId] })
+
+  const generateMutation = useMutation({
+    mutationFn: () => createOptimaLink(documentId),
+    onSuccess: (data) => {
+      setUrl(data.url)
+      setCopied(false)
+      invalidate()
+    },
+  })
+
+  const revokeMutation = useMutation({
+    mutationFn: () => revokeOptimaLink(documentId),
+    onSuccess: () => {
+      setUrl(null)
+      setCopied(false)
+      invalidate()
+    },
+  })
+
+  const handleCopy = async () => {
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  const hasKnownUrl = Boolean(url)
+
+  return (
+    <Paper sx={{ p: 2 }}>
+      <Typography variant="subtitle1" gutterBottom>
+        Comarch Optima
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Stały link do pobrania receptury TXT bez logowania - wklej go bezpośrednio do Comarch
+        ERP Optima.
+      </Typography>
+
+      {!linkActive && !hasKnownUrl && (
+        <Button
+          variant="outlined"
+          startIcon={<LinkIcon />}
+          onClick={() => generateMutation.mutate()}
+          disabled={generateMutation.isPending}
+        >
+          Generuj link TXT dla Optimy
+        </Button>
+      )}
+
+      {linkActive && !hasKnownUrl && (
+        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+          <Chip size="small" color="success" label="Link aktywny" />
+          <Typography variant="body2" color="text.secondary">
+            Sam adres jest widoczny tylko raz, zaraz po wygenerowaniu.
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<LinkIcon />}
+            onClick={() => generateMutation.mutate()}
+            disabled={generateMutation.isPending}
+          >
+            Wygeneruj nowy link
+          </Button>
+          <Button
+            size="small"
+            color="error"
+            variant="outlined"
+            startIcon={<LinkOffIcon />}
+            onClick={() => revokeMutation.mutate()}
+            disabled={revokeMutation.isPending}
+          >
+            Unieważnij link
+          </Button>
+        </Stack>
+      )}
+
+      {hasKnownUrl && (
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+            <TextField
+              size="small"
+              value={url}
+              InputProps={{ readOnly: true }}
+              sx={{ minWidth: 420, flexGrow: 1 }}
+              onFocus={(e) => e.target.select()}
+            />
+            <Button size="small" variant="outlined" startIcon={<ContentCopyIcon />} onClick={handleCopy}>
+              {copied ? 'Skopiowano' : 'Kopiuj link'}
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<LinkIcon />}
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+            >
+              Wygeneruj nowy link
+            </Button>
+            <Button
+              size="small"
+              color="error"
+              variant="outlined"
+              startIcon={<LinkOffIcon />}
+              onClick={() => revokeMutation.mutate()}
+              disabled={revokeMutation.isPending}
+            >
+              Unieważnij link
+            </Button>
+          </Stack>
+        </Stack>
+      )}
+
+      {(generateMutation.isError || revokeMutation.isError) && (
+        <Alert severity="error" sx={{ mt: 2 }}>
+          {generateMutation.error instanceof ApiError
+            ? generateMutation.error.detail
+            : revokeMutation.error instanceof ApiError
+              ? revokeMutation.error.detail
+              : 'Nie udało się wykonać operacji na linku Optima'}
+        </Alert>
+      )}
+    </Paper>
+  )
+}
+
 export function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -758,6 +909,10 @@ export function DocumentDetailPage() {
                   </Alert>
                 )}
               </Paper>
+
+              <Box sx={{ mt: 2 }}>
+                <ComarchOptimaSection documentId={documentId} linkActive={document.optima_link_active} />
+              </Box>
             </>
           )}
         </>

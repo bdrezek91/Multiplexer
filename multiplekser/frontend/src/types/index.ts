@@ -86,6 +86,13 @@ export interface DocumentDetail {
   ai_trace: AITraceEvent[]
   created_at: string
   items: DocumentItem[]
+  // Czy dokument ma aktywny link Optima (2026-09-17) - sam token/URL NIGDY nie wraca stad,
+  // tylko z odpowiedzi POST /documents/{id}/optima-link (patrz OptimaLink ponizej).
+  optima_link_active: boolean
+}
+
+export interface OptimaLink {
+  url: string
 }
 
 export interface DocumentCreated {

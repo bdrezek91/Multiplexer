@@ -144,6 +144,16 @@ schemacie bazy:
 docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
 ```
 
+**Uwaga - staly link Optima (`PUBLIC_BASE_URL`)** (2026-09-17) - stronę szczegółów dokumentu ma
+przycisk "Generuj link TXT dla Optimy" (staly, anonimowy link do receptury, patrz
+`app/modules/documents/optima_router.py`). Wymaga to na serwerze:
+1. Zastosowania nowej migracji Alembic (patrz punkt wyzej) - dodaje kolumny
+   `optima_share_token_hash`/`optima_share_created_at` na `document`.
+2. Ustawienia w `.env` zmiennej `PUBLIC_BASE_URL` na prawdziwa domene produkcyjna (np.
+   `PUBLIC_BASE_URL=https://dampolmultiplekser.pl`) - bez tego wygenerowane linki beda
+   wskazywac na `http://localhost:8000` i nie zadzialaja z zewnatrz. Patrz
+   `.env.prod.example`.
+
 **Inna aplikacja pod ta sama domena, na innej sciezce** (np. `/kalkulator-terminu`, bez osobnej
 subdomeny/certyfikatu) - Caddy juz ma wpis `handle_path` w `Caddyfile` wskazujacy na kontener
 `kalkulator-web:8000`. Zeby to zadzialalo, kontener tamtej aplikacji musi byc w tej samej sieci

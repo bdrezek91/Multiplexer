@@ -49,6 +49,15 @@ class DocumentModel(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
+    # Link Optima (2026-09-17, na zyczenie uzytkownika) - staly, anonimowy URL do pobrania
+    # receptury TXT bezposrednim GET (Comarch Optima nie potrafi zalogowac sie ani wyslac
+    # Bearer tokena). Token NIGDY nie jest przechowywany jawnie - tylko SHA-256 (patrz
+    # repository.py: create_optima_share_link/get_document_by_optima_token). Brak hasha =
+    # brak aktywnego linku. `optima_share_created_at` jest tylko informacyjne (nie uzywane do
+    # wygasania linku - link dziala do recznego uniewaznienia/wygenerowania nowego).
+    optima_share_token_hash: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    optima_share_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     items: Mapped[list["DocumentItemModel"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="DocumentItemModel.sequence",
     )

@@ -158,9 +158,11 @@ class DocumentReportModel(Base):
     reported_by: Mapped["UserModel"] = relationship()
 
 
-# Rodzaj interwencji drugiej kontroli AI dla grup podobnych wierszy (2026-09-17) i pelnej
-# kontroli calego dokumentu (2026-09-18) - patrz ocr/verify.py: verify_row_group_alignment,
-# tasks.py: _check_row_group_alignment/_check_full_document_consistency.
+# Rodzaj interwencji drugiej kontroli AI - patrz ocr/verify.py: verify_ambiguous_quantities,
+# tasks.py: _check_full_document_consistency. "mismatch_existing"/"missing_flagged_group"
+# pochodza z usunietego 2026-09-18 mechanizmu kontroli grup podobnych wierszy
+# (_check_row_group_alignment) - zostawione w krotce dla zgodnosci z historycznymi wpisami w
+# bazie, ale nie sa juz nigdzie generowane.
 ROW_GROUP_FLAG_KINDS = (
     "mismatch_existing", "missing_flagged_group",
     "full_reread_mismatch", "full_reread_missing",
@@ -168,16 +170,16 @@ ROW_GROUP_FLAG_KINDS = (
 
 
 class OcrRowGroupFlagModel(Base):
-    """Log kazdej interwencji drugiej, niezaleznej kontroli AI dla grup podobnych wierszy
-    formularza (2026-09-17, na zyczenie uzytkownika - raport skutecznosci mechanizmu). Zapisywany
-    WYLACZNIE gdy druga kontrola NIE zgadza sie z glownym odczytem (patrz tasks.py) - zgodnosc
-    (najczestszy przypadek) nie generuje wpisu. `kind`: "mismatch_existing" (istniejaca pozycja
-    oflagowana do weryfikacji) albo "missing_flagged_group" (druga kontrola sugeruje pominieta
-    pozycje, ale NIE zostala dodana automatycznie - patrz tasks.py, sekcja o realnym przypadku
-    2026-09-17, gdzie druga kontrola tez sie pomylila; zamiast niej oflagowana cala reszta
-    grupy). Trzymany jako TRWALY log niezaleznie od `document.ai_trace`
-    (JSONB per-dokument z limitem 200 zdarzen, wyswietlany w UI) - ten log sluzy do zbiorczego
-    raportu (scripts/report_row_group_flags.py), nie do podgladu pojedynczego dokumentu."""
+    """Log kazdej interwencji drugiej, niezaleznej, PELNEJ kontroli AI calego dokumentu
+    (2026-09-17/18, na zyczenie uzytkownika - raport skutecznosci mechanizmu). Zapisywany
+    WYLACZNIE gdy druga kontrola NIE zgadza sie z glownym odczytem (patrz tasks.py:
+    _check_full_document_consistency) - zgodnosc (najczestszy przypadek) nie generuje wpisu.
+    `kind`: "full_reread_mismatch" (istniejaca pozycja oflagowana do weryfikacji) albo
+    "full_reread_missing" (druga kontrola sugeruje pominieta pozycje, NIE dodana automatycznie -
+    decyzje co bylo faktycznie na kartce podejmuje czlowiek na oryginale). Trzymany jako TRWALY
+    log niezaleznie od `document.ai_trace` (JSONB per-dokument z limitem 200 zdarzen, wyswietlany
+    w UI) - ten log sluzy do zbiorczego raportu (scripts/report_row_group_flags.py), nie do
+    podgladu pojedynczego dokumentu."""
     __tablename__ = "ocr_row_group_flag"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)

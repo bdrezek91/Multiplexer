@@ -32,13 +32,10 @@ from app.modules.ocr.classify import classify_document
 from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
 from app.modules.ocr.image import downscale_image, is_blank_page, pdf_to_page_images
 from app.modules.ocr.parsing import parse_float_loose
-from app.modules.ocr.form_rows_elektryka import FORM_ROWS as _FORM_ROWS_ELEKTRYKA
-from app.modules.ocr.form_rows_hydraulika import FORM_ROWS as _FORM_ROWS_HYDRAULIKA
 from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
 from app.modules.ocr.providers import OCRProviderError
-from app.modules.ocr.row_groups import group_similar_rows
-from app.modules.ocr.verify import verify_ambiguous_quantities, verify_row_group_alignment
+from app.modules.ocr.verify import verify_ambiguous_quantities
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 
@@ -122,8 +119,7 @@ def _row_dict_from_ocritem(
     it, ilosc_wydana_raw, ilosc_zuzyta_raw, session: Session, *, ilosc_z_dodatkowej_kontroli: bool = False,
 ) -> dict:
     """Wspolna konwersja OCRItem/OCRItemHydraulika (ksztalt identyczny w obu pipeline'ach) na
-    plaski dict przechowywany w `items` - uzywana zarowno dla glownego odczytu jak i pozycji
-    dodanych/oflagowanych przez _check_row_group_alignment ponizej."""
+    plaski dict przechowywany w `items` - uzywana dla glownego odczytu."""
     wydana = parse_float_loose(ilosc_wydana_raw) if ilosc_wydana_raw is not None else None
     zuzyta = parse_float_loose(ilosc_zuzyta_raw) if ilosc_zuzyta_raw is not None else None
     return {
@@ -149,168 +145,6 @@ def _row_dict_from_ocritem(
     }
 
 
-_GROUP_MISMATCH_NOTE = (
-    "Druga, niezależna kontrola AI wskazuje inną ilość dla tego wiersza (grupa podobnych "
-    "wierszy formularza, np. różniących się przekrojem/wymiarem) - możliwe przesunięcie o "
-    "jeden wiersz, zweryfikuj ręcznie na oryginale."
-)
-
-
-def _flag_group_mismatch(item: dict) -> None:
-    item["needs_review"] = True
-    item["ilosc_z_dodatkowej_kontroli"] = True
-    existing = item.get("form_note") or ""
-    item["form_note"] = f"{existing} | {_GROUP_MISMATCH_NOTE}" if existing else _GROUP_MISMATCH_NOTE
-
-
-def _consensus(first: dict, second: dict) -> dict:
-    """Zostawia TYLKO etykiety, dla ktorych dwie niezalezne dodatkowe kontrole (verify_first,
-    verify_second w _check_row_group_alignment) zgadzaja sie ze soba co do obu ilosci - patrz
-    uzasadnienie w miejscu wywolania. Brak zgodnosci (albo brak odpowiedzi jednej z prob dla
-    danej etykiety) oznacza "nieustalone", nie trafia do dalszej analizy."""
-    result = {}
-    for label, r1 in first.items():
-        r2 = second.get(label)
-        if r2 is None:
-            continue
-        if r1.ilosc_wydana == r2.ilosc_wydana and r1.ilosc_zuzyta == r2.ilosc_zuzyta:
-            result[label] = r1
-    return result
-
-
-async def _check_row_group_alignment(
-    files: list[tuple[bytes, str]],
-    items: list[dict],
-    dzial: str,
-    session: Session,
-    document_id,
-    event_callback: OCRChainEventCallback,
-    cooldown_store: OCRCooldownStore,
-    log_context: Mapping[str, object],
-) -> None:
-    """Druga, niezalezna kontrola AI dla grup niemal identycznych wierszy formularza (2026-09-17,
-    realny przypadek produkcyjny: ilosc nalezaca do "Przewod 3x4" trafila do sasiedniego
-    "Przewod 3x1,5" - patrz row_groups.py i prompt.py: _PODOBNE_WIERSZE_DOPISEK). Uruchamia
-    dodatkowe zapytanie AI TYLKO gdy w dokumencie faktycznie wystapila taka grupa z jakakolwiek
-    znaleziona iloscia (best-effort, nigdy nie blokuje calego dokumentu przy bledzie/braku
-    wyniku - patrz verify_row_group_alignment). Zgodnosc obu odczytow (najczestszy przypadek) NIE
-    zmienia niczego w `items`. Rozbieznosc: oznacza istniejaca pozycje (i cala reszte grupy) do
-    recznej weryfikacji - NIGDY nie dodaje zgadywanej nowej pozycji (nawet gdy druga kontrola
-    "znajdzie" ilosc dla wiersza pominietego przez glowny odczyt) - realny przypadek produkcyjny
-    (2026-09-17) pokazal, ze druga kontrola bywa RÓWNIE bledna jak pierwsza (wskazuje inny, tez
-    zly wiersz tej samej grupy), wiec automatyczne dodanie jej zgadniecia tylko zamienia jeden
-    blad na dwa. Zamiast tego zostawia jawny trop w `document.ai_trace` (widoczny w UI jako
-    "Przebieg AI") - decyzje co bylo faktycznie na kartce podejmuje czlowiek na oryginale."""
-    form_rows = _FORM_ROWS_HYDRAULIKA if dzial == "hydraulika" else _FORM_ROWS_ELEKTRYKA
-    all_groups = group_similar_rows(form_rows)
-    if not all_groups:
-        return
-
-    active_labels = {
-        item["rozpoznana_nazwa"] for item in items
-        if item["ilosc_wydana"] is not None or item["ilosc_zuzyta"] is not None
-    }
-    at_risk_groups = [group for group in all_groups if any(label in active_labels for label in group)]
-    if not at_risk_groups:
-        return
-
-    # Realny przypadek produkcyjny (2026-09-17): POJEDYNCZA druga kontrola jest sama w sobie
-    # zbyt niestabilna, zeby jej ufac - w jednym przebiegu oflagowala 5 pozycji faktycznie
-    # POPRAWNYCH (falszywe alarmy) i rownoczesnie przeoczyla prawdziwy blad (wskazala INNY zly
-    # wiersz tej samej grupy niz za pierwszym razem). Wymagamy wiec zgodnosci DWOCH niezaleznych
-    # dodatkowych odczytow ze soba, zanim cokolwiek oznaczymy - jesli druga i trzecia proba nie
-    # zgadzaja sie ze soba, to sygnal, ze sama kontrola jest niepewna dla tego wiersza, wiec
-    # ufamy glownemu odczytowi zamiast dodawac szum (patrz _consensus ponizej).
-    verify_first = await verify_row_group_alignment(
-        files, at_risk_groups, log_context=log_context,
-        event_callback=event_callback, cooldown_store=cooldown_store,
-    )
-    if not verify_first:
-        return
-    verify_second = await verify_row_group_alignment(
-        files, at_risk_groups, log_context=log_context,
-        event_callback=event_callback, cooldown_store=cooldown_store,
-    )
-    verify_results = _consensus(verify_first, verify_second)
-    if not verify_results:
-        return
-
-    items_by_label: dict[str, list[dict]] = {}
-    for item in items:
-        items_by_label.setdefault(item["rozpoznana_nazwa"], []).append(item)
-
-    for group in at_risk_groups:
-        for label in group:
-            second = verify_results.get(label)
-            if second is None:
-                continue  # druga kontrola nie odpowiedziala dla tego ID - brak informacji, pomin
-
-            existing = items_by_label.get(label, [])
-            main_wydana = existing[0]["ilosc_wydana"] if existing else None
-            main_zuzyta = existing[0]["ilosc_zuzyta"] if existing else None
-            if second.ilosc_wydana == main_wydana and second.ilosc_zuzyta == main_zuzyta:
-                continue  # zgodnosc obu niezaleznych odczytow - najczestszy przypadek, bez zmian
-
-            if existing:
-                for item in existing:
-                    _flag_group_mismatch(item)
-                try:
-                    repository.log_row_group_flag(
-                        session, document_id=document_id, dzial=dzial, rozpoznana_nazwa=label,
-                        kind="mismatch_existing",
-                        main_ilosc_wydana=main_wydana, main_ilosc_zuzyta=main_zuzyta,
-                        second_ilosc_wydana=second.ilosc_wydana, second_ilosc_zuzyta=second.ilosc_zuzyta,
-                    )
-                except Exception:
-                    logger.warning("Nie udalo sie zapisac logu row-group-flag", exc_info=True)
-                continue
-
-            if not second.found_anything:
-                continue  # oba puste (roznica tylko np. 0 vs None) - nic do zrobienia
-
-            # Glowny odczyt CALKOWICIE pominal ten wiersz, a druga kontrola znalazla dla niego
-            # ilosc - typowy obraz "ofiary" przesuniecia wiersza. NIE dodajemy jednak zgadywanej
-            # pozycji: realny przypadek produkcyjny (2026-09-17) pokazal, ze druga kontrola bywa
-            # RÓWNIE bledna jak pierwsza (wskazala INNY, tez zly wiersz tej samej grupy) - dodanie
-            # jej zgadniecia jako nowej pozycji tylko zamienilo jeden blad na dwa. Zamiast
-            # fabrykowac dane, oflagowujemy do recznej weryfikacji WSZYSTKIE juz istniejace
-            # pozycje tej samej grupy i zostawiamy jawny trop w "Przebiegu AI" (widoczny w UI) -
-            # decyzje co faktycznie bylo na kartce podejmuje czlowiek na oryginale, nie zgadujemy.
-            for other_label in group:
-                for item in items_by_label.get(other_label, []):
-                    _flag_group_mismatch(item)
-            if event_callback is not None:
-                try:
-                    event_callback({
-                        "status": "no_result",
-                        "stage": "row_group_verification",
-                        "provider": None,
-                        "model": None,
-                        "label": None,
-                        "reason": (
-                            f'Druga kontrola AI sugeruje, że w tej grupie wierszy mogła zostać '
-                            f'pominięta pozycja "{label}" (możliwa ilość wydana: '
-                            f'{second.ilosc_wydana}, zużyta: {second.ilosc_zuzyta}) - NIE dodano '
-                            f'jej automatycznie (druga kontrola sama bywa niepewna), zweryfikuj '
-                            f'ręcznie na oryginale.'
-                        ),
-                        "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
-                        "target": label,
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    })
-                except Exception:
-                    logger.warning("Nie udalo sie zapisac zdarzenia AI dla row-group", exc_info=True)
-            try:
-                repository.log_row_group_flag(
-                    session, document_id=document_id, dzial=dzial, rozpoznana_nazwa=label,
-                    kind="missing_flagged_group",
-                    main_ilosc_wydana=None, main_ilosc_zuzyta=None,
-                    second_ilosc_wydana=second.ilosc_wydana, second_ilosc_zuzyta=second.ilosc_zuzyta,
-                )
-            except Exception:
-                logger.warning("Nie udalo sie zapisac logu row-group-flag", exc_info=True)
-
-
 _FULL_REREAD_MISMATCH_NOTE = (
     "Druga, pełna kontrola AI całego dokumentu wskazuje inną ilość dla tego wiersza - "
     "zweryfikuj ręcznie na oryginale."
@@ -330,22 +164,21 @@ async def _check_full_document_consistency(
     cooldown_store: OCRCooldownStore,
     log_context: Mapping[str, object],
 ) -> None:
-    """Druga, PELNA, niezalezna kontrola calego dokumentu (2026-09-18, realny przypadek
-    produkcyjny) - w przeciwienstwie do _check_row_group_alignment (ograniczonej do wykrytych
-    grup PODOBNYCH etykiet) porownuje KAZDA pozycje z drugim, niezaleznym pelnym odczytem calego
-    dokumentu. Walidacja pokazala, ze przesuniecie potrafi wystapic tez MIEDZY zupelnie roznymi,
-    niepodobnymi etykietami (np. "Szyna grzebieniowa widelkowa" -> "Koncowka tulejkowa TE
-    1,5-10" -> "Koncowka tulejkowa TE 2,5-10", albo "Puszka pusta 86x86" -> "Przewod 1x10
-    kolor") - grupowanie po podobienstwie nazwy (row_groups.py) z zalozenia nie moglo tego
-    zlapac, bo te etykiety nie sa do siebie podobne.
+    """Druga, PELNA, niezalezna kontrola calego dokumentu (2026-09-18) - porownuje KAZDA pozycje
+    z drugim, niezaleznym pelnym odczytem calego dokumentu (nie tylko wybrane grupy podobnych
+    etykiet - wczesniejsza, waskaza wersja tego mechanizmu, _check_row_group_alignment,
+    ograniczona do grup wykrytych przez row_groups.py, zostala usunieta 2026-09-18: prawdziwa
+    przyczyna powtarzajacego sie bledu "zla ilosc w sasiednim wierszu" okazala sie byc falszywe
+    wykrywanie skosu skanu - patrz ocr/image.py, _detect_skew_angle_deg - a nie niedoskonalosc
+    modelu AI, wiec waska kontrola grup przestala byc warta swojego kosztu/czasu; ta funkcja
+    zostaje jako ogolny, tanszy w czasie safety-net na przyszlosc).
 
-    Uzywa WYLACZNIE darmowego lancucha Gemini (quantity_verification_chain, ten sam co reszta
-    kontroli w tym pliku - NIE inny dostawca, patrz uzasadnienie przy _check_row_group_alignment
-    - podobny, pelny cross-check z OpenAI byl juz probowany i porzucony z powodu duzego szumu,
-    git historia ocr/crosscheck.py). Best-effort - blad/niedostepnosc modelu NIGDY nie blokuje
-    calego dokumentu. Tak jak _check_row_group_alignment: NIGDY nie nadpisuje ani nie dodaje
-    zgadywanych pozycji - tylko oznacza rozbieznosci do recznej weryfikacji, zostawiajac decyzje
-    co bylo faktycznie na kartce czlowiekowi."""
+    Uzywa WYLACZNIE darmowego lancucha Gemini (quantity_verification_chain) - NIE innego
+    dostawcy (podobny, pelny cross-check z OpenAI byl juz probowany i porzucony z powodu duzego
+    szumu, git historia ocr/crosscheck.py). Best-effort - blad/niedostepnosc modelu NIGDY nie
+    blokuje calego dokumentu. NIGDY nie nadpisuje ani nie dodaje zgadywanych pozycji - tylko
+    oznacza rozbieznosci do recznej weryfikacji, zostawiajac decyzje co bylo faktycznie na
+    kartce czlowiekowi."""
     try:
         if dzial == "hydraulika":
             confirm = await recognize_document_hydraulika(
@@ -393,9 +226,9 @@ async def _check_full_document_consistency(
         except Exception:
             logger.warning("Nie udalo sie zapisac logu full-reread-mismatch", exc_info=True)
 
-    # Etykiety znalezione TYLKO w drugim, kontrolnym odczycie (mozliwe "ofiary" przesuniecia
-    # spoza wykrytych grup podobnych wierszy) - NIE dodajemy ich automatycznie (ta sama lekcja co
-    # _check_row_group_alignment), tylko widoczny trop w "Przebiegu AI".
+    # Etykiety znalezione TYLKO w drugim, kontrolnym odczycie (mozliwe "ofiary" przesuniecia) -
+    # NIE dodajemy ich automatycznie (druga kontrola sama bywa niepewna), tylko widoczny trop
+    # w "Przebiegu AI".
     for label, (wydana, zuzyta) in confirm_by_label.items():
         if label in main_labels or (wydana is None and zuzyta is None):
             continue
@@ -607,19 +440,11 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             files, items, document_id, save_ai_event, cooldown_store, dzial,
         ))
 
-        # Obie ponizsze kontrole sa czysto opcjonalnym, dodatkowym zabezpieczeniem (patrz ich
-        # docstringi) - NIEOCZEKIWANY wyjatek w ktorejkolwiek (np. blad sieci nie zlapany przez
-        # wewnetrzna obsluge AllProvidersFailedError) NIGDY nie moze zepsuc juz poprawnie
-        # odczytanego dokumentu. Kazda z nich i tak ma wlasna, wewnetrzna obsluge bledow -
-        # to dodatkowa, zewnetrzna siatka bezpieczenstwa.
-        try:
-            asyncio.run(_check_row_group_alignment(
-                files, items, dzial, session, document.id,
-                save_ai_event, cooldown_store, {"document_id": document_id},
-            ))
-        except Exception:
-            logger.warning("Kontrola grup podobnych wierszy nieudana - pomijam", exc_info=True)
-
+        # Ponizsza kontrola jest czysto opcjonalnym, dodatkowym zabezpieczeniem (patrz jej
+        # docstring) - NIEOCZEKIWANY wyjatek (np. blad sieci nie zlapany przez wewnetrzna obsluge
+        # AllProvidersFailedError) NIGDY nie moze zepsuc juz poprawnie odczytanego dokumentu.
+        # Ma tez wlasna, wewnetrzna obsluge bledow - to dodatkowa, zewnetrzna siatka
+        # bezpieczenstwa.
         try:
             catalog = Catalog.from_db(session, dzial=dzial)
             special_rules = None if dzial == "hydraulika" else rules_from_db(session)

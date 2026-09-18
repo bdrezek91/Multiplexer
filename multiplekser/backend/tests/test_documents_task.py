@@ -382,12 +382,9 @@ def test_run_ocr_task_ponawia_po_przejsciowym_bledzie_i_konczy_sukcesem(
     # Tylko cztery kroki Gemini na kluczu darmowym maja klucz skonfigurowany
     # (gemini_key_configured) - kroki platne (Gemini/OpenAI) sa pomijane (brak klucza), wiec
     # wszystkie 4 darmowe kroki musza zawiesc w pierwszej probie klasyfikacji. Dopiero druga
-    # proba (attempt 1) dochodzi do sukcesu.
-    # "Bojler 80 L" nalezy do grupy podobnych wierszy razem z "Bojler 50 L" (patrz
-    # ocr/row_groups.py) - trzeci odczyt to dodatkowa kontrola AI dla tej grupy
-    # (_check_row_group_alignment w tasks.py), potwierdzajaca ten sam wynik co glowny odczyt.
-    group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
-    responses = [OCRProviderError("timeout")] * 4 + [classify_response, ocr_response, group_verify_response, group_verify_response]
+    # proba (attempt 1) dochodzi do sukcesu. Kolejne wywolanie to pelna kontrola spojnosci
+    # dokumentu (_check_full_document_consistency) - potwierdza ten sam wynik co glowny odczyt.
+    responses = [OCRProviderError("timeout")] * 4 + [classify_response, ocr_response, ocr_response]
     with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=responses)), \
          patch("app.modules.documents.tasks.time.sleep") as fake_sleep:
         run_ocr_task(document_id, db_session)
@@ -429,12 +426,12 @@ def test_run_ocr_task_druga_proba_uzupelnia_pomijeta_ilosc(
         '{"pozycje": [{"nazwa": "Bojler 80 L", "ma_oznaczenie": true, "confidence": 90}]}'
     )  # brak ilosci, ale widoczne oznaczenie kieruje pozycje do dodatkowej kontroli
     verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
-    # "Bojler 80 L" nalezy do grupy z "Bojler 50 L" (ocr/row_groups.py) - czwarty odczyt to
-    # dodatkowa kontrola AI dla tej grupy (_check_row_group_alignment), potwierdzajaca wynik.
-    group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
+    # Czwarty odczyt to pelna kontrola spojnosci dokumentu (_check_full_document_consistency) -
+    # potwierdza ten sam wynik co po dodatkowej kontroli ilosci.
+    confirm_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 90}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response, group_verify_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response, confirm_response]),
     ):
         run_ocr_task(document_id, db_session)
 
@@ -457,13 +454,12 @@ def test_run_ocr_task_ilosc_z_glownego_modelu_nie_ma_flagi_dodatkowej_kontroli(
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": 1, "confidence": 99}]}'
-    # "Bojler 80 L" nalezy do grupy z "Bojler 50 L" (ocr/row_groups.py) - trzeci odczyt to
-    # dodatkowa kontrola AI dla tej grupy (_check_row_group_alignment), potwierdzajaca wynik -
-    # zgodnosc obu odczytow NIE ustawia flagi dodatkowej kontroli (tylko rozbieznosc by ja ustawila).
-    group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
+    # Trzeci odczyt to pelna kontrola spojnosci dokumentu (_check_full_document_consistency) -
+    # potwierdza ten sam wynik co glowny odczyt, wiec NIE ustawia flagi dodatkowej kontroli
+    # (tylko rozbieznosc by ja ustawila).
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
     ):
         run_ocr_task(document_id, db_session)
 
@@ -596,140 +592,13 @@ def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(
     assert document.items[0].ilosc_finalna is None
 
 
-def test_run_ocr_task_grupa_podobnych_wierszy_wykrywa_przesuniecie(
-    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
-):
-    """Realny przypadek produkcyjny (2026-09-17): glowny model przypisal ilosc nalezaca do
-    "Przewod 3x4" do sasiedniego "Przewod 3x1,5" (grupa wierszy roznaicych sie tylko
-    przekrojem - patrz ocr/row_groups.py). Druga, niezalezna kontrola AI dla tej grupy wykrywa
-    rozbieznosc: oznacza istniejaca (bledna) pozycje do recznej weryfikacji. CELOWO NIE dodaje
-    zgadywanej "poprawnej" pozycji - inny realny przypadek produkcyjny (tego samego dnia)
-    pokazal, ze druga kontrola tez potrafi wskazac zly wiersz tej samej grupy, wiec automatyczne
-    dodanie jej zgadniecia tylko zamienia jeden blad na dwa."""
-    import_catalog(db_session, baza_elektryka_json)
-    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
-    document_id = _create_document(db_session, admin_user)
-
-    classify_response = '{"dzial":"elektryka","confidence":98.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Przewód 3x1,5", "ilosc_wydana": "2", "confidence": 98}]}'
-    # Grupa "Przewod" w kolejnosci FORM_ROWS: 1=3X16, 2=3x1,5, 3=3x2,5, 4=3x4, 5=5x16, 6=5x4.
-    # Druga kontrola poprawnie znajduje ilosc przy ID 4 ("Przewod 3x4"), nie przy ID 2.
-    group_verify_response = (
-        '{"pozycje":['
-        '{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"2","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"3","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"4","ilosc_wydana":2,"ilosc_zuzyta":null},'
-        '{"id":"5","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"6","ilosc_wydana":null,"ilosc_zuzyta":null}'
-        ']}'
-    )
-    with patch(
-        "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
-    ):
-        run_ocr_task(document_id, db_session)
-
-    document = doc_repo.get_document(db_session, document_id)
-    assert document.status == "done"
-    # Zadna nowa pozycja nie zostala dodana - tylko oflagowana ta, ktora juz byla.
-    assert len(document.items) == 1
-    wrong = document.items[0]
-    assert wrong.rozpoznana_nazwa == "Przewód 3x1,5"
-    assert wrong.ilosc_wydana == 2.0  # nie nadpisujemy istniejacej pozycji - tylko flagujemy
-    assert wrong.needs_review is True
-    assert wrong.ilosc_z_dodatkowej_kontroli is True
-
-    # Widoczny w UI (Przebieg AI) trop dla operatora, zamiast zgadywanej pozycji.
-    trace_reasons = " ".join(e.get("reason") or "" for e in document.ai_trace)
-    assert "Przewód 3x4" in trace_reasons
-
-
-def test_run_ocr_task_grupa_podobnych_wierszy_zgodnosc_nic_nie_zmienia(
-    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
-):
-    """Kontrastowy przypadek: gdy druga kontrola POTWIERDZA glowny odczyt (najczestszy
-    przypadek w praktyce), zaden wiersz nie zostaje oflagowany ani dodany - zero szumu."""
-    import_catalog(db_session, baza_elektryka_json)
-    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
-    document_id = _create_document(db_session, admin_user)
-
-    classify_response = '{"dzial":"elektryka","confidence":98.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Przewód 3x4", "ilosc_wydana": "2", "confidence": 98}]}'
-    group_verify_response = (
-        '{"pozycje":['
-        '{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"2","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"3","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"4","ilosc_wydana":2,"ilosc_zuzyta":null},'
-        '{"id":"5","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"6","ilosc_wydana":null,"ilosc_zuzyta":null}'
-        ']}'
-    )
-    with patch(
-        "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
-    ):
-        run_ocr_task(document_id, db_session)
-
-    document = doc_repo.get_document(db_session, document_id)
-    assert document.status == "done"
-    assert len(document.items) == 1
-    item = document.items[0]
-    assert item.rozpoznana_nazwa == "Przewód 3x4"
-    assert item.ilosc_wydana == 2.0
-    assert item.needs_review is False
-    assert item.ilosc_z_dodatkowej_kontroli is False
-
-
-def test_run_ocr_task_grupa_podobnych_wierszy_zapisuje_log_rozbieznosci(
-    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
-):
-    """Log ocr_row_group_flag (2026-09-17, raport skutecznosci - scripts/report_row_group_flags.py)
-    zapisuje wpis TYLKO przy rozbieznosci (zgodnosc nic nie zapisuje - patrz test kontrastowy
-    wyzej)."""
-    from app.modules.documents.models import OcrRowGroupFlagModel
-
-    import_catalog(db_session, baza_elektryka_json)
-    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
-    document_id = _create_document(db_session, admin_user)
-
-    classify_response = '{"dzial":"elektryka","confidence":98.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Przewód 3x1,5", "ilosc_wydana": "2", "confidence": 98}]}'
-    group_verify_response = (
-        '{"pozycje":['
-        '{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"2","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"3","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"4","ilosc_wydana":2,"ilosc_zuzyta":null},'
-        '{"id":"5","ilosc_wydana":null,"ilosc_zuzyta":null},'
-        '{"id":"6","ilosc_wydana":null,"ilosc_zuzyta":null}'
-        ']}'
-    )
-    with patch(
-        "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
-    ):
-        run_ocr_task(document_id, db_session)
-
-    flags = db_session.query(OcrRowGroupFlagModel).filter(
-        OcrRowGroupFlagModel.document_id == document_id,
-    ).all()
-    kinds = {f.kind for f in flags}
-    assert kinds == {"mismatch_existing", "missing_flagged_group"}
-    missing = next(f for f in flags if f.kind == "missing_flagged_group")
-    assert missing.rozpoznana_nazwa == "Przewód 3x4"
-    assert missing.second_ilosc_wydana == 2.0
-
-
 def test_run_ocr_task_pelna_kontrola_wykrywa_przesuniecie_miedzy_niepodobnymi_etykietami(
     db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
 ):
     """Realny przypadek produkcyjny (2026-09-18): przesuniecie wystapilo miedzy zupelnie
-    NIEPODOBNYMI etykietami ("Szyna grzebieniowa widelkowa" -> "Koncowka tulejkowa TE 1,5-10"),
-    ktorych row_groups.py (grupowanie po podobienstwie nazwy) z zalozenia nie moze wykryc.
+    NIEPODOBNYMI etykietami ("Szyna grzebieniowa widelkowa" -> "Koncowka tulejkowa TE 1,5-10").
     _check_full_document_consistency porownuje KAZDA pozycje z drugim, pelnym odczytem calego
-    dokumentu - lapie tez tego typu przesuniecie."""
+    dokumentu - lapie tego typu przesuniecie niezaleznie od podobienstwa nazw."""
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
     document_id = _create_document(db_session, admin_user)
@@ -738,20 +607,12 @@ def test_run_ocr_task_pelna_kontrola_wykrywa_przesuniecie_miedzy_niepodobnymi_et
     main_response = (
         '{"pozycje": [{"nazwa": "Końcówka tulejkowa TE 1,5-10", "ilosc_wydana": "13", "confidence": 98}]}'
     )
-    # "Koncowka tulejkowa TE 1,5-10" nalezy do grupy z "TE 2,5-10" (ocr/row_groups.py) - dwie
-    # dodatkowe kontrole grupy (konsensus, patrz _check_row_group_alignment) potwierdzaja ten
-    # sam wynik co glowny odczyt, zeby ten test sprawdzal WYLACZNIE pelna kontrole dokumentu.
-    group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":13,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":null,"ilosc_zuzyta":null}]}'
     confirm_response = (
         '{"pozycje": [{"nazwa": "Szyna grzebieniowa widełkowa", "ilosc_wydana": "13", "confidence": 98}]}'
     )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[
-            classify_response, main_response,
-            group_verify_response, group_verify_response,
-            confirm_response,
-        ]),
+        new=AsyncMock(side_effect=[classify_response, main_response, confirm_response]),
     ):
         run_ocr_task(document_id, db_session)
 

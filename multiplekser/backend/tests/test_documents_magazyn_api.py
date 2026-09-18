@@ -81,12 +81,10 @@ def test_zmiana_magazynu_dziala_dla_hydrauliki(
     document = doc_repo.create_document(
         db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
     )
-    # "Bojler 80 L" nalezy do grupy z "Bojler 50 L" (ocr/row_groups.py) - trzeci odczyt to
-    # dodatkowa kontrola AI dla tej grupy (_check_row_group_alignment w tasks.py).
-    group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
+    # Trzeci odczyt to pelna kontrola spojnosci dokumentu (_check_full_document_consistency).
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, group_verify_response, group_verify_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
     ):
         run_ocr_task(str(document.id), db_session)
 

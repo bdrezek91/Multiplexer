@@ -32,7 +32,7 @@ from app.modules.users.router import users_router
 configure_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Multiplekser v1.0.4 API", version="0.7.0-etap7")
+app = FastAPI(title="Multiplekser v1.0.5 API", version="0.7.0-etap7")
 app.state.limiter = limiter
 app.include_router(auth_router)
 app.include_router(users_router)

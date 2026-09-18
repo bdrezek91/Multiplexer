@@ -23,10 +23,19 @@ _SKEW_MAX_DEG = 30.0
 
 # Liczba dlugich, poziomych linii (Hough) ponizej ktorej metoda oparta na liniach siatki uznaje,
 # ze nie ma wystarczajacych danych i oddaje glos metodzie zapasowej (minAreaRect) - patrz
-# _detect_skew_angle_deg. Dobrana tak, zeby zwykla papierowa wydawka (dziesiatki wierszy tabeli)
-# miala spory zapas (realny przypadek: 30-171 linii na stronie formularza), a pojedyncze
-# przypadkowe krawedzie (szum/cienie na zdjeciu telefonem) go nie osiagaly.
-_MIN_HOUGH_LINES = 15
+# _detect_skew_angle_deg. NAPRAWA (bug wykryty 2026-09-18, drugi realny przypadek: "Peszel" ->
+# "Puszka pusta 86x86"): przy 15 strona formularza z gestym pismem odrecznym w kratkach potrafi
+# miec mniej niz 15 linii siatki na tyle dlugich (>=20% szerokosci strony), zeby przejsc filtr -
+# wtedy metoda oddawala glos zawodnej minAreaRect (falszywe 2.15° zamiast realnych ~0.47°),
+# mimo ze te nieliczne linie byly ZGODNE ze soba (rozrzut < 0.1°). Obnizone do 5 - przy tak malej
+# probce ZGODNOSC katow (patrz _MAX_HOUGH_ANGLE_STD_DEG) jest wazniejszym zabezpieczeniem przed
+# szumem niz sama liczba linii.
+_MIN_HOUGH_LINES = 5
+
+# Maksymalne odchylenie standardowe katow znalezionych linii, przy ktorym wynik Hougha jest
+# jeszcze wiarygodny - kilka linii przypadkowo dlugich (cienie, zagniecenia) rzadko jest ze soba
+# zgodnych, w przeciwienstwie do prawdziwych linii siatki tej samej, fizycznie prostej tabeli.
+_MAX_HOUGH_ANGLE_STD_DEG = 2.0
 
 
 def _hough_line_angle_deg(gray: "np.ndarray") -> Optional[float]:
@@ -54,6 +63,8 @@ def _hough_line_angle_deg(gray: "np.ndarray") -> Optional[float]:
         elif abs(angle) > 135:
             angles.append(angle - 180 if angle > 0 else angle + 180)
     if len(angles) < _MIN_HOUGH_LINES:
+        return None
+    if float(np.std(angles)) > _MAX_HOUGH_ANGLE_STD_DEG:
         return None
     return float(np.median(angles))
 

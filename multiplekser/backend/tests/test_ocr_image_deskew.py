@@ -101,3 +101,39 @@ def test_detect_skew_nie_daje_falszywego_alarmu_na_prostej_ale_nierownomiernej_t
     (minAreaRect na calej chmurze ciemnych pikseli)."""
     raw = _synthetic_form_jpeg_nierownomierna_tresc()
     assert abs(_measured_angle(raw)) < 0.5
+
+
+def _synthetic_form_jpeg_kilka_dlugich_linii(rows: int = 6) -> bytes:
+    """Prosta (nieobrocona) tabela z NIELICZNYMI, ale ZGODNYMI ze soba dlugimi liniami siatki
+    (mniej niz stary prog _MIN_HOUGH_LINES=15) i asymetrycznym rozkladem tresci - dokladnie taki
+    uklad dal DRUGI realny przypadek produkcyjny falszywego skosu (2026-09-18, PDF ze skanera,
+    strona 2: "Peszel" -> "Puszka pusta 86x86") - zbyt malo dlugich linii oddawalo glos zawodnej
+    minAreaRect, mimo ze te nieliczne linie byly ze soba zgodne (rozrzut < 0.1°)."""
+    img = Image.new("RGB", (800, 1000), "white")
+    draw = ImageDraw.Draw(img)
+    step = 800 // (rows + 1)
+    for i in range(1, rows + 1):
+        y = i * step
+        draw.line([(50, y), (750, y)], fill="black", width=2)
+    draw.line([(50, step), (50, rows * step)], fill="black", width=2)
+    draw.line([(750, step), (750, rows * step)], fill="black", width=2)
+    # Tekst/wypelnienie TYLKO w gornej jednej trzeciej - tak jak w realnym przypadku.
+    for i in range(1, rows // 2 + 1):
+        y = i * step
+        draw.rectangle([(60, y + 5), (600, y + 20)], fill="black")
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=95)
+    return buf.getvalue()
+
+
+def test_detect_skew_z_kilkoma_ale_zgodnymi_liniami_siatki_uzywa_hougha():
+    """Test mechanizmu wprowadzonego po drugim realnym przypadku produkcyjnym (2026-09-18:
+    "Peszel" -> "Puszka pusta 86x86") - realna, gesto zapisana strona formularza miala mniej niz
+    stary prog _MIN_HOUGH_LINES=15 dlugich linii siatki, co oddawalo glos zawodnej minAreaRect
+    (falszywe 2.15° zamiast realnych ~0.47°), mimo ze te nieliczne linie byly ze soba zgodne
+    (rozrzut < 0.1°). Ten syntetyczny obraz nie odtwarza samego artefaktu JPG/skanera, ktory
+    zmylil minAreaRect w oryginalnym przypadku (nie da sie tego wiarygodnie zsyntetyzowac) -
+    weryfikuje natomiast, ze przy tylko kilku dlugich liniach wynik nadal pochodzi z Hougha
+    (obnizony prog + kontrola zgodnosci katow, patrz _MIN_HOUGH_LINES/_MAX_HOUGH_ANGLE_STD_DEG)."""
+    raw = _synthetic_form_jpeg_kilka_dlugich_linii(rows=6)
+    assert abs(_measured_angle(raw)) < 0.5

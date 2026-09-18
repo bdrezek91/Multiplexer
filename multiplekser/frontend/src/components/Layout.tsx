@@ -26,7 +26,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <DampolLogo />
           </Box>
           <Typography variant="body2" component="div" sx={{ color: 'grey.500', flexGrow: 0, mr: 2 }}>
-            Multiplekser v1.0.3
+            Multiplekser v1.0.4
           </Typography>
           <Button sx={navButtonSx} component={RouterLink} to="/documents">
             Dokumenty

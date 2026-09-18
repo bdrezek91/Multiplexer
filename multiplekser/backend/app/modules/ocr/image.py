@@ -21,11 +21,55 @@ from app.core.config import settings
 _SKEW_MIN_DEG = 0.5
 _SKEW_MAX_DEG = 30.0
 
+# Liczba dlugich, poziomych linii (Hough) ponizej ktorej metoda oparta na liniach siatki uznaje,
+# ze nie ma wystarczajacych danych i oddaje glos metodzie zapasowej (minAreaRect) - patrz
+# _detect_skew_angle_deg. Dobrana tak, zeby zwykla papierowa wydawka (dziesiatki wierszy tabeli)
+# miala spory zapas (realny przypadek: 30-171 linii na stronie formularza), a pojedyncze
+# przypadkowe krawedzie (szum/cienie na zdjeciu telefonem) go nie osiagaly.
+_MIN_HOUGH_LINES = 15
+
+
+def _hough_line_angle_deg(gray: "np.ndarray") -> Optional[float]:
+    """Kat wzgledem poziomu (mediana), wyliczony z DLUGICH, prostych linii wykrytych na obrazie
+    (Hough) - w formularzu to linie siatki tabeli. Realny przypadek produkcyjny (2026-09-18):
+    metoda minAreaRect (caly rozklad ciemnych pikseli strony) wykryla falszywe 8.2° skosu na
+    stronie PDF, ktora byla w rzeczywistosci idealnie prosta (linie siatki mierzone Houghem
+    dawaly ~0.3°) - powodem byl nierownomierny rozklad tekstu na stronie (np. gesto zapisana
+    gora, prawie pusty dol), na ktory minAreaRect jest wrazliwy, a pomiar linii siatki juz nie.
+    Zwraca None, gdy nie znaleziono wystarczajaco dlugich linii (patrz _MIN_HOUGH_LINES) - wtedy
+    wywolujacy powinien uzyc metody zapasowej."""
+    edges = cv2.Canny(gray, 30, 100, apertureSize=3)
+    lines = cv2.HoughLinesP(
+        edges, 1, np.pi / 360, threshold=150,
+        minLineLength=int(gray.shape[1] * 0.2), maxLineGap=15,
+    )
+    if lines is None:
+        return None
+    angles = []
+    for line in lines:
+        x1, y1, x2, y2 = line.reshape(-1)
+        angle = float(np.degrees(np.arctan2(y2 - y1, x2 - x1)))
+        if abs(angle) < 45:
+            angles.append(angle)
+        elif abs(angle) > 135:
+            angles.append(angle - 180 if angle > 0 else angle + 180)
+    if len(angles) < _MIN_HOUGH_LINES:
+        return None
+    return float(np.median(angles))
+
 
 def _detect_skew_angle_deg(gray: "np.ndarray") -> float:
-    """Standardowa technika OpenCV (minAreaRect na progowanym obrazie) - zwraca kat w stopniach,
-    o jaki trzeba obrocic obraz, zeby wyprostowac dominujace linie/tekst (dodatni = przeciwnie
-    do ruchu wskazowek zegara, zgodnie z cv2.getRotationMatrix2D)."""
+    """Zwraca kat w stopniach, o jaki trzeba obrocic obraz, zeby wyprostowac dominujace linie
+    formularza (dodatni = przeciwnie do ruchu wskazowek zegara, zgodnie z
+    cv2.getRotationMatrix2D). PRIORYTET: linie siatki tabeli (Hough, patrz
+    _hough_line_angle_deg) - odporne na falszywe wykrycia z nierownomiernego rozkladu tresci.
+    Fallback: standardowa technika OpenCV (minAreaRect na progowanym obrazie) - uzywana TYLKO
+    gdy nie znaleziono wystarczajaco dlugich linii siatki (np. mocno rozmyte/zaszumione zdjecie
+    telefonem bez wyraznych krawedzi)."""
+    hough_angle = _hough_line_angle_deg(gray)
+    if hough_angle is not None:
+        return hough_angle
+
     thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
     coords = np.column_stack(np.where(thresh > 0))
     if coords.shape[0] < 50:  # zbyt malo tresci, zeby sensownie ocenic kat

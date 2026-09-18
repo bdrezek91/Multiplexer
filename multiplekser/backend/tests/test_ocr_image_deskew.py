@@ -72,3 +72,32 @@ def test_is_blank_page_niepoprawny_obraz_nigdy_nie_jest_pusty():
     # Bezpieczny fallback: gdy nie da sie zdekodowac obrazu, NIGDY nie odfiltrowuj (lepiej
     # wyslac cos bezuzytecznego do AI niz zgubic strone przez blad dekodowania).
     assert is_blank_page(b"nie-jest-obrazem") is False
+
+
+def _synthetic_form_jpeg_nierownomierna_tresc() -> bytes:
+    """Prosta (nieobrocona) tabela, ale z BARDZO nierownomiernym rozkladem tresci (gesto
+    zapisana gora, prawie pusty dol) - dokladnie taki uklad dal falszywe 8.2 st. skosu w
+    realnym przypadku produkcyjnym (2026-09-18, PDF ze skanera, strona 3 - patrz historia
+    czatu: "Przewod 3x4" -> "Przewod 3x2,5"), bo stara metoda (minAreaRect na calej chmurze
+    ciemnych pikseli) jest wrazliwa na taka asymetrie."""
+    img = Image.new("RGB", (800, 1000), "white")
+    draw = ImageDraw.Draw(img)
+    for y in range(100, 900, 40):
+        draw.line([(50, y), (750, y)], fill="black", width=2)
+    draw.line([(50, 100), (50, 900)], fill="black", width=2)
+    draw.line([(750, 100), (750, 900)], fill="black", width=2)
+    # Tekst/wypelnienie TYLKO w gornej jednej trzeciej - reszta tabeli pusta.
+    for y in range(110, 350, 40):
+        draw.rectangle([(60, y), (600, y + 20)], fill="black")
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=95)
+    return buf.getvalue()
+
+
+def test_detect_skew_nie_daje_falszywego_alarmu_na_prostej_ale_nierownomiernej_tabeli():
+    """Regresja realnego przypadku produkcyjnego (2026-09-18) - patrz
+    _synthetic_form_jpeg_nierownomierna_tresc. Metoda oparta na dlugich liniach siatki (Hough)
+    musi zmierzyc kat bliski zeru, mimo asymetrycznego rozkladu tresci, ktory myli stara metode
+    (minAreaRect na calej chmurze ciemnych pikseli)."""
+    raw = _synthetic_form_jpeg_nierownomierna_tresc()
+    assert abs(_measured_angle(raw)) < 0.5

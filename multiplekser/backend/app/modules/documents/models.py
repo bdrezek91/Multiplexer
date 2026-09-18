@@ -158,9 +158,13 @@ class DocumentReportModel(Base):
     reported_by: Mapped["UserModel"] = relationship()
 
 
-# Rodzaj interwencji drugiej kontroli AI dla grup podobnych wierszy (2026-09-17) - patrz
-# ocr/verify.py: verify_row_group_alignment, tasks.py: _check_row_group_alignment.
-ROW_GROUP_FLAG_KINDS = ("mismatch_existing", "missing_flagged_group")
+# Rodzaj interwencji drugiej kontroli AI dla grup podobnych wierszy (2026-09-17) i pelnej
+# kontroli calego dokumentu (2026-09-18) - patrz ocr/verify.py: verify_row_group_alignment,
+# tasks.py: _check_row_group_alignment/_check_full_document_consistency.
+ROW_GROUP_FLAG_KINDS = (
+    "mismatch_existing", "missing_flagged_group",
+    "full_reread_mismatch", "full_reread_missing",
+)
 
 
 class OcrRowGroupFlagModel(Base):

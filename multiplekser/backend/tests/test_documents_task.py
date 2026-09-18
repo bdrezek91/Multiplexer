@@ -63,14 +63,17 @@ def test_run_ocr_task_dwa_pliki_wysyla_oba_w_jednym_zapytaniu(
     ocr_response = (
         '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
     )
+    # Trzecie wywolanie to pelna, niezalezna kontrola calego dokumentu (_check_full_document_
+    # consistency, 2026-09-18) - potwierdza ten sam wynik co glowny odczyt.
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
     ) as mock_recognize:
         run_ocr_task(str(document.id), db_session)
 
-    # KAZDE wywolanie recognize() (klasyfikacja + pelny odczyt) musi dostac OBIE strony naraz.
-    assert mock_recognize.call_count == 2  # klasyfikacja + pelny odczyt
+    # KAZDE wywolanie recognize() (klasyfikacja + pelny odczyt + kontrola) musi dostac OBIE
+    # strony naraz.
+    assert mock_recognize.call_count == 3
     for call in mock_recognize.call_args_list:
         files = call.kwargs["files"]
         assert len(files) == 2
@@ -717,3 +720,81 @@ def test_run_ocr_task_grupa_podobnych_wierszy_zapisuje_log_rozbieznosci(
     missing = next(f for f in flags if f.kind == "missing_flagged_group")
     assert missing.rozpoznana_nazwa == "Przewód 3x4"
     assert missing.second_ilosc_wydana == 2.0
+
+
+def test_run_ocr_task_pelna_kontrola_wykrywa_przesuniecie_miedzy_niepodobnymi_etykietami(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Realny przypadek produkcyjny (2026-09-18): przesuniecie wystapilo miedzy zupelnie
+    NIEPODOBNYMI etykietami ("Szyna grzebieniowa widelkowa" -> "Koncowka tulejkowa TE 1,5-10"),
+    ktorych row_groups.py (grupowanie po podobienstwie nazwy) z zalozenia nie moze wykryc.
+    _check_full_document_consistency porownuje KAZDA pozycje z drugim, pelnym odczytem calego
+    dokumentu - lapie tez tego typu przesuniecie."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = '{"dzial":"elektryka","confidence":98.0}'
+    main_response = (
+        '{"pozycje": [{"nazwa": "Końcówka tulejkowa TE 1,5-10", "ilosc_wydana": "13", "confidence": 98}]}'
+    )
+    # "Koncowka tulejkowa TE 1,5-10" nalezy do grupy z "TE 2,5-10" (ocr/row_groups.py) - dwie
+    # dodatkowe kontrole grupy (konsensus, patrz _check_row_group_alignment) potwierdzaja ten
+    # sam wynik co glowny odczyt, zeby ten test sprawdzal WYLACZNIE pelna kontrole dokumentu.
+    group_verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":13,"ilosc_zuzyta":null},{"id":"2","ilosc_wydana":null,"ilosc_zuzyta":null}]}'
+    confirm_response = (
+        '{"pozycje": [{"nazwa": "Szyna grzebieniowa widełkowa", "ilosc_wydana": "13", "confidence": 98}]}'
+    )
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[
+            classify_response, main_response,
+            group_verify_response, group_verify_response,
+            confirm_response,
+        ]),
+    ):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    assert len(document.items) == 1  # nic nie zostalo dodane - tylko oflagowane
+    item = document.items[0]
+    assert item.rozpoznana_nazwa == "Końcówka tulejkowa  TE 1,5-10"
+    assert item.ilosc_wydana == 13.0
+    assert item.needs_review is True
+    assert item.ilosc_z_dodatkowej_kontroli is True
+
+    trace_reasons = " ".join(e.get("reason") or "" for e in document.ai_trace)
+    assert "Szyna grzebieniowa widełkowa" in trace_reasons
+
+    from app.modules.documents.models import OcrRowGroupFlagModel
+    flags = db_session.query(OcrRowGroupFlagModel).filter(
+        OcrRowGroupFlagModel.document_id == document_id,
+    ).all()
+    kinds = {f.kind for f in flags}
+    assert kinds == {"full_reread_mismatch", "full_reread_missing"}
+
+
+def test_run_ocr_task_pelna_kontrola_zgodnosc_nic_nie_zmienia(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_hydraulika_json,
+):
+    """"Zawór kątowy 1/2x3/4" to dokladny wiersz FORM_ROWS (snap "exact", nie nalezy do zadnej
+    wykrytej grupy podobnych wierszy - patrz test_ocr_pipeline_hydraulika.py) - w przeciwienstwie
+    do "Grzejnik 1800W" uzywanego w innych testach (off-form) nie ma wlasnego needs_review z
+    glownego odczytu, wiec test czysto sprawdza zachowanie pelnej kontroli spojnosci."""
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = '{"dzial":"hydraulika","confidence":95.0}'
+    ocr_response = '{"pozycje": [{"nazwa": "Zawór kątowy 1/2x3/4", "ilosc_wydana": "1", "confidence": 98}]}'
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
+    ):
+        run_ocr_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    assert document.status == "done"
+    item = document.items[0]
+    assert item.needs_review is False
+    assert item.ilosc_z_dodatkowej_kontroli is False

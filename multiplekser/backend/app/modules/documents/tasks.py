@@ -27,7 +27,7 @@ from app.modules.generator import pick_qty_razem
 from app.modules.matcher import rules_from_db
 from app.modules.matcher.special_rules import GNIAZDO_PODTYNKOWE_Z_KLAPKA_KODY
 from app.modules.matcher.result import QUALITY_OK
-from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback
+from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback, quantity_verification_chain
 from app.modules.ocr.classify import classify_document
 from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
 from app.modules.ocr.image import downscale_image, is_blank_page, pdf_to_page_images
@@ -311,6 +311,119 @@ async def _check_row_group_alignment(
                 logger.warning("Nie udalo sie zapisac logu row-group-flag", exc_info=True)
 
 
+_FULL_REREAD_MISMATCH_NOTE = (
+    "Druga, pełna kontrola AI całego dokumentu wskazuje inną ilość dla tego wiersza - "
+    "zweryfikuj ręcznie na oryginale."
+)
+
+
+async def _check_full_document_consistency(
+    files: list[tuple[bytes, str]],
+    items: list[dict],
+    dzial: str,
+    catalog: Catalog,
+    special_rules,
+    magazyn: Optional[str],
+    session: Session,
+    document_id,
+    event_callback: OCRChainEventCallback,
+    cooldown_store: OCRCooldownStore,
+    log_context: Mapping[str, object],
+) -> None:
+    """Druga, PELNA, niezalezna kontrola calego dokumentu (2026-09-18, realny przypadek
+    produkcyjny) - w przeciwienstwie do _check_row_group_alignment (ograniczonej do wykrytych
+    grup PODOBNYCH etykiet) porownuje KAZDA pozycje z drugim, niezaleznym pelnym odczytem calego
+    dokumentu. Walidacja pokazala, ze przesuniecie potrafi wystapic tez MIEDZY zupelnie roznymi,
+    niepodobnymi etykietami (np. "Szyna grzebieniowa widelkowa" -> "Koncowka tulejkowa TE
+    1,5-10" -> "Koncowka tulejkowa TE 2,5-10", albo "Puszka pusta 86x86" -> "Przewod 1x10
+    kolor") - grupowanie po podobienstwie nazwy (row_groups.py) z zalozenia nie moglo tego
+    zlapac, bo te etykiety nie sa do siebie podobne.
+
+    Uzywa WYLACZNIE darmowego lancucha Gemini (quantity_verification_chain, ten sam co reszta
+    kontroli w tym pliku - NIE inny dostawca, patrz uzasadnienie przy _check_row_group_alignment
+    - podobny, pelny cross-check z OpenAI byl juz probowany i porzucony z powodu duzego szumu,
+    git historia ocr/crosscheck.py). Best-effort - blad/niedostepnosc modelu NIGDY nie blokuje
+    calego dokumentu. Tak jak _check_row_group_alignment: NIGDY nie nadpisuje ani nie dodaje
+    zgadywanych pozycji - tylko oznacza rozbieznosci do recznej weryfikacji, zostawiajac decyzje
+    co bylo faktycznie na kartce czlowiekowi."""
+    try:
+        if dzial == "hydraulika":
+            confirm = await recognize_document_hydraulika(
+                files, catalog, magazyn=magazyn, chain=quantity_verification_chain(),
+                log_context=log_context, cooldown_store=cooldown_store,
+            )
+        else:
+            confirm = await recognize_document(
+                files, catalog, special_rules or [], magazyn=magazyn, chain=quantity_verification_chain(),
+                log_context=log_context, cooldown_store=cooldown_store,
+            )
+    except Exception:
+        logger.warning("Pelna kontrola spojnosci dokumentu nieudana - pomijam", exc_info=True)
+        return
+
+    confirm_by_label: dict[str, tuple[Optional[float], Optional[float]]] = {}
+    for it in confirm.pozycje:
+        wydana = parse_float_loose(it.ilosc_wydana) if it.ilosc_wydana is not None else None
+        zuzyta = parse_float_loose(it.ilosc_zuzyta) if it.ilosc_zuzyta is not None else None
+        confirm_by_label[it.rozpoznana_nazwa] = (wydana, zuzyta)
+
+    main_labels = {item["rozpoznana_nazwa"] for item in items}
+
+    for item in items:
+        label = item["rozpoznana_nazwa"]
+        confirm_qty = confirm_by_label.get(label)
+        main_qty = (item["ilosc_wydana"], item["ilosc_zuzyta"])
+        if confirm_qty == main_qty:
+            continue  # zgodnosc obu niezaleznych, pelnych odczytow - bez zmian
+
+        item["needs_review"] = True
+        item["ilosc_z_dodatkowej_kontroli"] = True
+        existing_note = item.get("form_note") or ""
+        item["form_note"] = (
+            f"{existing_note} | {_FULL_REREAD_MISMATCH_NOTE}" if existing_note else _FULL_REREAD_MISMATCH_NOTE
+        )
+        try:
+            repository.log_row_group_flag(
+                session, document_id=document_id, dzial=dzial, rozpoznana_nazwa=label,
+                kind="full_reread_mismatch",
+                main_ilosc_wydana=main_qty[0], main_ilosc_zuzyta=main_qty[1],
+                second_ilosc_wydana=confirm_qty[0] if confirm_qty else None,
+                second_ilosc_zuzyta=confirm_qty[1] if confirm_qty else None,
+            )
+        except Exception:
+            logger.warning("Nie udalo sie zapisac logu full-reread-mismatch", exc_info=True)
+
+    # Etykiety znalezione TYLKO w drugim, kontrolnym odczycie (mozliwe "ofiary" przesuniecia
+    # spoza wykrytych grup podobnych wierszy) - NIE dodajemy ich automatycznie (ta sama lekcja co
+    # _check_row_group_alignment), tylko widoczny trop w "Przebiegu AI".
+    for label, (wydana, zuzyta) in confirm_by_label.items():
+        if label in main_labels or (wydana is None and zuzyta is None):
+            continue
+        if event_callback is not None:
+            try:
+                event_callback({
+                    "status": "no_result", "stage": "full_document_verification",
+                    "provider": None, "model": None, "label": None,
+                    "reason": (
+                        f'Druga, pełna kontrola AI sugeruje pozycję "{label}" (ilość wydana: '
+                        f'{wydana}, zużyta: {zuzyta}), której NIE ma w głównym odczycie - NIE '
+                        f'dodano automatycznie, zweryfikuj ręcznie na oryginale.'
+                    ),
+                    "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
+                    "target": label, "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+            except Exception:
+                logger.warning("Nie udalo sie zapisac zdarzenia AI dla full-reread", exc_info=True)
+        try:
+            repository.log_row_group_flag(
+                session, document_id=document_id, dzial=dzial, rozpoznana_nazwa=label,
+                kind="full_reread_missing", main_ilosc_wydana=None, main_ilosc_zuzyta=None,
+                second_ilosc_wydana=wydana, second_ilosc_zuzyta=zuzyta,
+            )
+        except Exception:
+            logger.warning("Nie udalo sie zapisac logu full-reread-missing", exc_info=True)
+
+
 async def _verify_ambiguous_items(
     files: list[tuple[bytes, str]], items: list[dict], document_id: str,
     event_callback: OCRChainEventCallback,
@@ -494,10 +607,28 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             files, items, document_id, save_ai_event, cooldown_store, dzial,
         ))
 
-        asyncio.run(_check_row_group_alignment(
-            files, items, dzial, session, document.id,
-            save_ai_event, cooldown_store, {"document_id": document_id},
-        ))
+        # Obie ponizsze kontrole sa czysto opcjonalnym, dodatkowym zabezpieczeniem (patrz ich
+        # docstringi) - NIEOCZEKIWANY wyjatek w ktorejkolwiek (np. blad sieci nie zlapany przez
+        # wewnetrzna obsluge AllProvidersFailedError) NIGDY nie moze zepsuc juz poprawnie
+        # odczytanego dokumentu. Kazda z nich i tak ma wlasna, wewnetrzna obsluge bledow -
+        # to dodatkowa, zewnetrzna siatka bezpieczenstwa.
+        try:
+            asyncio.run(_check_row_group_alignment(
+                files, items, dzial, session, document.id,
+                save_ai_event, cooldown_store, {"document_id": document_id},
+            ))
+        except Exception:
+            logger.warning("Kontrola grup podobnych wierszy nieudana - pomijam", exc_info=True)
+
+        try:
+            catalog = Catalog.from_db(session, dzial=dzial)
+            special_rules = None if dzial == "hydraulika" else rules_from_db(session)
+            asyncio.run(_check_full_document_consistency(
+                files, items, dzial, catalog, special_rules, document.magazyn, session, document.id,
+                save_ai_event, cooldown_store, {"document_id": document_id},
+            ))
+        except Exception:
+            logger.warning("Pelna kontrola spojnosci dokumentu nieudana - pomijam", exc_info=True)
 
         _append_auto_zasilacz_led(items, dzial, session)
         _podwoj_ilosc_gniazda_podwojnego_podtynkowego(items)

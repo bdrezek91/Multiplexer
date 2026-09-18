@@ -117,6 +117,24 @@ def test_patch_metadane_nie_zmienia_dopasowania_pozycji(
     assert r.json()["items"][0]["match_kod"] == before
 
 
+def test_patch_metadane_poprawia_numer_projektu(
+    client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    ai_response = (
+        '{"numer_projektu": "113/06/2026", "pozycje": '
+        '[{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 90}]}'
+    )
+    doc_id = _create_done_document(db_session, admin_user, ai_response)
+
+    r = client.patch(f"/documents/{doc_id}/metadane", json={"numer_projektu": "999/07/2026"}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["numer_projektu"] == "999/07/2026"
+    assert body["pracownik"] is None  # pole nieobecne w body - bez zmian
+
+
 def test_patch_metadane_nieistniejacy_dokument_zwraca_404(client, admin_headers):
     r = client.patch(
         "/documents/00000000-0000-0000-0000-000000000000/metadane",

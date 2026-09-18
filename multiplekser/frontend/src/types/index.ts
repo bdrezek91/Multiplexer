@@ -112,6 +112,7 @@ export interface DocumentItemUpdate {
 export interface MetadaneUpdate {
   pracownik?: string | null
   numer_plomby?: string | null
+  numer_projektu?: string | null
 }
 
 export interface DocumentItemAdd {

@@ -368,10 +368,10 @@ def update_document_metadane(
     session: Session = Depends(get_db),
     user: UserModel = Depends(get_current_user),
 ):
-    """Reczna korekta pracownika/numeru plomby-rozdzielni odczytanych przez OCR z naglowka
-    formularza (2026-09-17, na zyczenie uzytkownika) - te pola sa tylko informacyjne (nie
-    wchodza do generowanego pliku TXT), wiec w przeciwienstwie do magazynu nie wymaga
-    ponownego dopasowania pozycji."""
+    """Reczna korekta pracownika/numeru plomby-rozdzielni/numeru projektu odczytanych przez OCR
+    z naglowka formularza (2026-09-17, rozszerzone 2026-09-18 o numer_projektu) - te pola sa
+    tylko informacyjne (numer_projektu wplywa jedynie na nazwe pobieranego pliku, patrz
+    get_filename), wiec w przeciwienstwie do magazynu nie wymaga ponownego dopasowania pozycji."""
     document = repository.get_document(session, document_id)
     if document is None:
         raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
@@ -383,6 +383,8 @@ def update_document_metadane(
         update_kwargs["pracownik"] = fields["pracownik"]
     if "numer_plomby" in fields:
         update_kwargs["numer_plomby"] = fields["numer_plomby"]
+    if "numer_projektu" in fields:
+        update_kwargs["numer_projektu"] = fields["numer_projektu"]
 
     repository.set_metadane(session, document, **update_kwargs)
     session.refresh(document)

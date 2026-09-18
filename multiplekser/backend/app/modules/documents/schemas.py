@@ -98,11 +98,13 @@ class MagazynUpdateIn(BaseModel):
 
 
 class MetadaneUpdateIn(BaseModel):
-    """Reczna korekta pol odczytanych przez OCR z naglowka formularza (2026-09-17) - pracownik i
-    numer plomby-rozdzielni bywaja odczytane bledne/niepewne, tak samo jak reszta OCR. Pole
-    nieobecne w body (`exclude_unset`) zostaje bez zmian, jawne `null` kasuje wartosc."""
+    """Reczna korekta pol odczytanych przez OCR z naglowka formularza (2026-09-17, rozszerzone
+    2026-09-18 o numer_projektu) - pracownik, numer plomby-rozdzielni i numer projektu bywaja
+    odczytane bledne/niepewne, tak samo jak reszta OCR. Pole nieobecne w body (`exclude_unset`)
+    zostaje bez zmian, jawne `null` kasuje wartosc."""
     pracownik: str | None = None
     numer_plomby: str | None = None
+    numer_projektu: str | None = None
 
 
 class DocumentReportCreateIn(BaseModel):

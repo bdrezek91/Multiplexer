@@ -139,10 +139,10 @@ function AITracePanel({ events }: { events: AITraceEvent[] }) {
   )
 }
 
-// Reczna korekta pracownika/numeru plomby-rozdzielni odczytanych przez OCR z naglowka
-// formularza (2026-09-17, na zyczenie uzytkownika) - to samo pole moze byc odczytane bledne,
-// wiec (tak jak reszta OCR) daje sie poprawic recznie. `key` w miejscu uzycia (jak przy
-// QtyFinalnaCell) wymusza remount przy odswiezeniu dokumentu spoza tego pola.
+// Reczna korekta pracownika/numeru plomby-rozdzielni/numeru projektu odczytanych przez OCR z
+// naglowka formularza (2026-09-17, rozszerzone 2026-09-18 o numer_projektu) - to samo pole moze
+// byc odczytane bledne, wiec (tak jak reszta OCR) daje sie poprawic recznie. `key` w miejscu
+// uzycia (jak przy QtyFinalnaCell) wymusza remount przy odswiezeniu dokumentu spoza tego pola.
 function MetadaneField({
   documentId,
   field,
@@ -150,7 +150,7 @@ function MetadaneField({
   label,
 }: {
   documentId: string
-  field: 'pracownik' | 'numer_plomby'
+  field: 'pracownik' | 'numer_plomby' | 'numer_projektu'
   value: string | null
   label: string
 }) {
@@ -742,11 +742,20 @@ export function DocumentDetailPage() {
             <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
               <Box>
                 <Typography variant="h6">{document.original_filename}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Numer projektu: {document.numer_projektu ?? 'nieznany'}
-                </Typography>
+                {document.status !== 'done' && (
+                  <Typography variant="body2" color="text.secondary">
+                    Numer projektu: {document.numer_projektu ?? 'nieznany'}
+                  </Typography>
+                )}
                 {document.status === 'done' && (
                   <Stack direction="row" spacing={1} sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
+                    <MetadaneField
+                      key={`numer_projektu-${document.numer_projektu}`}
+                      documentId={documentId}
+                      field="numer_projektu"
+                      value={document.numer_projektu}
+                      label="Numer projektu"
+                    />
                     <MetadaneField
                       key={`pracownik-${document.pracownik}`}
                       documentId={documentId}

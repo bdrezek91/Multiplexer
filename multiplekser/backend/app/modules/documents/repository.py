@@ -191,13 +191,17 @@ def set_metadane(
     *,
     pracownik: Optional[str] = ...,
     numer_plomby: Optional[str] = ...,
+    numer_projektu: Optional[str] = ...,
 ) -> None:
-    """Reczna korekta pol odczytanych przez OCR z naglowka formularza (2026-09-17) - Ellipsis
-    jako "nie zmieniaj tego pola", tak samo jak w update_item ponizej."""
+    """Reczna korekta pol odczytanych przez OCR z naglowka formularza (2026-09-17, rozszerzone
+    2026-09-18 o numer_projektu) - Ellipsis jako "nie zmieniaj tego pola", tak samo jak w
+    update_item ponizej."""
     if pracownik is not ...:
         document.pracownik = pracownik
     if numer_plomby is not ...:
         document.numer_plomby = numer_plomby
+    if numer_projektu is not ...:
+        document.numer_projektu = numer_projektu
     session.commit()
 
 

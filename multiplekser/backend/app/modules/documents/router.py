@@ -47,10 +47,12 @@ from .schemas import (
     DocumentOut,
     DocumentReportCreateIn,
     DocumentReportOut,
+    DocumentStatsOut,
     GenerateRequest,
     MagazynUpdateIn,
     MetadaneUpdateIn,
     OptimaLinkOut,
+    UserDocumentStatsOut,
 )
 from .storage import get_storage
 from .tasks import dispatch_ocr_task
@@ -542,6 +544,32 @@ def list_document_reports(
     filtruje."""
     reports = repository.list_reports(session, status=status)
     return [_report_to_schema(r) for r in reports]
+
+
+# Sciezka dwuczlonowa ("stats/summary", nie samo "stats") - swiadomie, zeby NIE kolidowac z
+# GET /{document_id} zarejestrowanym wczesniej w tym pliku (Starlette dopasowuje trasy w
+# kolejnosci rejestracji, jednoczlonowa sciezka pasowalaby do {document_id} jako UUID-podobny
+# string i nigdy nie dotarlaby tutaj) - ten sam wzorzec co /reports/list powyzej.
+@router.get("/stats/summary", response_model=DocumentStatsOut)
+def get_document_stats(
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(require_admin),
+):
+    """Licznik przerobionych dokumentow per uzytkownik dla panelu administratora (2026-09-21,
+    na zyczenie uzytkownika), zestawiony z szacowanym zaoszczedzonym czasem/pieniedzmi wzgledem
+    recznego wprowadzania wydawki - zalozenia (8 min/wydawke, 55 zl brutto/h kosztu pracodawcy)
+    patrz repository.MINUTES_PER_MANUAL_DOCUMENT/HOURLY_RATE_PLN."""
+    per_user = repository.get_document_stats_per_user(session)
+    razem_dokumenty = sum(row["dokumenty"] for row in per_user)
+    razem_minuty = sum(row["minuty_zaoszczedzone"] for row in per_user)
+    return DocumentStatsOut(
+        per_user=[UserDocumentStatsOut(**row) for row in per_user],
+        razem_dokumenty=razem_dokumenty,
+        razem_minuty_zaoszczedzone=razem_minuty,
+        razem_pieniadze_zaoszczedzone=round(razem_minuty / 60 * repository.HOURLY_RATE_PLN, 2),
+        minuty_na_dokument=repository.MINUTES_PER_MANUAL_DOCUMENT,
+        stawka_pln_za_h=repository.HOURLY_RATE_PLN,
+    )
 
 
 @router.patch("/reports/{report_id}/resolve", response_model=DocumentReportOut)

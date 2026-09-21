@@ -14,6 +14,23 @@ export interface CurrentUser {
   active: boolean
 }
 
+export interface UserDocumentStats {
+  user_id: string
+  email: string
+  dokumenty: number
+  minuty_zaoszczedzone: number
+  pieniadze_zaoszczedzone: number
+}
+
+export interface DocumentStats {
+  per_user: UserDocumentStats[]
+  razem_dokumenty: number
+  razem_minuty_zaoszczedzone: number
+  razem_pieniadze_zaoszczedzone: number
+  minuty_na_dokument: number
+  stawka_pln_za_h: number
+}
+
 export interface Product {
   kod: string
   nazwa: string

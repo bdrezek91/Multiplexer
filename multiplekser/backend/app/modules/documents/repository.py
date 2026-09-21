@@ -7,11 +7,48 @@ import secrets
 import uuid
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from datetime import datetime, timezone
 
+from app.modules.users.models import UserModel
+
 from .models import DocumentFileModel, DocumentItemModel, DocumentModel, DocumentReportModel, OcrRowGroupFlagModel
+
+# Zestawienie oszczednosci dla panelu administratora (2026-09-21, na zyczenie uzytkownika) -
+# przyblizony czas recznego wprowadzenia JEDNEJ wydawki na podstawie realnego doswiadczenia
+# uzytkownika ("ktos Cie zagada, pojdziesz siku, musisz cos wyjasnic" - to nie jest czysty czas
+# klikania, tylko realny czas "od wziecia kartki do zapisanej recznie wydawki"). Stawka to koszt
+# godziny pracy pracownika DLA PRACODAWCY (brutto + skladki), nie "na reke".
+MINUTES_PER_MANUAL_DOCUMENT = 8
+HOURLY_RATE_PLN = 55.0
+
+
+def get_document_stats_per_user(session: Session) -> list[dict]:
+    """Ile dokumentow (tylko status="done" - realnie ukonczonych, nie w trakcie/z bledem)
+    przerobil kazdy uzytkownik, zestawione z szacowanym zaoszczedzonym czasem/pieniedzmi wzgledem
+    recznego wprowadzania (patrz stale wyzej). Tylko uzytkownicy z co najmniej jednym gotowym
+    dokumentem (INNER JOIN) - posortowane malejaco po liczbie dokumentow."""
+    rows = (
+        session.query(UserModel.id, UserModel.email, func.count(DocumentModel.id))
+        .join(DocumentModel, DocumentModel.user_id == UserModel.id)
+        .filter(DocumentModel.status == "done")
+        .group_by(UserModel.id, UserModel.email)
+        .order_by(func.count(DocumentModel.id).desc())
+        .all()
+    )
+    stats = []
+    for user_id, email, count in rows:
+        minutes_saved = count * MINUTES_PER_MANUAL_DOCUMENT
+        stats.append({
+            "user_id": str(user_id),
+            "email": email,
+            "dokumenty": count,
+            "minuty_zaoszczedzone": minutes_saved,
+            "pieniadze_zaoszczedzone": round(minutes_saved / 60 * HOURLY_RATE_PLN, 2),
+        })
+    return stats
 
 
 class DocumentNotFoundError(Exception):

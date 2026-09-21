@@ -129,3 +129,25 @@ class DocumentReportOut(BaseModel):
     status: str
     created_at: datetime
     resolved_at: datetime | None
+
+
+class UserDocumentStatsOut(BaseModel):
+    """Jeden wiersz zestawienia oszczednosci (2026-09-21) - patrz
+    repository.get_document_stats_per_user."""
+    user_id: str
+    email: str
+    dokumenty: int
+    minuty_zaoszczedzone: int
+    pieniadze_zaoszczedzone: float
+
+
+class DocumentStatsOut(BaseModel):
+    """Zestawienie dla panelu administratora: ile dokumentow przerobil kazdy uzytkownik i ile to
+    daje zaoszczedzonego czasu/pieniedzy wzgledem recznego wprowadzania - zalozenia (8 min/wydawke,
+    55 zl brutto/h kosztu pracodawcy) patrz repository.py."""
+    per_user: list[UserDocumentStatsOut]
+    razem_dokumenty: int
+    razem_minuty_zaoszczedzone: int
+    razem_pieniadze_zaoszczedzone: float
+    minuty_na_dokument: int
+    stawka_pln_za_h: float

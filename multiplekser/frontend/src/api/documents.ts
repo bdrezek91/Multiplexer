@@ -8,6 +8,7 @@ import type {
   DocumentReport,
   DocumentReportCreate,
   DocumentReportStatus,
+  DocumentStats,
   GenerateRequest,
   MetadaneUpdate,
   OptimaLink,
@@ -15,6 +16,13 @@ import type {
 
 export function listDocuments(): Promise<DocumentDetail[]> {
   return apiRequest<DocumentDetail[]>('/documents')
+}
+
+// Licznik przerobionych dokumentow per uzytkownik dla panelu administratora (2026-09-21, na
+// zyczenie uzytkownika) - zestawiony z zaoszczedzonym czasem/pieniedzmi wzgledem recznego
+// wprowadzania wydawki.
+export function getDocumentStats(): Promise<DocumentStats> {
+  return apiRequest<DocumentStats>('/documents/stats/summary')
 }
 
 export function getDocument(id: string): Promise<DocumentDetail> {

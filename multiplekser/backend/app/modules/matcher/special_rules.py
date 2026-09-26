@@ -157,6 +157,29 @@ DEFAULT_SPECIAL_RULES: list[SpecialRule] = [
         priority=77,
         description="Gniazdo podwojne grafit polskie podtynkowe -> pojedyncze grafit polskie z klapka (ilosc x2, patrz tasks.py).",
     ),
+    # "ELEGANT"/"MULTIMEDIALNA" to nazwy konkretnego, odrebnego produktu handlowego, nie zwykly
+    # opis rozdzielnicy SRN - bez tej reguly snap_to_form_row()/reconcile_form_row() poprawnie
+    # zachowuje slowo "ELEGANT" w tekscie (patrz form_rows_elektryka.py), ale samo dopasowanie po
+    # aliasach (alias_hits, specyficznosc = liczba tokenow) i tak przegrywa z dluzszym aliasem
+    # zwyklej "ROZDZIELNICA SRN 24" (np. "rozdzielnica srn 24 biala" - 4 tokeny), bo krotszy alias
+    # "elegant 24" (2 tokeny) ma nizsza specyficznosc (bug wykryty 2026-09-26). Regula z wyzsza
+    # (mniejsza liczbowo) priorytetem dla wariantu z "multimedialna" musi byc SPRAWDZONA PRZED
+    # zwyklym wariantem "elegant" (patrz priority 78 < 79) - inaczej ta ponizej przechwycilaby
+    # tez multimedialny wariant.
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\brozdzielnic)(?=.*elegant)(?=.*multimedialn)",
+        target_kod="ROZDZIELNICA ELEGANT MULTIMEDIALNA 24",
+        priority=78,
+        description="Rozdzielnica Elegant multimedialna -> ROZDZIELNICA ELEGANT MULTIMEDIALNA 24 (sprawdzana PRZED zwyklym wariantem Elegant, patrz priority).",
+    ),
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\brozdzielnic)(?=.*elegant)",
+        target_kod="ROZDZIELNICA ELEGANT 24",
+        priority=79,
+        description="Rozdzielnica Elegant (bez 'multimedialna') -> ROZDZIELNICA ELEGANT 24.",
+    ),
 ]
 
 # Kody docelowe powyzszych 4 regul "podwojne podtynkowe" - tasks.py: _podwoj_ilosc_gniazda_

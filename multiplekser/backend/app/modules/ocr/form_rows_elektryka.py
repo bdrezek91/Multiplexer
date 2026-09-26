@@ -214,7 +214,9 @@ def snap_to_form_row(name: str) -> SnapResult:
     return SnapResult(name=name, ratio=best_ratio, status="off")
 
 
-_ATTR_WORD_RE = re.compile(r"\b(podtynkow\w*|natynkow\w*)\b", re.IGNORECASE)
+_ATTR_WORD_RE = re.compile(
+    r"\b(podtynkow\w*|natynkow\w*|elegant\w*|multimedialn\w*)\b", re.IGNORECASE,
+)
 _DIGIT_RE = re.compile(r"\d+(?:[.,]\d+)?")
 
 
@@ -232,9 +234,12 @@ class ReconciledName:
 def reconcile_form_row(raw: str, snap: SnapResult) -> ReconciledName:
     """Port bug-fixow z runAI() (monolit, ok. linii 1426-1490): snapToFormRow() ma poprawiac
     LITEROWKI OCR (np. "Kortyko" -> "Korytko"), ale przy ratio 0.70-0.95 (status "fixed") nie wolno
-    mu przy okazji skasowac REALNYCH roznic (montaz podtynkowy/natynkowy, inne cyfry np. "5x10" vs
-    "5x16") - to nie literowki, tylko inny, osobny produkt. Jesli surowy odczyt ma inne
-    liczby/slowa atrybutowe niz "poprawiony" wiersz formularza, zachowujemy oryginalny odczyt."""
+    mu przy okazji skasowac REALNYCH roznic (montaz podtynkowy/natynkowy, dopisek elegant/
+    multimedialna, inne cyfry np. "5x10" vs "5x16") - to nie literowki, tylko inny, osobny
+    produkt (bug wykryty 2026-09-26: "Rozdzielnica SRN 24 biała ELEGANT" po cichu tracila
+    "ELEGANT" i trafiala w zwykla SRN 24 zamiast w ROZDZIELNICA ELEGANT 24). Jesli surowy odczyt
+    ma inne liczby/slowa atrybutowe niz "poprawiony" wiersz formularza, zachowujemy oryginalny
+    odczyt."""
     nazwa = snap.name
     if snap.status == "fixed":
         words_raw = {w.lower() for w in _ATTR_WORD_RE.findall(raw)}

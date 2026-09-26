@@ -53,3 +53,24 @@ def test_reconcile_off_form_oznaczony_jako_niepewny():
     assert rec.nazwa == raw
     assert rec.uncertain is True
     assert "spoza formularza" in rec.form_note
+
+
+def test_reconcile_zachowuje_dopisek_elegant():
+    """Bug wykryty 2026-09-26: 'Rozdzielnica SRN 24 biała ELEGANT' tekstowo jest bardzo blisko
+    wiersza formularza 'Rozdzielnica SRN 24 biała' (ratio w przedziale 'fixed'), ale ELEGANT to
+    inny, osobny produkt (ROZDZIELNICA ELEGANT 24) - nie wolno go po cichu zgubic."""
+    raw = "Rozdzielnica SRN 24 biała ELEGANT"
+    snap = snap_to_form_row(raw)
+    assert snap.status == "fixed"
+
+    rec = reconcile_form_row(raw, snap)
+    assert rec.nazwa == raw
+    assert rec.uncertain is True
+
+
+def test_reconcile_zachowuje_dopisek_multimedialna():
+    raw = "Rozdzielnica SRN 24 biała ELEGANT multimedialna"
+    snap = snap_to_form_row(raw)
+    rec = reconcile_form_row(raw, snap)
+    assert "multimedialna" in rec.nazwa.lower()
+    assert rec.uncertain is True

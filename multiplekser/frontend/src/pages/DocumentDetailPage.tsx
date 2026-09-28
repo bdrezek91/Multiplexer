@@ -42,6 +42,7 @@ import {
   createOptimaLink,
   generateDocument,
   getDocument,
+  getJevShadow,
   getDocumentFile,
   revokeOptimaLink,
   updateDocumentItem,
@@ -54,7 +55,7 @@ import { DzialChip } from '../components/DzialChip'
 import { MatchQualityChip } from '../components/MatchQualityChip'
 import { ApiError } from '../api/client'
 import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
-import type { AITraceEvent, Dzial, DocumentItem, Product } from '../types'
+import type { AITraceEvent, Dzial, DocumentItem, JevShadowSummary, Product } from '../types'
 
 const AI_STAGE_LABELS: Record<string, string> = {
   classification: 'Rozpoznanie działu',
@@ -143,6 +144,75 @@ function AITracePanel({ events }: { events: AITraceEvent[] }) {
 // naglowka formularza (2026-09-17, rozszerzone 2026-09-18 o numer_projektu) - to samo pole moze
 // byc odczytane bledne, wiec (tak jak reszta OCR) daje sie poprawic recznie. `key` w miejscu
 // uzycia (jak przy QtyFinalnaCell) wymusza remount przy odswiezeniu dokumentu spoza tego pola.
+function JevShadowPanel({ summary }: { summary: JevShadowSummary | undefined }) {
+  if (!summary) return null
+
+  if (!summary.ready) {
+    return (
+      <Alert severity="info" sx={{ mt: 2 }}>
+        Jev shadow analizuje pozycje w tle. Wynik pojawi się automatycznie.
+      </Alert>
+    )
+  }
+
+  const differences = summary.items.filter((item) => !item.agrees)
+
+  return (
+    <Box
+      sx={{
+        mt: 2,
+        p: 1.5,
+        border: 1,
+        borderColor: differences.length > 0 ? 'warning.main' : 'success.main',
+        borderRadius: 1,
+      }}
+    >
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+        <Typography variant="subtitle2">Jev shadow</Typography>
+        <Chip
+          size="small"
+          color={differences.length > 0 ? 'warning' : 'success'}
+          label={
+            summary.zgodne +
+            '/' +
+            summary.pozycje_ocenione +
+            ' zgodne (' +
+            (summary.zgodnosc_proc ?? 0) +
+            '%)'
+          }
+        />
+        <Chip size="small" variant="outlined" label="tylko podgląd — nie zmienia wyniku" />
+        {!summary.complete && <Chip size="small" color="info" label="analiza w toku" />}
+      </Stack>
+
+      {differences.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Jev zgadza się z matcherem dla wszystkich ocenionych pozycji.
+        </Typography>
+      ) : (
+        <Stack spacing={1} sx={{ mt: 1 }}>
+          {differences.map((item) => (
+            <Box key={item.item_id} sx={{ p: 1, bgcolor: 'action.hover', borderRadius: 1 }}>
+              <Typography variant="body2"><strong>{item.rozpoznana_nazwa}</strong></Typography>
+              <Typography variant="caption" display="block" color="text.secondary">
+                Matcher: {item.matcher_kod ?? 'brak'}
+              </Typography>
+              <Typography variant="caption" display="block" color="warning.main">
+                Jev: {item.jev_kod ?? 'OTHER'} • confidence: {item.confidence?.toFixed(2) ?? '-'}
+              </Typography>
+              {!item.matcher_in_shortlist && (
+                <Typography variant="caption" display="block" color="text.secondary">
+                  Wynik matchera nie był w TOP kandydatów Jev.
+                </Typography>
+              )}
+            </Box>
+          ))}
+        </Stack>
+      )}
+    </Box>
+  )
+}
+
 function MetadaneField({
   documentId,
   field,
@@ -683,6 +753,16 @@ export function DocumentDetailPage() {
     },
   })
 
+  const { data: jevShadow } = useQuery({
+    queryKey: ['documents', documentId, 'jev-shadow'],
+    queryFn: () => getJevShadow(documentId),
+    enabled: Boolean(document && document.status === 'done' && document.dzial === 'elektryka'),
+    refetchInterval: (query) => {
+      const data = query.state.data
+      return data?.complete ? false : 2000
+    },
+  })
+
   const magazynMutation = useMutation({
     mutationFn: (magazyn: string | null) => updateDocumentMagazyn(documentId, magazyn),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['documents', documentId] }),
@@ -812,6 +892,7 @@ export function DocumentDetailPage() {
             </Stack>
 
             <AITracePanel events={document.ai_trace} />
+            <JevShadowPanel summary={jevShadow} />
 
             {document.status === 'processing' || document.status === 'queued' ? (
               <Alert severity="info" sx={{ mt: 2 }}>

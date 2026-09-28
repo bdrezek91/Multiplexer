@@ -151,3 +151,25 @@ class DocumentStatsOut(BaseModel):
     razem_pieniadze_zaoszczedzone: float
     minuty_na_dokument: int
     stawka_pln_za_h: float
+
+
+class JevShadowItemOut(BaseModel):
+    item_id: str
+    rozpoznana_nazwa: str
+    matcher_kod: str | None
+    jev_kod: str | None
+    agrees: bool
+    matcher_in_shortlist: bool
+    confidence: float | None
+    model: str | None
+
+
+class JevShadowSummaryOut(BaseModel):
+    ready: bool
+    complete: bool
+    expected_items: int
+    pozycje_ocenione: int
+    zgodne: int
+    rozbieznosci: int
+    zgodnosc_proc: float | None
+    items: list[JevShadowItemOut] = Field(default_factory=list)

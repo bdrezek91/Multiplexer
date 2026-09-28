@@ -96,6 +96,65 @@ def _query_features(query_name: str, dzial: str) -> dict:
     }
 
 
+def _compact_attrs(attrs: dict) -> dict:
+    """Tylko atrybuty przydatne Jev; bez technicznego _meta i pustych pol."""
+    out = {}
+    for key, value in (attrs or {}).items():
+        if key.startswith("_"):
+            continue
+        if value is None or value == "" or value == [] or value == {}:
+            continue
+        out[key] = value
+    return out
+
+
+def _same_product_family(query_core: str, product_core: str) -> bool:
+    """Lekki filtr rodziny produktu przed rankingiem Jev.
+
+    Grupy Optimy sa szerokie (np. Aparatura modulowa), wiec sama grupa potrafi
+    wrzucic do shortlisty roznicznik przy zapytaniu o roznicowke. Porownujemy
+    pierwszy rdzen nazwy; tolerujemy typowe odmiany/ucięcia OCR przez wspolny
+    prefiks co najmniej 5 znakow.
+    """
+    q_first = query_core.split(" ")[0] if query_core else ""
+    p_first = product_core.split(" ")[0] if product_core else ""
+    if not q_first or not p_first:
+        return False
+    if q_first == p_first:
+        return True
+    common = 0
+    for q_char, p_char in zip(q_first, p_first):
+        if q_char != p_char:
+            break
+        common += 1
+    return common >= 5
+
+
+def _diagnostic_rank(diagnostics: Optional[dict]) -> tuple[int, int, int]:
+    """Ranking diagnostyczny bez wiedzy o wyniku matchera.
+
+    Najpierw odrzucamy kandydatow z konfliktami atrybutow, potem premiujemy
+    zgodne atrybuty i na koncu mniej brakujacych danych. Zwracane wartosci
+    sa przygotowane pod sortowanie reverse=True.
+    """
+    if not diagnostics:
+        return (0, 0, 0)
+
+    conflicts = sum(
+        1 for key, value in diagnostics.items()
+        if key.endswith("_conflict") and bool(value)
+    )
+    matches = sum(
+        1 for key, value in diagnostics.items()
+        if key.endswith("_match") and key != "color_match" and bool(value)
+    )
+    missing = sum(
+        1 for key, value in diagnostics.items()
+        if key.endswith("_missing") and bool(value)
+    )
+    return (-conflicts, matches, -missing)
+
+
 def build_shortlist(
     *,
     query_name: str,
@@ -128,16 +187,21 @@ def build_shortlist(
             expected_group is not None
             and product.grupa == expected_group
         )
+        same_family = _same_product_family(query_core, product.core)
 
         alias_hit = product.kod in alias_codes
 
-        if same_group or alias_hit:
+        if (same_group and same_family) or alias_hit:
             raw_pool.append(product)
 
-    # Fallback: jezeli parser nie potrafil ustalic grupy,
-    # ranking robimy na calym katalogu.
+    # Fallback: gdy OCR jest zbyt znieksztalcony, wracamy do szerszej grupy,
+    # a dopiero gdy nawet jej nie znamy - do calego katalogu.
+    if not raw_pool and expected_group is not None:
+        raw_pool = [p for p in catalog.products if p.grupa == expected_group]
     if not raw_pool:
         raw_pool = list(catalog.products)
+
+    q_elektryka = core_and_attrs(query_name) if dzial != "hydraulika" else None
 
     ranked_by_code = {}
 
@@ -156,24 +220,38 @@ def build_shortlist(
 
         alias_hit = product.kod in alias_codes
 
+        diagnostics = None
+        if q_elektryka is not None:
+            diagnostics = diagnose_candidate_elektryka(
+                q_elektryka,
+                effective,
+            ).as_dict()
+
         previous = ranked_by_code.get(effective.kod)
 
         row = (
             effective,
             float(score),
             alias_hit,
+            diagnostics,
         )
 
         if previous is None:
             ranked_by_code[effective.kod] = row
             continue
 
-        _, previous_score, previous_alias = previous
-
-        # Alias ma pierwszenstwo, potem podobienstwo tekstowe.
-        if alias_hit and not previous_alias:
-            ranked_by_code[effective.kod] = row
-        elif alias_hit == previous_alias and score > previous_score:
+        _, previous_score, previous_alias, previous_diagnostics = previous
+        row_rank = (
+            1 if alias_hit else 0,
+            *_diagnostic_rank(diagnostics),
+            float(score),
+        )
+        previous_rank = (
+            1 if previous_alias else 0,
+            *_diagnostic_rank(previous_diagnostics),
+            float(previous_score),
+        )
+        if row_rank > previous_rank:
             ranked_by_code[effective.kod] = row
 
     ranked = list(ranked_by_code.values())
@@ -181,6 +259,7 @@ def build_shortlist(
     ranked.sort(
         key=lambda row: (
             1 if row[2] else 0,
+            *_diagnostic_rank(row[3]),
             row[1],
         ),
         reverse=True,
@@ -188,17 +267,9 @@ def build_shortlist(
 
     ranked = ranked[:max(1, limit)]
 
-    # Diagnostyka per-kandydat (country_match/conflict/missing, amp_*, phase_*, ...) - tylko
-    # Elektryka ma dzis diagnose_candidate_elektryka(); Hydraulika dostaje None (patrz
-    # docstring _query_features - to samo ograniczenie co przy cechach zapytania).
-    q_elektryka = core_and_attrs(query_name) if dzial != "hydraulika" else None
-
     candidates = []
 
-    for index, (product, score, is_alias) in enumerate(ranked):
-        diagnostics = None
-        if q_elektryka is not None:
-            diagnostics = diagnose_candidate_elektryka(q_elektryka, product).as_dict()
+    for index, (product, score, is_alias, diagnostics) in enumerate(ranked):
 
         candidates.append(
             ShadowCandidate(
@@ -207,7 +278,7 @@ def build_shortlist(
                 nazwa=product.nazwa,
                 jm=product.jm,
                 grupa=product.grupa,
-                atrybuty=product.atrybuty or {},
+                atrybuty=_compact_attrs(product.atrybuty or {}),
                 score=score,
                 alias_hit=is_alias,
                 current_match=(

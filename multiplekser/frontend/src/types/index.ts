@@ -88,6 +88,28 @@ export interface AITraceEvent {
   created_at: string
 }
 
+export interface JevShadowItem {
+  item_id: string
+  rozpoznana_nazwa: string
+  matcher_kod: string | null
+  jev_kod: string | null
+  agrees: boolean
+  matcher_in_shortlist: boolean
+  confidence: number | null
+  model: string | null
+}
+
+export interface JevShadowSummary {
+  ready: boolean
+  complete: boolean
+  expected_items: number
+  pozycje_ocenione: number
+  zgodne: number
+  rozbieznosci: number
+  zgodnosc_proc: number | null
+  items: JevShadowItem[]
+}
+
 export interface DocumentDetail {
   id: string
   status: DocumentStatus

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.modules.decision.models import JevShadowResultModel
 from app.modules.generator import (
     GeneratorItem,
     encode_cp1250,
@@ -48,6 +49,8 @@ from .schemas import (
     DocumentReportCreateIn,
     DocumentReportOut,
     DocumentStatsOut,
+    JevShadowItemOut,
+    JevShadowSummaryOut,
     GenerateRequest,
     MagazynUpdateIn,
     MetadaneUpdateIn,
@@ -224,6 +227,52 @@ def get_document(
         raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
     _check_owner_or_admin(document, user)
     return _to_schema(document)
+
+
+@router.get("/{document_id}/jev-shadow", response_model=JevShadowSummaryOut)
+def get_document_jev_shadow(
+    document_id: str,
+    session: Session = Depends(get_db),
+    user: UserModel = Depends(get_current_user),
+):
+    """Read-only podglad wynikow Jev shadow. Nie zmienia dokumentu ani dopasowan."""
+    document = repository.get_document(session, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail=f"Dokument {document_id!r} nie istnieje")
+    _check_owner_or_admin(document, user)
+
+    rows = (
+        session.query(JevShadowResultModel)
+        .join(DocumentItemModel, DocumentItemModel.id == JevShadowResultModel.item_id)
+        .filter(JevShadowResultModel.document_id == document.id)
+        .order_by(DocumentItemModel.sequence)
+        .all()
+    )
+    expected_items = sum(1 for item in document.items if (item.rozpoznana_nazwa or "").strip())
+    zgodne = sum(1 for row in rows if row.agrees)
+    count = len(rows)
+    return JevShadowSummaryOut(
+        ready=count > 0,
+        complete=count >= expected_items and expected_items > 0,
+        expected_items=expected_items,
+        pozycje_ocenione=count,
+        zgodne=zgodne,
+        rozbieznosci=count - zgodne,
+        zgodnosc_proc=round(100.0 * zgodne / count, 1) if count else None,
+        items=[
+            JevShadowItemOut(
+                item_id=str(row.item_id),
+                rozpoznana_nazwa=row.rozpoznana_nazwa,
+                matcher_kod=row.matcher_kod,
+                jev_kod=row.jev_kod,
+                agrees=row.agrees,
+                matcher_in_shortlist=row.matcher_in_shortlist,
+                confidence=row.confidence,
+                model=row.model,
+            )
+            for row in rows
+        ],
+    )
 
 
 @router.patch("/{document_id}/items/{item_id}", response_model=DocumentItemOut)

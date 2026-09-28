@@ -101,6 +101,10 @@ services:
       # wszystkie kroki Gemini zawioda. Brak klucza = ten krok jest po prostu pomijany.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      JEV_ENABLED: ${JEV_ENABLED:-false}
+      JEV_MODE: ${JEV_MODE:-shadow}
+      JEV_MODEL: ${JEV_MODEL:-jev-latest}
     depends_on:
       postgres:
         condition: service_healthy

@@ -10,6 +10,7 @@ import type {
   DocumentReportStatus,
   DocumentStats,
   GenerateRequest,
+  JevShadowSummary,
   MetadaneUpdate,
   OptimaLink,
 } from '../types'
@@ -32,6 +33,10 @@ export function getDocument(id: string): Promise<DocumentDetail> {
 // `files` - jeden lub wiecej (np. dwa osobne zdjecia z telefonu tej samej papierowej wydawki,
 // ktora nie zmiescila sie na jednym zdjeciu - patrz historia czatu). Wszystkie pod tym samym
 // polem "plik" w FormData - backend (FastAPI) skleja powtorzone pola tej samej nazwy w liste.
+export function getJevShadow(id: string): Promise<JevShadowSummary> {
+  return apiRequest<JevShadowSummary>('/documents/' + encodeURIComponent(id) + '/jev-shadow')
+}
+
 export function uploadDocument(files: File[], magazyn?: string): Promise<DocumentCreated> {
   const formData = new FormData()
   files.forEach((file) => formData.append('plik', file))

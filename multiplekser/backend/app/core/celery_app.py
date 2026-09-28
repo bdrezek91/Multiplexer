@@ -22,6 +22,7 @@ from app.modules.matcher import models as _matcher_models  # noqa: F401
 from app.modules.products import models as _products_models  # noqa: F401
 from app.modules.users import models as _users_models  # noqa: F401
 from app.modules.documents import models as _documents_models  # noqa: F401
+from app.modules.decision import models as _decision_models  # noqa: F401
 
 celery_app = Celery("multiplekser", broker=settings.redis_url, backend=settings.redis_url)
 celery_app.conf.update(
@@ -32,4 +33,7 @@ celery_app.conf.update(
 )
 
 # Rejestruje taski zdefiniowane w modulach (import ma efekt uboczny - podpina @celery_app.task).
-celery_app.autodiscover_tasks(["app.modules.documents"])
+celery_app.autodiscover_tasks(["app.modules.documents", "app.modules.decision"])
+
+# Rejestracja tasku Jev shadow (decision/tasks.py).
+from app.modules.decision import tasks as _decision_tasks  # noqa: F401

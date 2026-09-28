@@ -59,7 +59,7 @@ def test_build_shortlist_dla_roznicowki_nie_zawiera_przypadkowych_produktow(cata
     assert len(candidates) > 0
     for c in candidates:
         assert "wtyczka" not in c.nazwa.lower()
-        assert "różnicówka" in c.nazwa.lower() or "wyłącznik różnicowo" in c.nazwa.lower()
+        assert "różnicówka" in c.nazwa.lower() or "wyłącznik różnicopr" in c.nazwa.lower()
 
 
 def test_build_shortlist_dolacza_diagnostyke_per_kandydat(catalog):
@@ -198,3 +198,21 @@ async def test_evaluate_shadow_other_nie_wymusza_matcher_kod(monkeypatch, catalo
     assert result.jev_kod is None
     assert result.agrees is False
     assert result.matcher_kod == match.kod  # matcher wciaz ma swoj wynik, niezmieniony
+
+
+def test_shortlist_25a_niemiecki_premiuje_zgodne_atrybuty(catalog):
+    query = "Wyłącznik nadprądowy 25A niemiecki"
+    match = match_against_catalog(query, catalog, magazyn="Czekanów")
+
+    candidates = build_shortlist(
+        query_name=query,
+        catalog=catalog,
+        current_match=match,
+        dzial="elektryka",
+        magazyn="Czekanów",
+        limit=5,
+    )
+
+    assert match.kod == "BEZPIECZNIK 25A NIEMIECKI 1P"
+    assert candidates[0].kod == match.kod
+    assert any(c.kod == match.kod for c in candidates)

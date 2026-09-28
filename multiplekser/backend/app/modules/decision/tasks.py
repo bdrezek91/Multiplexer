@@ -10,6 +10,7 @@ analizy zgodnosci matcher-vs-Jev. Nic z tego nie zmienia Document/DocumentItem w
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 from sqlalchemy.orm import Session
@@ -22,6 +23,7 @@ from app.modules.products import Catalog
 from ..documents.models import DocumentModel
 from .jev_client import jev_enabled
 from .jev_shadow import evaluate_shadow
+from .models import JevShadowResultModel
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +66,7 @@ async def _evaluate_all(document: DocumentModel, catalog: Catalog) -> list[dict]
         if result is None:
             continue
         out.append({
+            "item_id": item.id,
             "rozpoznana_nazwa": item.rozpoznana_nazwa,
             "matcher_kod": result.matcher_kod,
             "jev_kod": result.jev_kod,
@@ -71,8 +74,45 @@ async def _evaluate_all(document: DocumentModel, catalog: Catalog) -> list[dict]
             "matcher_in_shortlist": result.matcher_in_shortlist,
             "confidence": result.confidence,
             "model": result.model,
+            "probabilities": result.probabilities,
+            "query_features": result.query_features,
+            "candidate_codes": [c.kod for c in result.candidates],
+            "input_tokens": result.input_tokens,
+            "output_tokens": result.output_tokens,
         })
     return out
+
+
+def _persist_rows(session: Session, document_id: str, rows: list[dict]) -> None:
+    """Upsert wynikow shadow per pozycja. Nie dotyka Document/DocumentItem."""
+    for row in rows:
+        existing = (
+            session.query(JevShadowResultModel)
+            .filter(JevShadowResultModel.item_id == row["item_id"])
+            .one_or_none()
+        )
+        values = {
+            "document_id": document_id,
+            "item_id": row["item_id"],
+            "rozpoznana_nazwa": row["rozpoznana_nazwa"],
+            "matcher_kod": row["matcher_kod"],
+            "jev_kod": row["jev_kod"],
+            "agrees": row["agrees"],
+            "matcher_in_shortlist": row["matcher_in_shortlist"],
+            "confidence": row["confidence"],
+            "model": row["model"],
+            "probabilities": row["probabilities"],
+            "query_features": row["query_features"],
+            "candidate_codes": row["candidate_codes"],
+            "input_tokens": row["input_tokens"],
+            "output_tokens": row["output_tokens"],
+        }
+        if existing is None:
+            session.add(JevShadowResultModel(**values))
+        else:
+            for key, value in values.items():
+                setattr(existing, key, value)
+    session.commit()
 
 
 def run_jev_shadow_for_document(document_id: str, session: Session) -> None:
@@ -100,16 +140,44 @@ def run_jev_shadow_for_document(document_id: str, session: Session) -> None:
     if not rows:
         return
 
+    try:
+        _persist_rows(session, document.id, rows)
+    except Exception:
+        session.rollback()
+        logger.warning(
+            "Jev shadow - nie udalo sie zapisac wynikow do bazy",
+            exc_info=True,
+            extra={"document_id": document_id},
+        )
+
     zgodnosc = sum(1 for r in rows if r["agrees"])
+    log_rows = [
+        {
+            "rozpoznana_nazwa": r["rozpoznana_nazwa"],
+            "matcher_kod": r["matcher_kod"],
+            "jev_kod": r["jev_kod"],
+            "agrees": r["agrees"],
+            "confidence": r["confidence"],
+            "matcher_in_shortlist": r["matcher_in_shortlist"],
+            "input_tokens": r["input_tokens"],
+            "output_tokens": r["output_tokens"],
+        }
+        for r in rows
+    ]
+    summary = {
+        "document_id": document_id,
+        "pozycje_ocenione": len(rows),
+        "zgodnosc_z_matcherem": zgodnosc,
+        "rozbieznosci": len(rows) - zgodnosc,
+        "zgodnosc_proc": round(100.0 * zgodnosc / len(rows), 1),
+        "input_tokens": sum(r["input_tokens"] for r in rows),
+        "output_tokens": sum(r["output_tokens"] for r in rows),
+        "szczegoly": log_rows,
+    }
     logger.info(
-        "Jev shadow - podsumowanie dokumentu",
-        extra={
-            "document_id": document_id,
-            "pozycje_ocenione": len(rows),
-            "zgodnosc_z_matcherem": zgodnosc,
-            "rozbieznosci": len(rows) - zgodnosc,
-            "szczegoly": rows,
-        },
+        "Jev shadow - podsumowanie dokumentu | %s",
+        json.dumps(summary, ensure_ascii=False, default=str),
+        extra=summary,
     )
 
 

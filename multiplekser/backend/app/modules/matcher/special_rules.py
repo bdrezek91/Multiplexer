@@ -180,6 +180,33 @@ DEFAULT_SPECIAL_RULES: list[SpecialRule] = [
         priority=79,
         description="Rozdzielnica Elegant (bez 'multimedialna') -> ROZDZIELNICA ELEGANT 24.",
     ),
+    # "Zasilacz do LED" bez podanej mocy na kartce - wszystkie warianty (15W/36W/45W/60W/75W)
+    # maja identyczny "core" tekstowy (roznia sie tylko moca), wiec bez tej reguly Dice-tie-break
+    # wybieral zawsze pierwszy w katalogu (ZASILACZ LED 15W) - przypadkowo, nie merytorycznie.
+    # Na zyczenie uzytkownika (2026-09-29): gdy moc NIE jest podana wprost, domyslnie 75W (ten sam
+    # zasilacz co juz jest automatycznie doliczany do kazdej "tasmy LED", patrz priority=73 wyzej).
+    # Negative lookahead wylacza regule, gdy w tekscie JEST jawna moc (np. "zasilacz led 15w") -
+    # wtedy zwykle dopasowanie po atrybucie moc_W ma dzialac normalnie.
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\bzasilacz\w*\b)(?=.*\bled\b)(?!.*\d+\s*w\b)",
+        target_kod="ZASILACZ LED 75W",
+        priority=80,
+        description="Zasilacz do LED bez podanej mocy -> domyslnie ZASILACZ LED 75W (na zyczenie uzytkownika, 2026-09-29).",
+    ),
+    # "PROFIL DO TAŚMY LED" to stary duplikat w katalogu (stan=0, zrodlo_stanu="zerowe" - brak
+    # pokrycia w Optimie), ktory mial identyczny/wiekszy alias-match niz prawdziwy kod magazynowy
+    # "PROFIL CZARNY 16X12 2M" (stan=67, nazwa zawiera dopisek "Profil aluminium czarny LED 2M").
+    # Uzytkownik zglosil (2026-09-29, zrzut ekranu z Optimy), ze OCR/matcher wybieral zly
+    # (duplikat) kod - override kieruje kazdy "profil ... led" na prawidlowy kod magazynowy.
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\bprofil)(?=.*led)",
+        normalize=True,
+        target_kod="PROFIL CZARNY 16X12 2M",
+        priority=81,
+        description="Profil do tasmy LED (dowolny zapis) -> PROFIL CZARNY 16X12 2M (prawidlowy kod magazynowy Optima, 'PROFIL DO TASMY LED' to duplikat bez pokrycia w magazynie).",
+    ),
 ]
 
 # Kody docelowe powyzszych 4 regul "podwojne podtynkowe" - tasks.py: _podwoj_ilosc_gniazda_

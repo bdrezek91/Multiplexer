@@ -74,6 +74,47 @@ def test_ocr_override_peszel(catalog):
 
 
 @pytest.mark.parametrize("nazwa", [
+    "Zasilacz do LED",
+    "zasilacz led",
+    "Zasilacz do led",
+])
+def test_zasilacz_do_led_bez_mocy_domyslnie_75w(catalog, nazwa):
+    """Na zyczenie uzytkownika (2026-09-29): 'zasilacz do LED' bez podanej mocy zawsze -> 75W
+    (ten sam, ktory juz jest automatycznie doliczany do kazdej tasmy LED) - bez tej reguly
+    Dice-tie-break (wszystkie warianty mocy maja identyczny "core" tekstowy) przypadkowo
+    wybieral zawsze pierwszy wpis w katalogu (15W)."""
+    r = match_against_catalog(nazwa, catalog)
+    assert r.kod == "ZASILACZ LED 75W"
+    assert r.quality == "ok"
+
+
+@pytest.mark.parametrize("nazwa,oczekiwany_kod", [
+    ("Zasilacz LED 15W", "ZASILACZ LED 15W"),
+    ("zasilacz do led 60w", "ZASILACZ LED 60W"),
+    ("Zasilacz LED 45 W", "ZASILACZ LED 45W"),
+])
+def test_zasilacz_led_z_jawna_moca_nie_jest_dotkniety_regula(catalog, nazwa, oczekiwany_kod):
+    """Gdy moc JEST podana wprost, domyslny override na 75W nie ma zastosowania."""
+    r = match_against_catalog(nazwa, catalog)
+    assert r.kod == oczekiwany_kod
+    assert r.quality == "ok"
+
+
+@pytest.mark.parametrize("nazwa", [
+    "Profil alu do taśmy led",
+    "profil do taśmy led",
+    "Profil LED",
+])
+def test_profil_do_tasmy_led_mapuje_na_prawidlowy_kod_magazynowy(catalog, nazwa):
+    """Na zyczenie uzytkownika (2026-09-29): 'PROFIL DO TAŚMY LED' to stary duplikat bez
+    pokrycia w magazynie (stan=0) - kazdy 'profil ... led' ma trafiac w prawdziwy kod
+    magazynowy 'PROFIL CZARNY 16X12 2M' (stan=67, ten sam produkt fizycznie)."""
+    r = match_against_catalog(nazwa, catalog)
+    assert r.kod == "PROFIL CZARNY 16X12 2M"
+    assert r.quality == "ok"
+
+
+@pytest.mark.parametrize("nazwa", [
     "Taśma LED 5M",
     "Taśma LED 10M",
     "Taśma LED zielona",

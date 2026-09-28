@@ -163,9 +163,12 @@ class JevShadowItemOut(BaseModel):
     confidence: float | None
     model: str | None
     duration_ms: int
+    applied: bool | None = None
+    locked_by_special_rule: bool = False
 
 
 class JevShadowSummaryOut(BaseModel):
+    mode: str
     ready: bool
     complete: bool
     expected_items: int

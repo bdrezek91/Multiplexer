@@ -455,8 +455,29 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         except Exception:
             logger.warning("Pelna kontrola spojnosci dokumentu nieudana - pomijam", exc_info=True)
 
+        # Najpierw zachowujemy wszystkie istniejace reguly biznesowe matchera. Auto-zasilacz
+        # i mnoznik gniazda sa czescia sprawdzonej logiki i nie powinny zalezec od decyzji AI.
         _append_auto_zasilacz_led(items, dzial, session)
         _podwoj_ilosc_gniazda_podwojnego_podtynkowego(items)
+
+        # Jev ACTIVE: Gemini czyta dokument, obecny matcher daje bazowe dopasowanie, a Jev
+        # wybiera finalny kod tylko dla Elektryki. Twarde special rules maja pierwszenstwo;
+        # blad/OTHER zostawia stary matcher. Wszystkie pozycje ida do Jev rownolegle.
+        active_jev_rows = []
+        try:
+            from app.modules.decision.active import apply_jev_active
+            catalog_for_jev = Catalog.from_db(session, dzial=dzial)
+            rules_for_jev = [] if dzial == "hydraulika" else rules_from_db(session)
+            active_jev_rows = asyncio.run(apply_jev_active(
+                items=items,
+                catalog=catalog_for_jev,
+                special_rules=rules_for_jev,
+                magazyn=document.magazyn,
+                dzial=dzial,
+                resolve_product_id=lambda kod: _resolve_product_id(session, kod),
+            ))
+        except Exception:
+            logger.warning("Jev active - blad, zostawiam wyniki matchera", exc_info=True)
 
         repository.mark_done(
             session, document,
@@ -465,6 +486,17 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             dzial=dzial, dzial_confidence=classify_result.confidence,
             pracownik=result.pracownik, numer_plomby=result.numer_plomby,
         )
+
+        if active_jev_rows:
+            try:
+                from app.modules.decision.tasks import persist_active_rows
+                completed_document = repository.get_document(session, document.id)
+                if completed_document is not None:
+                    persist_active_rows(session, completed_document, active_jev_rows)
+            except Exception:
+                session.rollback()
+                logger.warning("Jev active - nie udalo sie zapisac diagnostyki", exc_info=True)
+
         logger.info(
             "OCR - zakonczone sukcesem",
             extra={

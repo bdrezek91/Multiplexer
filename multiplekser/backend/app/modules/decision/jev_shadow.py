@@ -165,6 +165,7 @@ def build_shortlist(
     dzial: str,
     magazyn: Optional[str] = None,
     limit: int = 5,
+    include_current_match: bool = False,
 ) -> list[ShadowCandidate]:
     """Buduje shortliste niezaleznie od decyzji obecnego matchera."""
 
@@ -202,6 +203,15 @@ def build_shortlist(
         raw_pool = [p for p in catalog.products if p.grupa == expected_group]
     if not raw_pool:
         raw_pool = list(catalog.products)
+
+    # W trybie aktywnym obecne, sprawdzone dopasowanie MUSI miec szanse zostac wybrane przez
+    # Jev nawet gdy niezalezna heurystyka shortlisty go nie znalazla. Nie oznaczamy go Jev jako
+    # "stary wynik" - po prostu dokladamy produkt do kandydatow. Shadow zachowuje dotychczasowa
+    # niezaleznosc i nie dodaje matchera sztucznie.
+    if include_current_match and current_match.kod:
+        current_product = catalog.find_by_kod(current_match.kod)
+        if current_product and all(p.kod != current_product.kod for p in raw_pool):
+            raw_pool.append(current_product)
 
     q_elektryka = core_and_attrs(query_name) if dzial != "hydraulika" else None
 
@@ -267,7 +277,16 @@ def build_shortlist(
         reverse=True,
     )
 
-    ranked = ranked[:max(1, limit)]
+    limit = max(1, limit)
+    selected = ranked[:limit]
+    if include_current_match and current_match.kod:
+        current_product = catalog.find_by_kod(current_match.kod)
+        if current_product is not None:
+            current_effective = apply_warehouse_variant(catalog, current_product, magazyn)
+            current_row = ranked_by_code.get(current_effective.kod)
+            if current_row is not None and all(row[0].kod != current_effective.kod for row in selected):
+                selected = (selected[:limit - 1] if limit > 1 else []) + [current_row]
+    ranked = selected
 
     candidates = []
 
@@ -311,7 +330,8 @@ async def evaluate_shadow(
     if not jev_enabled():
         return None
 
-    if jev_mode() != "shadow":
+    mode = jev_mode()
+    if mode not in {"shadow", "active"}:
         return None
 
     try:
@@ -322,6 +342,7 @@ async def evaluate_shadow(
             dzial=dzial,
             magazyn=magazyn,
             limit=limit,
+            include_current_match=(mode == "active"),
         )
 
         if not candidates:

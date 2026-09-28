@@ -98,9 +98,12 @@ export interface JevShadowItem {
   confidence: number | null
   model: string | null
   duration_ms: number
+  applied: boolean | null
+  locked_by_special_rule: boolean
 }
 
 export interface JevShadowSummary {
+  mode: 'shadow' | 'active' | string
   ready: boolean
   complete: boolean
   expected_items: number

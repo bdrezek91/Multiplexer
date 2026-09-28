@@ -21,7 +21,7 @@ from app.modules.matcher.result import MatchResult
 from app.modules.products import Catalog
 
 from ..documents.models import DocumentModel
-from .jev_client import jev_enabled
+from .jev_client import jev_enabled, jev_mode
 from .jev_shadow import evaluate_shadow
 from .models import JevShadowResultModel
 
@@ -117,6 +117,21 @@ def _persist_rows(session: Session, document_id: str, rows: list[dict]) -> None:
     session.commit()
 
 
+def persist_active_rows(session: Session, document: DocumentModel, rows: list[dict]) -> None:
+    """Zapisuje diagnostyke Jev active po mark_done(), mapujac sequence -> item_id."""
+    if not rows:
+        return
+    item_by_sequence = {item.sequence: item for item in document.items}
+    materialized = []
+    for row in rows:
+        item = item_by_sequence.get(row.get("sequence"))
+        if item is None:
+            continue
+        materialized.append({**row, "item_id": item.id})
+    if materialized:
+        _persist_rows(session, document.id, materialized)
+
+
 def run_jev_shadow_for_document(document_id: str, session: Session) -> None:
     document = session.get(DocumentModel, document_id)
     if document is None:
@@ -197,6 +212,6 @@ def process_jev_shadow(document_id: str) -> None:
 def dispatch_jev_shadow_task(document_id: str) -> None:
     """Zleca ocene Jev Shadow do Celery - no-op gdy Jev jest wylaczony (JEV_ENABLED=false),
     zeby nie zaśmiecac kolejki zadaniami ktore i tak natychmiast wroca bez wyniku."""
-    if not jev_enabled():
+    if not jev_enabled() or jev_mode() != "shadow":
         return
     process_jev_shadow.delay(document_id)

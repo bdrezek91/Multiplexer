@@ -149,8 +149,10 @@ function JevShadowPanel({ summary }: { summary: JevShadowSummary | undefined }) 
 
   if (!summary.ready) {
     return (
-      <Alert severity="info" sx={{ mt: 2 }}>
-        Jev shadow analizuje pozycje w tle. Wynik pojawi się automatycznie.
+      <Alert severity={summary.mode === 'active' ? 'warning' : 'info'} sx={{ mt: 2 }}>
+        {summary.mode === 'active'
+          ? 'Jev active nie zwrócił jeszcze wyniku — do tego czasu obowiązuje obecny matcher.'
+          : 'Jev shadow analizuje pozycje w tle. Wynik pojawi się automatycznie.'}
       </Alert>
     )
   }
@@ -168,7 +170,7 @@ function JevShadowPanel({ summary }: { summary: JevShadowSummary | undefined }) 
       }}
     >
       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-        <Typography variant="subtitle2">Jev shadow</Typography>
+        <Typography variant="subtitle2">{summary.mode === 'active' ? 'Jev active' : 'Jev shadow'}</Typography>
         <Chip
           size="small"
           color={differences.length > 0 ? 'warning' : 'success'}
@@ -181,7 +183,14 @@ function JevShadowPanel({ summary }: { summary: JevShadowSummary | undefined }) 
             '%)'
           }
         />
-        <Chip size="small" variant="outlined" label="tylko podgląd — nie zmienia wyniku" />
+        <Chip
+          size="small"
+          variant="outlined"
+          color={summary.mode === 'active' ? 'success' : 'default'}
+          label={summary.mode === 'active'
+            ? 'aktywny — decyzja Jev może zmienić dopasowanie; reguły specjalne mają pierwszeństwo'
+            : 'tylko podgląd — nie zmienia wyniku'}
+        />
         {summary.duration_ms !== null && (
           <Chip size="small" variant="outlined" label={`czas decyzji: ${(summary.duration_ms / 1000).toFixed(1)} s`} />
         )}
@@ -203,6 +212,15 @@ function JevShadowPanel({ summary }: { summary: JevShadowSummary | undefined }) 
               <Typography variant="caption" display="block" color="warning.main">
                 Jev: {item.jev_kod ?? 'OTHER'} • confidence: {item.confidence?.toFixed(2) ?? '-'} • {(item.duration_ms / 1000).toFixed(1)} s
               </Typography>
+              {summary.mode === 'active' && (
+                <Typography variant="caption" display="block" color={item.applied ? 'success.main' : 'text.secondary'}>
+                  {item.locked_by_special_rule
+                    ? 'Zachowano naszą regułę specjalną — Jev nie może jej nadpisać.'
+                    : item.applied
+                      ? 'Zastosowano decyzję Jev jako finalne dopasowanie.'
+                      : 'Pozostawiono wynik matchera (fallback/brak zmiany).'}
+                </Typography>
+              )}
               {!item.matcher_in_shortlist && (
                 <Typography variant="caption" display="block" color="text.secondary">
                   Wynik matchera nie był w TOP kandydatów Jev.

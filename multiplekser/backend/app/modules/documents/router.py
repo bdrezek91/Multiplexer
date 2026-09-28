@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.db import get_db
 from app.modules.decision.models import JevShadowResultModel
+from app.modules.decision.jev_client import jev_mode
 from app.modules.generator import (
     GeneratorItem,
     encode_cp1250,
@@ -252,6 +253,7 @@ def get_document_jev_shadow(
     zgodne = sum(1 for row in rows if row.agrees)
     count = len(rows)
     return JevShadowSummaryOut(
+        mode=jev_mode(),
         ready=count > 0,
         complete=count >= expected_items and expected_items > 0,
         expected_items=expected_items,
@@ -271,6 +273,8 @@ def get_document_jev_shadow(
                 confidence=row.confidence,
                 model=row.model,
                 duration_ms=row.duration_ms,
+                applied=(row.query_features or {}).get("active_applied"),
+                locked_by_special_rule=bool((row.query_features or {}).get("active_locked_by_special_rule", False)),
             )
             for row in rows
         ],

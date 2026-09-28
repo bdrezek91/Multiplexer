@@ -79,6 +79,7 @@ async def _evaluate_all(document: DocumentModel, catalog: Catalog) -> list[dict]
             "candidate_codes": [c.kod for c in result.candidates],
             "input_tokens": result.input_tokens,
             "output_tokens": result.output_tokens,
+            "duration_ms": result.duration_ms,
         })
     return out
 
@@ -106,6 +107,7 @@ def _persist_rows(session: Session, document_id: str, rows: list[dict]) -> None:
             "candidate_codes": row["candidate_codes"],
             "input_tokens": row["input_tokens"],
             "output_tokens": row["output_tokens"],
+            "duration_ms": row["duration_ms"],
         }
         if existing is None:
             session.add(JevShadowResultModel(**values))
@@ -161,6 +163,7 @@ def run_jev_shadow_for_document(document_id: str, session: Session) -> None:
             "matcher_in_shortlist": r["matcher_in_shortlist"],
             "input_tokens": r["input_tokens"],
             "output_tokens": r["output_tokens"],
+            "duration_ms": r["duration_ms"],
         }
         for r in rows
     ]
@@ -172,6 +175,7 @@ def run_jev_shadow_for_document(document_id: str, session: Session) -> None:
         "zgodnosc_proc": round(100.0 * zgodnosc / len(rows), 1),
         "input_tokens": sum(r["input_tokens"] for r in rows),
         "output_tokens": sum(r["output_tokens"] for r in rows),
+        "duration_ms": max(r["duration_ms"] for r in rows),
         "szczegoly": log_rows,
     }
     logger.info(

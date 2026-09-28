@@ -97,6 +97,7 @@ export interface JevShadowItem {
   matcher_in_shortlist: boolean
   confidence: number | null
   model: string | null
+  duration_ms: number
 }
 
 export interface JevShadowSummary {
@@ -107,6 +108,7 @@ export interface JevShadowSummary {
   zgodne: number
   rozbieznosci: number
   zgodnosc_proc: number | null
+  duration_ms: number | null
   items: JevShadowItem[]
 }
 

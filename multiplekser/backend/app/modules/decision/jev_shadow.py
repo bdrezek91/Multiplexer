@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -61,6 +62,7 @@ class JevShadowResult:
     query_features: dict
     input_tokens: int
     output_tokens: int
+    duration_ms: int
 
 
 def _query_core(query_name: str, dzial: str) -> str:
@@ -378,6 +380,7 @@ async def evaluate_shadow(
         # UWAGA:
         # current_match celowo NIE znajduje sie w state ani instructions.
         # Jev ma podjac decyzje niezaleznie od starego matchera.
+        decision_started = time.perf_counter()
         result = await ask_choice(
             state={
                 "ocr_text": query_name,
@@ -400,6 +403,7 @@ async def evaluate_shadow(
             ),
             criteria=criteria,
         )
+        duration_ms = round((time.perf_counter() - decision_started) * 1000)
     except JevError as exc:
         logger.warning("Jev shadow - blad TypeSafe, pomijam (fail-open)", exc_info=exc)
         return None
@@ -432,4 +436,5 @@ async def evaluate_shadow(
         query_features=query_features,
         input_tokens=result.input_tokens,
         output_tokens=result.output_tokens,
+        duration_ms=duration_ms,
     )

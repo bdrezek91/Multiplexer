@@ -162,6 +162,7 @@ class JevShadowItemOut(BaseModel):
     matcher_in_shortlist: bool
     confidence: float | None
     model: str | None
+    duration_ms: int
 
 
 class JevShadowSummaryOut(BaseModel):
@@ -172,4 +173,5 @@ class JevShadowSummaryOut(BaseModel):
     zgodne: int
     rozbieznosci: int
     zgodnosc_proc: float | None
+    duration_ms: int | None
     items: list[JevShadowItemOut] = Field(default_factory=list)

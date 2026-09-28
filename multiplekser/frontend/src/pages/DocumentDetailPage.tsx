@@ -182,6 +182,9 @@ function JevShadowPanel({ summary }: { summary: JevShadowSummary | undefined }) 
           }
         />
         <Chip size="small" variant="outlined" label="tylko podgląd — nie zmienia wyniku" />
+        {summary.duration_ms !== null && (
+          <Chip size="small" variant="outlined" label={`czas decyzji: ${(summary.duration_ms / 1000).toFixed(1)} s`} />
+        )}
         {!summary.complete && <Chip size="small" color="info" label="analiza w toku" />}
       </Stack>
 
@@ -198,7 +201,7 @@ function JevShadowPanel({ summary }: { summary: JevShadowSummary | undefined }) 
                 Matcher: {item.matcher_kod ?? 'brak'}
               </Typography>
               <Typography variant="caption" display="block" color="warning.main">
-                Jev: {item.jev_kod ?? 'OTHER'} • confidence: {item.confidence?.toFixed(2) ?? '-'}
+                Jev: {item.jev_kod ?? 'OTHER'} • confidence: {item.confidence?.toFixed(2) ?? '-'} • {(item.duration_ms / 1000).toFixed(1)} s
               </Typography>
               {!item.matcher_in_shortlist && (
                 <Typography variant="caption" display="block" color="text.secondary">

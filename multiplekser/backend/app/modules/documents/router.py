@@ -259,6 +259,7 @@ def get_document_jev_shadow(
         zgodne=zgodne,
         rozbieznosci=count - zgodne,
         zgodnosc_proc=round(100.0 * zgodne / count, 1) if count else None,
+        duration_ms=max((row.duration_ms for row in rows), default=None),
         items=[
             JevShadowItemOut(
                 item_id=str(row.item_id),
@@ -269,6 +270,7 @@ def get_document_jev_shadow(
                 matcher_in_shortlist=row.matcher_in_shortlist,
                 confidence=row.confidence,
                 model=row.model,
+                duration_ms=row.duration_ms,
             )
             for row in rows
         ],

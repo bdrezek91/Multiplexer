@@ -68,6 +68,43 @@ def test_detect_phase_brak_wskazowek_zwraca_none():
     assert detect_phase("Rozdzielnica SRN 12") is None
 
 
+# ---- detect_phase(): naturalny zapis "N fazowa/fazowy/fazowe" bez lacznika (bug wykryty
+# 2026-09-29 przy okazji Jev shadow: core_and_attrs("Roznicowka niemiecka 1 fazowa 40A")
+# nie mial phase="1F", mimo ze kraj i amperaz byly wykrywane poprawnie) ----
+
+def test_detect_phase_1_fazowa_bez_lacznika():
+    assert detect_phase("Różnicówka niemiecka 1 fazowa 40A") == "1F"
+
+
+def test_detect_phase_3_fazowa_bez_lacznika():
+    assert detect_phase("Różnicówka polska 3 fazowa 40A") == "3F"
+
+
+def test_detect_phase_1_fazowy_1_fazowe_bez_lacznika():
+    assert detect_phase("Wyłącznik 1 fazowy") == "1F"
+    assert detect_phase("Zasilanie 1 fazowe") == "1F"
+
+
+def test_detect_phase_3_fazowy_3_fazowe_bez_lacznika():
+    assert detect_phase("Wyłącznik 3 fazowy") == "3F"
+    assert detect_phase("Zasilanie 3 fazowe") == "3F"
+
+
+def test_core_and_attrs_roznicowka_1_fazowa_pelny_przypadek():
+    """Pelny przypadek z raportu Jev shadow - kraj DE, amp 40, phase 1F rozpoznane razem."""
+    result = core_and_attrs("Różnicówka niemiecka 1 fazowa 40A")
+    assert result.country == "DE"
+    assert result.amp == "40"
+    assert result.phase == "1F"
+
+
+def test_core_and_attrs_roznicowka_3_fazowa_pelny_przypadek():
+    result = core_and_attrs("Różnicówka polska 3 fazowa 40A")
+    assert result.country == "PL"
+    assert result.amp == "40"
+    assert result.phase == "3F"
+
+
 def test_gniazdo_odbiornikowe_oznacza_montaz_staly():
     assert core_and_attrs("Gniazdo odbiornikowe 3F 16A").montaz == "STALY"
 

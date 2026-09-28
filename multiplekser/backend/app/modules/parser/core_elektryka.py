@@ -88,6 +88,9 @@ _PHASE_1F_PATTERNS = [
     re.compile(r"\b1\s*f\b"),
     re.compile(r"\b1-fazowe?\b"),
     re.compile(r"\b1\s*-\s*fazowe?\b"),
+    # Naturalny zapis bez lacznika ("1 fazowa/fazowy/fazowe", tez sklejony "1fazowa") - bug
+    # wykryty 2026-09-29 (Jev shadow test: "Roznicowka niemiecka 1 fazowa 40A" nie mial phase).
+    re.compile(r"\b1\s*fazow[aey]\b"),
     re.compile(r"\bjednofazow[aei]\b"),
     re.compile(r"\b230v\b"),
     re.compile(r"\b230\s*v\b"),
@@ -99,6 +102,7 @@ _PHASE_3F_PATTERNS = [
     re.compile(r"\b3\s*f\b"),
     re.compile(r"\b3-fazowe?\b"),
     re.compile(r"\b3\s*-\s*fazowe?\b"),
+    re.compile(r"\b3\s*fazow[aey]\b"),
     re.compile(r"\btr[oó]jfazow[aei]\b"),
     re.compile(r"\b400v\b"),
     re.compile(r"\b400\s*v\b"),

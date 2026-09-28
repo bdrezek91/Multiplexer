@@ -115,3 +115,33 @@ def test_retention_jeden_zablokowany_dokument_nie_psuje_reszty_paczki(
     # 5 dokumentow ponad limit, w tym "flagged" - kaskada teraz pozwala go usunac razem z logiem.
     assert removed == 5
     assert repository.get_document(db_session, flagged.id) is None
+
+
+def test_retention_usuwa_wiersz_nawet_gdy_usuniecie_pliku_zawiedzie(
+    db_session, admin_user, mocked_storage, monkeypatch,
+):
+    """Regresja drugiej czesci naprawy z 2026-09-28 (znalezionej podczas analizy prawdziwej
+    przyczyny dokumentow bez pliku na produkcji - patrz historia czatu: to NIE byl reset
+    wolumenu/restart, tylko ten sam blad retencji): kolejnosc MUSI byc "wiersz najpierw, plik
+    potem". Stary kod kasowal PLIK przed commitem wiersza - gdy commit z jakiegokolwiek powodu
+    zawodzil, plik znikal bezpowrotnie a wiersz zostawal (dokladnie objaw zgloszony przez
+    uzytkownika: "nie znaleziono w storage"). Test symuluje odwrotna, bezpieczna sytuacje:
+    usuniecie PLIKU zawodzi (np. przejsciowy blad sieci do MinIO) - dokument i tak znika z bazy,
+    plik zostaje tylko osierocony (nieszkodliwe: dokumentu juz nie ma w UI)."""
+    storage = get_storage()
+    documents = _make_old_documents(db_session, admin_user, storage, 21)
+    doomed = documents[0]
+
+    original_delete = storage.delete
+
+    def failing_delete(key):
+        if key == doomed.file_key:
+            raise RuntimeError("symulowana przejsciowa awaria sieci do MinIO")
+        return original_delete(key)
+
+    monkeypatch.setattr(storage, "delete", failing_delete)
+
+    removed = prune_documents(db_session, storage, limit=20)
+
+    assert removed == 1
+    assert repository.get_document(db_session, doomed.id) is None

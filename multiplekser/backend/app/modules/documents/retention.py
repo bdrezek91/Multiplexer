@@ -34,7 +34,19 @@ def prune_documents(session: Session, storage: FileStorage, *, limit: int) -> in
     dokument z nieprzewidzianym konfliktem (np. brakujaca kaskada dla powiazanej tabeli) wybijal
     WSZYSTKIE wczesniejsze, poprawne usuniecia w tej samej paczce (wyjatek lapany w tasks.py
     dopiero na samej gorze, session.rollback() kasowal caly postep) - retencja przez to po cichu
-    nie usuwala NIC, nigdy, odkad zostala wdrozona."""
+    nie usuwala NIC, nigdy, odkad zostala wdrozona.
+
+    KOLEJNOSC jest celowa i wazna (2026-09-28, druga czesc tej samej naprawy): NAJPIERW kasujemy
+    wiersz w bazie i dopiero PO potwierdzonym commicie kasujemy plik ze storage - nigdy odwrotnie.
+    Storage (S3/MinIO) nie jest transakcyjny wzgledem Postgresa - usuniecie pliku jest
+    nieodwracalne, a DELETE FROM document moze sie nie udac (np. przez nieprzewidzianą kaskadę).
+    Stary kod kasowal PLIK przed commitem wiersza - gdy commit wybuchal (co dzialo sie ZA KAZDYM
+    razem odkad w paczce pojawil sie pierwszy dokument ze zgloszeniem/logiem AI), plik znikal
+    bezpowrotnie, a wiersz zostawal - to faktyczna przyczyna dokumentow z bledem "nie znaleziono
+    w storage" na produkcji (nie restart/reset wolumenu, jak wczesniej podejrzewano - sam
+    poprzedni blad retencji). Kolejnosc "wiersz najpierw" gwarantuje, ze w najgorszym razie
+    zostaje NIEUZYWANY plik do posprzatania recznie - nigdy odwrotnie (dzialajacy dokument bez
+    pliku)."""
     if limit < 1:
         logger.warning("Retencja pominieta: document_retention_limit musi byc dodatni")
         return 0
@@ -74,20 +86,28 @@ def prune_documents(session: Session, storage: FileStorage, *, limit: int) -> in
     for document in query.all():
         keys = [document.file_key, *(extra.file_key for extra in document.extra_files)]
         try:
-            for key in keys:
-                storage.delete(key)
             session.delete(document)
             session.commit()
         except Exception:
-            # Ani plik, ani wiersz tego JEDNEGO dokumentu nie zostaja usuniete - ale reszta
-            # paczki (juz zatwierdzona osobno, wyzej w petli) zostaje. Ponowne wywolanie jest
-            # bezpieczne, bo S3 DeleteObject jest idempotentne.
+            # Wiersz NIE zostal usuniety - plik zostaje niedotkniety, dokument po prostu wraca
+            # jako kandydat przy nastepnym uruchomieniu. Bezpieczny stan: dzialajacy dokument.
             session.rollback()
             logger.exception(
-                "Retencja: nie udalo sie usunac dokumentu",
+                "Retencja: nie udalo sie usunac wiersza dokumentu - plik pozostawiony",
                 extra={"document_id": str(document.id)},
             )
             continue
+        for key in keys:
+            try:
+                storage.delete(key)
+            except Exception:
+                # Wiersz juz nie istnieje - plik zostaje osierocony w storage (do recznego
+                # sprzatania), ale to nieszkodliwy stan (dokumentu i tak juz nie ma w UI).
+                # Ponowne wywolanie bezpieczne, bo S3 DeleteObject jest idempotentne.
+                logger.exception(
+                    "Retencja: wiersz dokumentu usuniety, ale nie udalo sie usunac pliku ze storage",
+                    extra={"document_id": str(document.id), "key": key},
+                )
         removed += 1
 
     if removed:

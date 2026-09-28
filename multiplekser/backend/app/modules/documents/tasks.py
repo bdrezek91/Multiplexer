@@ -472,6 +472,15 @@ def run_ocr_task(document_id: str, session: Session) -> None:
                 "pozycje": len(items), "rejected_count": result.rejected_count,
             },
         )
+
+        # Jev shadow (2026-09-29) - osobne zadanie Celery, PO zakonczeniu dokumentu, zero
+        # wplywu na czas/wynik powyzej (patrz decision/tasks.py, docstring). No-op gdy
+        # JEV_ENABLED=false (domyslnie, patrz docker-compose.prod.yml).
+        try:
+            from app.modules.decision.tasks import dispatch_jev_shadow_task
+            dispatch_jev_shadow_task(document_id)
+        except Exception:
+            logger.warning("Jev shadow - nie udalo sie zlecic zadania, pomijam", exc_info=True)
     except (OCRUnparsableResponseError, AllProvidersFailedError, OCRProviderError) as exc:
         repository.mark_error(session, document, str(exc))
         logger.error("OCR - zakonczone bledem", extra={"document_id": document_id, "error": str(exc)})

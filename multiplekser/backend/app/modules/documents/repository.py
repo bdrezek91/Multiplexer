@@ -7,7 +7,6 @@ import secrets
 import uuid
 from typing import Optional
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from datetime import datetime, timezone
@@ -26,16 +25,22 @@ HOURLY_RATE_PLN = 55.0
 
 
 def get_document_stats_per_user(session: Session) -> list[dict]:
-    """Ile dokumentow (tylko status="done" - realnie ukonczonych, nie w trakcie/z bledem)
-    przerobil kazdy uzytkownik, zestawione z szacowanym zaoszczedzonym czasem/pieniedzmi wzgledem
-    recznego wprowadzania (patrz stale wyzej). Tylko uzytkownicy z co najmniej jednym gotowym
-    dokumentem (INNER JOIN) - posortowane malejaco po liczbie dokumentow."""
+    """Ile dokumentow ukonczyl kazdy uzytkownik, zestawione z szacowanym zaoszczedzonym
+    czasem/pieniedzmi wzgledem recznego wprowadzania (patrz stale wyzej).
+
+    CELOWO czytane z trwalego licznika `UserModel.dokumenty_ukonczone_licznik`, a NIE live
+    COUNT(DocumentModel WHERE status="done") - ten drugi sposob byl bledny (bug 2026-09-29):
+    retention.py kasuje stare dokumenty (zachowuje tylko document_retention_limit najnowszych),
+    wiec live COUNT spadal w miare kasowania starych wpisow, mimo ze uzytkownik naprawde
+    przerobil wiecej dokumentow niz akurat zostalo w bazie - pokazywane oszczednosci potrafily
+    nagle spasc z >1300 zl do 132 zl. Licznik jest inkrementowany raz w mark_done() i nigdy
+    nie jest dekrementowany przez retencje.
+
+    Tylko uzytkownicy z co najmniej jednym ukonczonym dokumentem - posortowane malejaco."""
     rows = (
-        session.query(UserModel.id, UserModel.email, func.count(DocumentModel.id))
-        .join(DocumentModel, DocumentModel.user_id == UserModel.id)
-        .filter(DocumentModel.status == "done")
-        .group_by(UserModel.id, UserModel.email)
-        .order_by(func.count(DocumentModel.id).desc())
+        session.query(UserModel.id, UserModel.email, UserModel.dokumenty_ukonczone_licznik)
+        .filter(UserModel.dokumenty_ukonczone_licznik > 0)
+        .order_by(UserModel.dokumenty_ukonczone_licznik.desc())
         .all()
     )
     stats = []
@@ -161,6 +166,12 @@ def mark_done(
     document.error_message = None
     document.dzial = dzial
     document.dzial_confidence = dzial_confidence
+    # Trwaly licznik (patrz komentarz przy UserModel.dokumenty_ukonczone_licznik) - inkrementacja
+    # w bazie (UPDATE ... SET x = x + 1), zeby byc bezpiecznym przy rownoleglych workerach Celery.
+    session.query(UserModel).filter(UserModel.id == document.user_id).update(
+        {UserModel.dokumenty_ukonczone_licznik: UserModel.dokumenty_ukonczone_licznik + 1},
+        synchronize_session=False,
+    )
     session.commit()
 
 

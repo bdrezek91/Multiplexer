@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Boolean, String, Uuid
+from sqlalchemy import Boolean, Integer, String, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,3 +24,12 @@ class UserModel(Base):
     rola: Mapped[str] = mapped_column(String, nullable=False, default="magazynier")
     magazyny_dostepne: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Trwaly, narastajacy licznik ukonczonych dokumentow (statystyki wydajnosci, Users/UsersPage) -
+    # NIE wolno liczyc tego z live COUNT(DocumentModel WHERE status="done"), bo retention.py
+    # kasuje stare dokumenty (zachowuje tylko document_retention_limit najnowszych) - taki live
+    # COUNT po prostu spada w miare jak retencja usuwa stare wpisy, mimo ze uzytkownik naprawde
+    # przerobil wiecej dokumentow niz akurat zostalo w bazie (bug wykryty 2026-09-29, realny
+    # spadek pokazywanych oszczednosci z >1300 zl do 132 zl). Inkrementowany raz, w momencie
+    # oznaczenia dokumentu jako "done" (documents/repository.py: mark_done()), nigdy nie
+    # dekrementowany przez retencje.
+    dokumenty_ukonczone_licznik: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

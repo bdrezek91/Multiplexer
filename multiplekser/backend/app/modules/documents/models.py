@@ -73,6 +73,20 @@ class DocumentModel(Base):
     extra_files: Mapped[list["DocumentFileModel"]] = relationship(
         back_populates="document", cascade="all, delete-orphan", order_by="DocumentFileModel.sequence",
     )
+    # Kaskada dla retencji (2026-09-28, naprawa bledu wykrytego na produkcji): bez tego
+    # session.delete(document) w retention.py wybuchal IntegrityError (naruszenie klucza obcego)
+    # za kazdym razem, gdy usuwany dokument mial ZGLOSZENIE PROBLEMU lub log drugiej kontroli AI -
+    # wyjatek byl polykany w tasks.py (try/except wokol calego prune_documents), wiec retencja
+    # PO CICHU nie usuwala NIC, nigdy, odkad zostala wdrozona (zamiast trzymac ostatnie 20
+    # dokumentow, baza rosla bez ograniczen - patrz historia czatu). `reports` MA WLASNA ochrone
+    # w retention.py (dokumenty z NIEROZWIAZANYM zgloszeniem sa pomijane w retencji calkowicie,
+    # nie tylko przy kasowaniu) - kaskada tutaj dotyczy tylko juz ROZWIAZANYCH zgloszen.
+    reports: Mapped[list["DocumentReportModel"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan",
+    )
+    row_group_flags: Mapped[list["OcrRowGroupFlagModel"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan",
+    )
 
 
 class DocumentItemModel(Base):
@@ -154,7 +168,7 @@ class DocumentReportModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    document: Mapped["DocumentModel"] = relationship()
+    document: Mapped["DocumentModel"] = relationship(back_populates="reports")
     reported_by: Mapped["UserModel"] = relationship()
 
 
@@ -193,4 +207,4 @@ class OcrRowGroupFlagModel(Base):
     second_ilosc_zuzyta: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
-    document: Mapped["DocumentModel"] = relationship()
+    document: Mapped["DocumentModel"] = relationship(back_populates="row_group_flags")

@@ -64,10 +64,10 @@ async def test_default_chain_ma_gemini_x4_darmowy_gemini_platny_openai_platny():
     assert openai_steps[0] is chain[-1]  # OpenAI zawsze na koncu - ostatni fallback
 
     assert [s.model for s in gemini_steps] == [
-        "gemini-3.6-flash",
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite",
         "gemini-3.5-flash",
         "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
         "gemini-3.6-flash",
     ]
 
@@ -86,10 +86,10 @@ async def test_quantity_verification_chain_ma_tylko_cztery_darmowe_modele_gemini
     assert all(isinstance(s.provider, GeminiProvider) for s in chain)
     assert all("darmowy" in s.label for s in chain)
     assert [s.model for s in chain] == [
-        "gemini-3.6-flash",
+        "gemini-3-flash-preview",
+        "gemini-3.1-flash-lite",
         "gemini-3.5-flash",
         "gemini-3.5-flash-lite",
-        "gemini-3.1-flash-lite",
     ]
 
 
@@ -339,16 +339,16 @@ async def test_timeout_kroku_przechodzi_do_nastepnego_i_ustawia_cooldown():
     assert "blokada modelu na 2 min" in str(rejected["reason"])
 
 
-async def test_domyslny_36_ma_krotszy_timeout_niz_globalny_30s():
+async def test_domyslny_chain_zaczyna_od_najszybszego_modelu_z_benchmarku():
     chain = default_ocr_chain()
     first = chain[0]
-    assert first.model == "gemini-3.6-flash"
-    assert first.timeout_seconds == 12
+    assert first.model == "gemini-3-flash-preview"
+    assert first.timeout_seconds == 14
 
 
-async def test_background_36_ma_timeout_10s():
+async def test_background_zaczyna_od_3_flash_preview():
     from app.modules.ocr.chain import background_verification_chain
 
     chain = background_verification_chain()
-    assert chain[0].model == "gemini-3.6-flash"
-    assert chain[0].timeout_seconds == 10
+    assert chain[0].model == "gemini-3-flash-preview"
+    assert chain[0].timeout_seconds == 14

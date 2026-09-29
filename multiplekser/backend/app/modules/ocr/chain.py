@@ -65,11 +65,16 @@ def default_ocr_chain() -> list[OCRChainStep]:
     gemini = GeminiProvider()
     free_key = settings.gemini_api_key_free
     paid_key = settings.gemini_api_key_paid
+    # Kolejnosc oparta na benchmarku prawdziwych wydawek (2026-09-29):
+    # 3 Flash Preview: najszybszy i 100% zgodny kodowo na testowanych dokumentach;
+    # 3.1 Flash Lite: stabilny fallback, ale na 125/04/2026 zgubil 1 kod;
+    # 3.5 Flash: dobra jakosc, ale chwilowo podatny na 503;
+    # 3.5 Flash Lite: poprawny jakosciowo, ale w pelnym OCR potrafil byc wyraznie wolniejszy.
     return [
-        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 12),
-        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 24),
+        OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 14),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 16),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 18),
         OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 18),
-        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 18),
         OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key, 18),
         OCRChainStep(
             f"OpenAI {settings.openai_model} (klucz platny)",
@@ -114,22 +119,22 @@ def quantity_verification_chain() -> list[OCRChainStep]:
     gemini = GeminiProvider()
     free_key = settings.gemini_api_key_free
     return [
-        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 10),
-        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 18),
-        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 14),
+        OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 12),
         OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 14),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 16),
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 16),
     ]
 
 
 def background_verification_chain() -> list[OCRChainStep]:
-    """Drugi pelny odczyt w tle: bardziej agresywny timeout 3.6, bo wynik glowny jest juz gotowy."""
+    """Drugi pelny odczyt w tle: darmowe modele w kolejnosci z benchmarku prawdziwych wydawek."""
     gemini = GeminiProvider()
     free_key = settings.gemini_api_key_free
     return [
-        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 10),
-        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 20),
+        OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 14),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 16),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 18),
         OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 18),
-        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 18),
     ]
 
 

@@ -226,7 +226,7 @@ def test_run_ocr_task_sukces_zapisuje_pozycje(
     document = doc_repo.get_document(db_session, document_id)
     assert document.status == "done"
     assert document.numer_projektu == "35/06/2026"
-    assert document.used_provider == "Gemini 3.6 Flash (klucz darmowy)"
+    assert document.used_provider == "Gemini 3 Flash Preview (klucz darmowy)"
     assert document.rejected_count == 0
     assert len(document.items) == 1
 

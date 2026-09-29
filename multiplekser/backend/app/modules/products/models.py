@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Boolean, ForeignKey, String, UniqueConstraint, Uuid
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -44,6 +44,35 @@ class ProductAliasModel(Base):
     alias_text: Mapped[str] = mapped_column(String, nullable=False)
 
     product: Mapped["ProductModel"] = relationship(back_populates="aliasy")
+
+
+class ProductAliasSuggestionModel(Base):
+    __tablename__ = "product_alias_suggestion"
+    __table_args__ = (
+        UniqueConstraint(
+            "dzial", "target_kod", "normalized_alias",
+            name="uq_alias_suggestion_dzial_kod_alias",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    dzial: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    target_kod: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    alias_text: Mapped[str] = mapped_column(String, nullable=False)
+    normalized_alias: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="pending", index=True)
+    source_document_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    source_item_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("app_user.id"), nullable=True,
+    )
+    resolved_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("app_user.id"), nullable=True,
+    )
+    created_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+    )
+    resolved_at: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class WarehouseVariantModel(Base):

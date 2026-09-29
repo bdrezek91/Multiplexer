@@ -125,24 +125,33 @@ class Catalog:
         """Separacja logiczna dzialow: zawsze filtruje po kolumnie `dzial`, nigdy nie
         zwraca produktow z innego dzialu w tym samym Catalog (patrz test_dzial_izolacja)."""
         from .models import ProductModel
+        from .knowledge import approved_aliases_by_kod
 
         rows = session.query(ProductModel).filter(ProductModel.dzial == dzial).options(
             selectinload(ProductModel.aliasy),
             selectinload(ProductModel.warianty_magazynowe),
         ).all()
-        products = [
-            Product(
+        learned_aliases = approved_aliases_by_kod(session, dzial=dzial)
+        products = []
+        for row in rows:
+            alias_texts = [a.alias_text for a in row.aliasy]
+            seen = {plain_norm(alias) for alias in alias_texts}
+            for alias in learned_aliases.get(row.kod, []):
+                norm = plain_norm(alias)
+                if norm and norm not in seen:
+                    alias_texts.append(alias)
+                    seen.add(norm)
+
+            products.append(Product(
                 kod=row.kod,
                 nazwa=row.nazwa,
                 jm=row.jm,
                 grupa=row.grupa,
                 atrybuty=row.atrybuty or {},
                 kolor_domniemany=row.kolor_domniemany,
-                aliasy=[Alias.from_text(a.alias_text) for a in row.aliasy],
+                aliasy=[Alias.from_text(alias) for alias in alias_texts],
                 warianty_magazynowe={w.magazyn: w.kod_docelowy for w in row.warianty_magazynowe} or None,
                 status=row.status,
                 dzial=row.dzial,
-            )
-            for row in rows
-        ]
+            ))
         return cls(products)

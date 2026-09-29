@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { Dzial, Product, ProductInput } from '../types'
+import type { AliasSuggestion, Dzial, Product, ProductInput } from '../types'
 
 export interface ProductFilters {
   status?: string
@@ -40,4 +40,28 @@ export function updateProduct(kod: string, data: ProductInput, dzial?: Dzial): P
 export function deleteProduct(kod: string, dzial?: Dzial): Promise<void> {
   const query = dzial ? `?dzial=${dzial}` : ''
   return apiRequest<void>(`/products/${encodeURIComponent(kod)}${query}`, { method: 'DELETE' })
+}
+
+
+export function listAliasSuggestions(
+  status: 'pending' | 'approved' | 'rejected' = 'pending',
+  dzial?: Dzial,
+): Promise<AliasSuggestion[]> {
+  const params = new URLSearchParams({ status })
+  if (dzial) params.set('dzial', dzial)
+  return apiRequest<AliasSuggestion[]>(`/products/knowledge/suggestions?${params.toString()}`)
+}
+
+export function approveAliasSuggestion(id: string): Promise<AliasSuggestion> {
+  return apiRequest<AliasSuggestion>(
+    `/products/knowledge/suggestions/${encodeURIComponent(id)}/approve`,
+    { method: 'POST' },
+  )
+}
+
+export function rejectAliasSuggestion(id: string): Promise<AliasSuggestion> {
+  return apiRequest<AliasSuggestion>(
+    `/products/knowledge/suggestions/${encodeURIComponent(id)}/reject`,
+    { method: 'POST' },
+  )
 }

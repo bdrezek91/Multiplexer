@@ -24,7 +24,13 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import EditIcon from '@mui/icons-material/Edit'
 import AddIcon from '@mui/icons-material/Add'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { deleteProduct, listProducts } from '../api/products'
+import {
+  approveAliasSuggestion,
+  deleteProduct,
+  listAliasSuggestions,
+  listProducts,
+  rejectAliasSuggestion,
+} from '../api/products'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { ProductFormDialog } from './ProductFormDialog'
@@ -64,6 +70,27 @@ export function ProductsPage() {
     mutationFn: (kod: string) => deleteProduct(kod, dzial),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['products'] }),
   })
+
+  const { data: aliasSuggestions = [] } = useQuery({
+    queryKey: ['aliasSuggestions', dzial],
+    queryFn: () => listAliasSuggestions('pending', dzial),
+    enabled: isAdmin,
+  })
+
+  const approveAliasMutation = useMutation({
+    mutationFn: (id: string) => approveAliasSuggestion(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['aliasSuggestions'] })
+      void queryClient.invalidateQueries({ queryKey: ['products'] })
+    },
+  })
+
+  const rejectAliasMutation = useMutation({
+    mutationFn: (id: string) => rejectAliasSuggestion(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['aliasSuggestions'] }),
+  })
+
+  const aliasMutationError = approveAliasMutation.error || rejectAliasMutation.error
 
   const openCreateDialog = () => {
     setEditingProduct(null)
@@ -140,6 +167,88 @@ export function ProductsPage() {
           <MenuItem value="archiwalny">archiwalny</MenuItem>
         </TextField>
       </Stack>
+
+      {isAdmin && (
+        <Paper variant="outlined" sx={{ p: 1.5, mb: 2 }}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+            <Typography variant="subtitle1">Propozycje wiedzy DAMPOL</Typography>
+            <Chip
+              size="small"
+              color={aliasSuggestions.length > 0 ? 'warning' : 'success'}
+              label={aliasSuggestions.length}
+            />
+          </Stack>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Powstają tylko po ręcznej zmianie kodu produktu. Dopiero akceptacja dodaje alias do
+            matchera i Jeva; import katalogu Optimy nie usuwa tej wiedzy.
+          </Typography>
+
+          {aliasMutationError && (
+            <Alert severity="error" sx={{ mb: 1 }}>
+              {aliasMutationError instanceof ApiError
+                ? aliasMutationError.detail
+                : 'Nie udało się zapisać decyzji o aliasie'}
+            </Alert>
+          )}
+
+          {aliasSuggestions.length === 0 ? (
+            <Typography variant="body2">Brak oczekujących propozycji.</Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Nazwa z wydawki</TableCell>
+                    <TableCell>Produkt w Optimie</TableCell>
+                    <TableCell>Utworzono</TableCell>
+                    <TableCell align="right">Decyzja</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {aliasSuggestions.map((suggestion) => (
+                    <TableRow key={suggestion.id}>
+                      <TableCell>{suggestion.alias_text}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{suggestion.target_kod}</Typography>
+                        {suggestion.target_nazwa && (
+                          <Typography variant="caption" color="text.secondary">
+                            {suggestion.target_nazwa}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(suggestion.created_at).toLocaleString('pl-PL')}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            disabled={approveAliasMutation.isPending || rejectAliasMutation.isPending}
+                            onClick={() => approveAliasMutation.mutate(suggestion.id)}
+                          >
+                            Akceptuj
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            disabled={approveAliasMutation.isPending || rejectAliasMutation.isPending}
+                            onClick={() => rejectAliasMutation.mutate(suggestion.id)}
+                          >
+                            Odrzuć
+                          </Button>
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Paper>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>

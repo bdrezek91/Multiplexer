@@ -34,6 +34,7 @@ from app.modules.matcher import (
     rules_from_db,
 )
 from app.modules.products import Catalog
+from app.modules.products import knowledge as product_knowledge
 from app.modules.products.models import ProductModel
 from app.modules.users import get_current_user, require_admin
 from app.modules.users.deps import check_magazyn_access
@@ -305,6 +306,7 @@ def update_document_item(
 
     fields = body.model_dump(exclude_unset=True)
     update_kwargs: dict = {}
+    previous_match_kod = item.match_kod
     if "ilosc_finalna" in fields:
         update_kwargs["ilosc_finalna"] = fields["ilosc_finalna"]
     if "match_kod" in fields:
@@ -325,12 +327,31 @@ def update_document_item(
                 # tego kodu wprost zamiast ponownie dopasowywac od zera surowa nazwe z OCR.
                 match_quality=QUALITY_OK, match_score=1.0,
             )
+
+            # Uczenie DAMPOL: tylko swiadoma ZMIANA kodu dla pozycji pochodzacej z OCR.
+            # Nie uczymy sie z automatycznie dodanych pozycji ani z pozycji dodanych recznie.
+            if (
+                cand.kod != previous_match_kod
+                and (item.rozpoznana_nazwa or "").strip()
+                and not str(item.form_note or "").startswith("Dodano automatycznie")
+                and str(item.uwagi or "") != "Dodano ręcznie"
+            ):
+                product_knowledge.suggest_alias(
+                    session,
+                    dzial=document.dzial or "elektryka",
+                    target_kod=cand.kod,
+                    alias_text=item.rozpoznana_nazwa,
+                    source_document_id=document.id,
+                    source_item_id=item.id,
+                    created_by_id=user.id,
+                )
         else:
             update_kwargs.update(
                 match_kod=None, match_nazwa=None, match_jm=None, matched_product_id=None,
                 match_quality=QUALITY_BAD, match_score=0.0,
             )
 
+    # repository.update_item robi commit; razem z nim atomowo zapisuje ewentualna propozycje aliasu.
     item = repository.update_item(session, item, **update_kwargs)
     return _item_to_schema(item)
 

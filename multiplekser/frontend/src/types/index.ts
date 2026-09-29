@@ -98,6 +98,21 @@ export interface Product {
   dzial: Dzial
 }
 
+export interface AliasSuggestion {
+  id: string
+  dzial: Dzial
+  target_kod: string
+  target_nazwa: string | null
+  alias_text: string
+  status: 'pending' | 'approved' | 'rejected'
+  source_document_id: string | null
+  source_item_id: string | null
+  created_by_id: string | null
+  resolved_by_id: string | null
+  created_at: string
+  resolved_at: string | null
+}
+
 // `dzial` nie jest czescia body zadania POST/PUT /products (przekazywany jako query param,
 // domyslnie "elektryka" po stronie backendu) - katalog administracyjny w UI wciaz zarzadza
 // wylacznie Elektryka, patrz docs/RAPORT_ETAP_HYDRAULIKA_2.md.

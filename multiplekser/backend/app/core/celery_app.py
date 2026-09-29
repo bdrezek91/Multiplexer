@@ -30,6 +30,21 @@ celery_app.conf.update(
     accept_content=["json"],
     result_serializer="json",
     task_track_started=True,
+
+    # Dwie fizycznie rozdzielone kolejki:
+    # - ocr: wszystko co blokuje uzytkownika (glowny OCR + Jev active w tym samym tasku),
+    # - background: kontrole po status=done i diagnostyka shadow.
+    # Dzięki temu drugi Gemini nigdy nie zajmuje slotu workera obslugujacego nowa wydawke.
+    task_default_queue="ocr",
+    task_routes={
+        "documents.process_ocr": {"queue": "ocr"},
+        "documents.full_document_verification": {"queue": "background"},
+        "decision.jev_shadow": {"queue": "background"},
+    },
+
+    # Dlugie taski OCR nie powinny byc pobierane z duzym wyprzedzeniem. Przy concurrency=4
+    # stary domyslny prefetch dawał do 16 zarezerwowanych taskow na worker.
+    worker_prefetch_multiplier=1,
 )
 
 # Rejestruje taski zdefiniowane w modulach (import ma efekt uboczny - podpina @celery_app.task).

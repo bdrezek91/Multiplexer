@@ -82,7 +82,9 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
-    command: celery -A app.core.celery_app worker --loglevel=info
+    # Priorytetowa kolejka - tylko glowne przetwarzanie dokumentu. Jev active dziala wewnatrz
+    # tego samego taska, wiec wynik widoczny dla uzytkownika nie rywalizuje z kontrolami w tle.
+    command: celery -A app.core.celery_app worker --loglevel=info --queues=ocr --concurrency=4 --prefetch-multiplier=1 --hostname=ocr@%h
     # Wylacza HEALTHCHECK odziedziczony z obrazu backendu (Dockerfile.prod) - ten HTTP check
     # (curl na :8000/health) jest dla uvicorn, ktorego worker (proces Celery) w ogole nie
     # uruchamia, wiec zawsze zglaszalby "unhealthy" mimo poprawnie dzialajacego workera.
@@ -100,6 +102,40 @@ services:
       GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
       # Opcjonalny - ostatni krok w lancuchu OCR (patrz ocr/chain.py), uzywany WYLACZNIE gdy
       # wszystkie kroki Gemini zawioda. Brak klucza = ten krok jest po prostu pomijany.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      JEV_ENABLED: ${JEV_ENABLED:-false}
+      JEV_MODE: ${JEV_MODE:-shadow}
+      JEV_MODEL: ${JEV_MODEL:-jev-latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker-background:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    # Tlo: drugi pelny odczyt Gemini i ewentualny Jev shadow. Jeden proces wystarcza -
+    # zadania nie blokuja uzytkownika i nie powinny konkurowac o RAM/API z glownym OCR.
+    command: celery -A app.core.celery_app worker --loglevel=info --queues=background --concurrency=1 --prefetch-multiplier=1 --hostname=background@%h
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-multiplekser}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-multiplekser}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DOCUMENT_RETENTION_LIMIT: ${DOCUMENT_RETENTION_LIMIT:-20}
+      GEMINI_API_KEY_FREE: ${GEMINI_API_KEY_FREE:-}
+      GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}

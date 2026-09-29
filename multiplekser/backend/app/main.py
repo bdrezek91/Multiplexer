@@ -23,6 +23,7 @@ from app.modules.documents.router import router as documents_router
 from app.modules.matcher import match_against_catalog, match_against_catalog_hydraulika, rules_from_db
 from app.modules.products import Catalog
 from app.modules.products.router import router as products_router
+from app.modules.system_status.router import router as system_status_router
 from app.modules.users import get_current_user
 from app.modules.users.deps import check_magazyn_access
 from app.modules.users.models import UserModel
@@ -32,13 +33,14 @@ from app.modules.users.router import users_router
 configure_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Multiplekser v1.0.27 API", version="0.7.0-etap7")
+app = FastAPI(title="Multiplekser v1.0.28 API", version="0.7.0-etap7")
 app.state.limiter = limiter
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(products_router)
 app.include_router(documents_router)
 app.include_router(optima_router)
+app.include_router(system_status_router)
 
 
 # Rate limiting (patrz app/core/rate_limit.py) - limit ustawiony bezposrednio przy endpoincie

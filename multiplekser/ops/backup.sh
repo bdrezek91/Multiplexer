@@ -23,7 +23,10 @@ WORK_DIR="$BACKUP_ROOT/.work-$TIMESTAMP"
 LAST_SUCCESS="$BACKUP_ROOT/LAST_SUCCESS"
 
 mkdir -p "$DB_DIR" "$MINIO_DIR" "$MANIFEST_DIR" "$WORK_DIR"
-chmod 700 "$BACKUP_ROOT" "$DB_DIR" "$MINIO_DIR" "$MANIFEST_DIR" "$WORK_DIR"
+# Backend monitoringu potrzebuje jedynie przejść do znanego pliku LAST_SUCCESS.
+# 711 pozwala na traversal bez możliwości listowania katalogu; właściwe backupy pozostają 700/600.
+chmod 711 "$BACKUP_ROOT"
+chmod 700 "$DB_DIR" "$MINIO_DIR" "$MANIFEST_DIR" "$WORK_DIR"
 
 # Nie uruchamiaj dwóch backupów równocześnie.
 LOCK_FILE="/run/lock/multiplekser-backup.lock"

@@ -31,6 +31,60 @@ export interface DocumentStats {
   stawka_pln_za_h: number
 }
 
+export interface SystemServiceStatus {
+  ok: boolean
+  detail: string | null
+}
+
+export interface SystemWorkerStatus {
+  online: boolean
+  node: string | null
+}
+
+export interface SystemQueueStatus {
+  length: number
+}
+
+export interface SystemCooldownStatus {
+  label: string
+  model: string
+  remaining_seconds: number
+}
+
+export interface SystemRecentDocumentTiming {
+  document_id: string
+  numer_projektu: string | null
+  created_at: string
+  duration_ms: number | null
+}
+
+export interface SystemAlert {
+  severity: 'warning' | 'error'
+  code: string
+  message: string
+}
+
+export interface SystemStatus {
+  generated_at: string
+  overall: 'ok' | 'warning' | 'error'
+  services: Record<string, SystemServiceStatus>
+  workers: Record<string, SystemWorkerStatus>
+  queues: Record<string, SystemQueueStatus>
+  backup_last_success: string | null
+  backup_age_hours: number | null
+  backup_ok: boolean
+  jev_enabled: boolean
+  jev_mode: string
+  jev_model: string
+  cooldowns: SystemCooldownStatus[]
+  avg_last10_ms: number | null
+  last_document_ms: number | null
+  recent_documents: SystemRecentDocumentTiming[]
+  documents_error_24h: number
+  ai_failed_events_24h: number
+  alerts: SystemAlert[]
+}
+
 export interface Product {
   kod: string
   nazwa: string

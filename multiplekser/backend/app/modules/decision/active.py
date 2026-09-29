@@ -10,7 +10,7 @@ import logging
 from typing import Callable, Optional
 
 from app.modules.matcher.result import MatchResult, QUALITY_BAD, QUALITY_OK
-from app.modules.matcher.shared import apply_warehouse_variant, resolve_by_kod
+from app.modules.matcher.shared import apply_warehouse_variant, magazyn_key, resolve_by_kod
 from app.modules.matcher.special_rules import SpecialRule, evaluate_special_rules, find_matching_special_rule
 from app.modules.parser import core_and_attrs
 from app.modules.products import Catalog
@@ -22,9 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 def _effective_poles_from_query(query_name: str) -> int:
-    """Konwencja DAMPOL: brak xP na wydawce oznacza 1P."""
+    """Konwencja DAMPOL: jawne 3P/3F = 3P, a brak informacji = 1P."""
     parsed = core_and_attrs(query_name)
-    return int(parsed.biegunow) if parsed.biegunow is not None else 1
+    if parsed.biegunow is not None:
+        return int(parsed.biegunow)
+    if parsed.phase == "3F":
+        return 3
+    return 1
 
 
 def _candidate_poles(candidate) -> int | None:
@@ -43,6 +47,18 @@ def _candidate_respects_poles(query_name: str, candidate) -> bool:
     if cand_poles is None:
         return True
     return cand_poles == _effective_poles_from_query(query_name)
+
+
+def _warehouse_variant_source(catalog: Catalog, current_kod: str | None, magazyn: Optional[str]):
+    """Zwraca produkt bazowy, jeżeli current_kod jest autorytatywnym wariantem wybranego magazynu."""
+    key = magazyn_key(magazyn)
+    if not key or not current_kod:
+        return None
+    for product in catalog.products:
+        variants = product.warianty_magazynowe or {}
+        if variants.get(key) == current_kod:
+            return product
+    return None
 
 
 def _is_weak_match(match: MatchResult) -> bool:
@@ -91,7 +107,14 @@ async def apply_jev_active(
         # do tasmy LED) sa tak samo chronione jak special rules - Jev moze je ocenic, ale nie
         # moze zmienic kodu ustalonego przez logike biznesowa.
         auto_generated = str(item.get("form_note") or "").startswith("Dodano automatycznie")
-        locked = special_result is not None or auto_generated
+        special_locked = special_result is not None or auto_generated
+
+        # Wariant magazynowy jest decyzja biznesowa o kodzie Optimy, nie sugestia matchera.
+        # Przykład: 25A niemiecki -> Zabrze bez "1P", Czekanów z "1P". Jev może ocenić
+        # pozycję, ale nie może nadpisać poprawnego wariantu magazynowego innym kodem.
+        warehouse_source = _warehouse_variant_source(catalog, current_match.kod, magazyn)
+        warehouse_locked = warehouse_source is not None
+        locked = special_locked or warehouse_locked
 
         rule_context = None
         if matched_rule is not None:
@@ -109,8 +132,16 @@ async def apply_jev_active(
                 "description": item.get("form_note"),
                 "target_kod": current_match.kod,
             }
+        elif warehouse_locked:
+            rule_context = {
+                "authoritative": True,
+                "kind": "warehouse_variant",
+                "description": f"Wariant kodu Optimy dla magazynu {magazyn}.",
+                "source_kod": warehouse_source.kod,
+                "target_kod": current_match.kod,
+            }
 
-        meta.append((sequence, item, current_match, locked))
+        meta.append((sequence, item, current_match, locked, special_locked, warehouse_locked))
         jobs.append(evaluate_shadow(
             query_name=name,
             catalog=catalog,
@@ -125,7 +156,7 @@ async def apply_jev_active(
 
     results = await asyncio.gather(*jobs, return_exceptions=True)
     out: list[dict] = []
-    for (sequence, item, current_match, locked), result in zip(meta, results):
+    for (sequence, item, current_match, locked, special_locked, warehouse_locked), result in zip(meta, results):
         if isinstance(result, BaseException):
             logger.warning("Jev active - wyjatek, zostawiam matcher", exc_info=result)
             continue
@@ -187,7 +218,8 @@ async def apply_jev_active(
             "query_features": {
                 **result.query_features,
                 "active_applied": applied,
-                "active_locked_by_special_rule": locked,
+                "active_locked_by_special_rule": special_locked,
+                "active_locked_by_warehouse_variant": warehouse_locked,
                 "active_cleared_weak_match": cleared_weak_match,
                 "active_rejected_by_poles": rejected_by_poles,
             },
@@ -196,7 +228,8 @@ async def apply_jev_active(
             "output_tokens": result.output_tokens,
             "duration_ms": result.duration_ms,
             "applied": applied,
-            "locked_by_special_rule": locked,
+            "locked_by_special_rule": special_locked,
+            "locked_by_warehouse_variant": warehouse_locked,
         })
 
     return out

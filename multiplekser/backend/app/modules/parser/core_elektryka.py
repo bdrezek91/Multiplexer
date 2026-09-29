@@ -91,7 +91,7 @@ _PHASE_1F_PATTERNS = [
     # Naturalny zapis bez lacznika ("1 fazowa/fazowy/fazowe", tez sklejony "1fazowa") - bug
     # wykryty 2026-09-29 (Jev shadow test: "Roznicowka niemiecka 1 fazowa 40A" nie mial phase).
     re.compile(r"\b1\s*fazow[aey]\b"),
-    re.compile(r"\bjednofazow[aei]\b"),
+    re.compile(r"\bjednofazow[aeiy]\b"),
     re.compile(r"\b230v\b"),
     re.compile(r"\b230\s*v\b"),
     re.compile(r"\b2p\s*\+\s*pe\b"),
@@ -103,7 +103,7 @@ _PHASE_3F_PATTERNS = [
     re.compile(r"\b3-fazowe?\b"),
     re.compile(r"\b3\s*-\s*fazowe?\b"),
     re.compile(r"\b3\s*fazow[aey]\b"),
-    re.compile(r"\btr[oó]jfazow[aei]\b"),
+    re.compile(r"\btr[oó]jfazow[aeiy]\b"),
     re.compile(r"\b400v\b"),
     re.compile(r"\b400\s*v\b"),
     re.compile(r"\b3p\s*\+\s*n\s*\+\s*pe\b"),
@@ -231,6 +231,16 @@ def core_and_attrs(name: str) -> ParsedAttrs:
         t = DIM_RE.sub(" ", t)
 
     phase = detect_phase(original)
+
+    # Dla wyłączników nadprądowych/bezpieczników zapis "3 fazowy", "3F" lub
+    # "trójfazowy" oznacza wariant 3P. Nie stosujemy tego globalnie do osprzętu CEE,
+    # bo tam 3F nie jest tym samym co liczba biegunów.
+    if (
+        biegunow is None
+        and phase == "3F"
+        and re.search(r"\b(bezpiecznik\w*|wy[łl]ącznik\w*\s+nadprądow\w*)\b", original, re.I)
+    ):
+        biegunow = 3
 
     t = strip_diacritics(t).lower()
     t = re.sub(r"[^a-z0-9 ]", " ", t)

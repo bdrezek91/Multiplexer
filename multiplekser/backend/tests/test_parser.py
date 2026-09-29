@@ -57,6 +57,7 @@ def test_detect_phase_jednofazowa_slownie():
 
 def test_detect_phase_trojfazowa_slownie():
     assert detect_phase("Różnicówka trójfazowa") == "3F"
+    assert detect_phase("Wyłącznik trójfazowy") == "3F"
 
 
 def test_detect_phase_1f_3f_skrot():
@@ -103,6 +104,17 @@ def test_core_and_attrs_roznicowka_3_fazowa_pelny_przypadek():
     assert result.country == "PL"
     assert result.amp == "40"
     assert result.phase == "3F"
+
+
+def test_core_and_attrs_bezpiecznik_3_fazowy_oznacza_3p():
+    for text in (
+        "Wyłącznik nadprądowy 25A niemiecki 3 fazowy",
+        "Bezpiecznik 25A niemiecki 3F",
+        "Bezpiecznik 25A niemiecki trójfazowy",
+    ):
+        result = core_and_attrs(text)
+        assert result.phase == "3F"
+        assert result.biegunow == 3
 
 
 def test_gniazdo_odbiornikowe_oznacza_montaz_staly():

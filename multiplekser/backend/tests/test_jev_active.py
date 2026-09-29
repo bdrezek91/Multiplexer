@@ -141,6 +141,19 @@ def test_konwencja_dampol_brak_3p_oznacza_1p(catalog):
     assert active._candidate_respects_poles("Wyłącznik nadprądowy 25A niemiecki", three_p) is False
     assert active._candidate_respects_poles("Wyłącznik nadprądowy 25A niemiecki 3P", three_p) is True
     assert active._candidate_respects_poles("Wyłącznik nadprądowy 25A niemiecki 3P", one_p) is False
+    assert active._candidate_respects_poles("Wyłącznik nadprądowy 25A niemiecki 3 fazowy", three_p) is True
+    assert active._candidate_respects_poles("Wyłącznik nadprądowy 25A niemiecki 3 fazowy", one_p) is False
+
+
+@pytest.mark.parametrize("query", [
+    "Wyłącznik nadprądowy 25A niemiecki 3 fazowy",
+    "Bezpiecznik 25A niemiecki 3F",
+    "Bezpiecznik 25A niemiecki trójfazowy",
+])
+def test_25a_niemiecki_jawnie_3_fazowy_zawsze_wybiera_3p(catalog, query):
+    for magazyn in ("Zabrze", "Czekanów"):
+        match = match_against_catalog(query, catalog, magazyn=magazyn)
+        assert match.kod == "BEZPIECZNIK 25A NIEMIECKI 3P"
 
 
 @pytest.mark.asyncio
@@ -171,7 +184,43 @@ async def test_active_nie_pozwala_jev_zmienic_1p_na_3p_bez_3p_na_wydawce(monkeyp
 
     assert items[0]["match_kod"] == "BEZPIECZNIK 25A NIEMIECKI 1P"
     assert rows[0]["applied"] is False
-    assert rows[0]["query_features"]["active_rejected_by_poles"] is True
+    assert rows[0]["locked_by_warehouse_variant"] is True
+    assert rows[0]["query_features"]["active_locked_by_warehouse_variant"] is True
+
+
+@pytest.mark.asyncio
+async def test_active_zabrze_nie_pozwala_jev_dopisac_1p(monkeypatch, catalog):
+    monkeypatch.setenv("JEV_ENABLED", "true")
+    monkeypatch.setenv("JEV_MODE", "active")
+
+    query = "Wyłącznik nadprądowy 25A niemiecki"
+    match = match_against_catalog(query, catalog, magazyn="Zabrze")
+    assert match.kod == "BEZPIECZNIK 25A NIEMIECKI"
+
+    target = catalog.find_by_kod("BEZPIECZNIK 25A NIEMIECKI 1P")
+    assert target is not None
+    items = [_item(query, match)]
+    captured = {}
+
+    async def fake(**kwargs):
+        captured.update(kwargs)
+        return _result(match, target.kod)
+
+    monkeypatch.setattr(active, "evaluate_shadow", fake)
+    rows = await active.apply_jev_active(
+        items=items,
+        catalog=catalog,
+        special_rules=DEFAULT_SPECIAL_RULES,
+        magazyn="Zabrze",
+        dzial="elektryka",
+        resolve_product_id=lambda kod: "pid",
+    )
+
+    assert items[0]["match_kod"] == "BEZPIECZNIK 25A NIEMIECKI"
+    assert rows[0]["applied"] is False
+    assert rows[0]["locked_by_warehouse_variant"] is True
+    assert captured["business_rule_context"]["kind"] == "warehouse_variant"
+    assert captured["business_rule_context"]["target_kod"] == "BEZPIECZNIK 25A NIEMIECKI"
 
 
 @pytest.mark.asyncio

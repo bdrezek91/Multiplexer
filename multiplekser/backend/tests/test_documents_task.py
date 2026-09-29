@@ -194,9 +194,15 @@ def test_run_ocr_task_pomija_prawie_puste_strony_pdf(
     ) as mock_recognize:
         run_ocr_task(str(document.id), db_session)
 
-    for call in mock_recognize.call_args_list:
-        files = call.kwargs["files"]
-        assert len(files) == 2  # 3 strony PDF, ale prawie pusta strona srodkowa pominieta
+    assert mock_recognize.call_count == 2
+    # Klasyfikacja od v1.0.24 dostaje tylko miniaturke naglowka pierwszej strony.
+    classify_files = mock_recognize.call_args_list[0].kwargs["files"]
+    assert len(classify_files) == 1
+
+    # Glowny OCR nadal dostaje wszystkie niepuste strony: z 3 stron PDF srodkowa jest pusta,
+    # wiec do OCR trafiaja 2 pelne strony.
+    ocr_files = mock_recognize.call_args_list[1].kwargs["files"]
+    assert len(ocr_files) == 2
 
     saved = doc_repo.get_document(db_session, str(document.id))
     assert saved.status == "done"

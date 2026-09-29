@@ -29,6 +29,7 @@ krok. Krok bez skonfigurowanego klucza jest pomijany (nie liczy sie jako "blad" 
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import time
@@ -55,6 +56,7 @@ class OCRChainStep:
     provider: OCRProvider
     model: str
     api_key: Optional[str]
+    timeout_seconds: float | None = None
 
 
 def default_ocr_chain() -> list[OCRChainStep]:
@@ -64,14 +66,14 @@ def default_ocr_chain() -> list[OCRChainStep]:
     free_key = settings.gemini_api_key_free
     paid_key = settings.gemini_api_key_paid
     return [
-        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key),
-        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key),
-        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key),
-        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key),
-        OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key),
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 12),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 24),
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 18),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 18),
+        OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key, 18),
         OCRChainStep(
             f"OpenAI {settings.openai_model} (klucz platny)",
-            OpenAIProvider(), settings.openai_model, settings.openai_api_key,
+            OpenAIProvider(), settings.openai_model, settings.openai_api_key, 25,
         ),
     ]
 
@@ -88,14 +90,14 @@ def classify_ocr_chain() -> list[OCRChainStep]:
     free_key = settings.gemini_api_key_free
     paid_key = settings.gemini_api_key_paid
     return [
-        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key),
-        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key),
-        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key),
-        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key),
-        OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 8),
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 8),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 10),
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 10),
+        OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key, 10),
         OCRChainStep(
             f"OpenAI {settings.openai_model} (klucz platny)",
-            OpenAIProvider(), settings.openai_model, settings.openai_api_key,
+            OpenAIProvider(), settings.openai_model, settings.openai_api_key, 12,
         ),
     ]
 
@@ -112,10 +114,22 @@ def quantity_verification_chain() -> list[OCRChainStep]:
     gemini = GeminiProvider()
     free_key = settings.gemini_api_key_free
     return [
-        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key),
-        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key),
-        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key),
-        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key),
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 10),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 18),
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 14),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 14),
+    ]
+
+
+def background_verification_chain() -> list[OCRChainStep]:
+    """Drugi pelny odczyt w tle: bardziej agresywny timeout 3.6, bo wynik glowny jest juz gotowy."""
+    gemini = GeminiProvider()
+    free_key = settings.gemini_api_key_free
+    return [
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 10),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 20),
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 18),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 18),
     ]
 
 
@@ -267,12 +281,19 @@ async def run_ocr_chain(
             _publish_event("skipped", {**step_extra, "reason": reason}, event_callback)
             continue
         started_at = time.monotonic()
-        logger.info("OCR AI - proba modelu", extra=step_extra)
+        timeout_seconds = float(step.timeout_seconds or settings.ocr_timeout_seconds)
+        logger.info(
+            "OCR AI - proba modelu",
+            extra={**step_extra, "timeout_seconds": timeout_seconds},
+        )
         _publish_event("attempt", step_extra, event_callback)
         try:
-            text = await step.provider.recognize(
-                files=files, model=step.model, api_key=step.api_key, prompt=prompt,
-                thinking_level=thinking_level,
+            text = await asyncio.wait_for(
+                step.provider.recognize(
+                    files=files, model=step.model, api_key=step.api_key, prompt=prompt,
+                    thinking_level=thinking_level,
+                ),
+                timeout=timeout_seconds,
             )
             if response_validator is not None and not response_validator(text):
                 last_invalid_text = text
@@ -317,6 +338,34 @@ async def run_ocr_chain(
                 event_callback,
             )
             return OCRChainResult(text=text, used_label=step.label)
+        except TimeoutError:
+            last_error = OCRProviderError(
+                f"Timeout po {timeout_seconds:g} s bez odpowiedzi"
+            )
+            reason = str(last_error)
+            if cooldown_store:
+                cooldown_minutes = cooldown_store.record_timeout(step.label)
+                if cooldown_minutes:
+                    reason = f"{reason} | blokada modelu na {cooldown_minutes} min"
+            logger.warning(
+                "OCR AI - model odrzucony",
+                extra={
+                    **step_extra,
+                    "reason": reason,
+                    "error_type": "TimeoutError",
+                    "duration_ms": round((time.monotonic() - started_at) * 1000),
+                },
+            )
+            _publish_event(
+                "rejected",
+                {
+                    **step_extra,
+                    "reason": reason,
+                    "duration_ms": round((time.monotonic() - started_at) * 1000),
+                },
+                event_callback,
+            )
+            continue
         except OCRProviderError as exc:
             last_error = exc
             reason = _safe_reason(exc)

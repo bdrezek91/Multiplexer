@@ -1,4 +1,6 @@
 """Testy Etapu 6: run_ocr_chain() - port AI_CHAIN + petli prob w runAI() z monolitu."""
+import asyncio
+
 import pytest
 
 from app.modules.ocr.chain import (
@@ -29,6 +31,7 @@ class _FakeCooldown:
         self.cooldown_minutes = cooldown_minutes
         self.rate_limits: list[str] = []
         self.unavailable: list[str] = []
+        self.timeouts: list[str] = []
         self.resets: list[str] = []
 
     def remaining_seconds(self, step_label: str) -> int:
@@ -41,6 +44,10 @@ class _FakeCooldown:
     def record_unavailable(self, step_label: str) -> int:
         self.unavailable.append(step_label)
         return 3
+
+    def record_timeout(self, step_label: str) -> int:
+        self.timeouts.append(step_label)
+        return 2
 
     def reset(self, step_label: str) -> None:
         self.resets.append(step_label)
@@ -294,3 +301,54 @@ async def test_api_503_ustawia_krotki_cooldown_i_przechodzi_do_kolejnego_modelu(
     rejected = next(event for event in events if event["status"] == "rejected")
     assert "API 503" in str(rejected["reason"])
     assert "blokada modelu na 3 min" in str(rejected["reason"])
+
+
+async def test_timeout_kroku_przechodzi_do_nastepnego_i_ustawia_cooldown():
+    class SlowProvider(OCRProvider):
+        def __init__(self):
+            self.calls = []
+
+        async def recognize(self, *, files, model, api_key, prompt, thinking_level="low"):
+            self.calls.append(model)
+            if model == "slow":
+                await asyncio.sleep(0.2)
+                return "ZA POZNO"
+            return "OK"
+
+    provider = SlowProvider()
+    cooldown = _FakeCooldown()
+    events: list[dict[str, object]] = []
+    steps = [
+        OCRChainStep("Wolny", provider, "slow", "key", 0.02),
+        OCRChainStep("Szybki", provider, "fast", "key", 1.0),
+    ]
+
+    result = await run_ocr_chain(
+        [(b"dane", "image/jpeg")],
+        "prompt",
+        chain=steps,
+        cooldown_store=cooldown,
+        event_callback=events.append,
+    )
+
+    assert result.used_label == "Szybki"
+    assert provider.calls == ["slow", "fast"]
+    assert cooldown.timeouts == ["Wolny"]
+    rejected = next(e for e in events if e["status"] == "rejected")
+    assert "Timeout po 0.02 s" in str(rejected["reason"])
+    assert "blokada modelu na 2 min" in str(rejected["reason"])
+
+
+async def test_domyslny_36_ma_krotszy_timeout_niz_globalny_30s():
+    chain = default_ocr_chain()
+    first = chain[0]
+    assert first.model == "gemini-3.6-flash"
+    assert first.timeout_seconds == 12
+
+
+async def test_background_36_ma_timeout_10s():
+    from app.modules.ocr.chain import background_verification_chain
+
+    chain = background_verification_chain()
+    assert chain[0].model == "gemini-3.6-flash"
+    assert chain[0].timeout_seconds == 10

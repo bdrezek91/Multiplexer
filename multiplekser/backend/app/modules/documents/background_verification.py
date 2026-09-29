@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.matcher import rules_from_db
 from app.modules.matcher.special_rules import GNIAZDO_PODTYNKOWE_Z_KLAPKA_KODY
-from app.modules.ocr.chain import OCRChainEventCallback, quantity_verification_chain
+from app.modules.ocr.chain import OCRChainEventCallback, background_verification_chain
 from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
 from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline_elektryka import recognize_document
@@ -53,7 +53,7 @@ async def _check_full_document_consistency(
     modelu AI, wiec waska kontrola grup przestala byc warta swojego kosztu/czasu; ta funkcja
     zostaje jako ogolny, tanszy w czasie safety-net na przyszlosc).
 
-    Uzywa WYLACZNIE darmowego lancucha Gemini (quantity_verification_chain) - NIE innego
+    Uzywa WYLACZNIE darmowego lancucha Gemini (background_verification_chain) - NIE innego
     dostawcy (podobny, pelny cross-check z OpenAI byl juz probowany i porzucony z powodu duzego
     szumu, git historia ocr/crosscheck.py). Best-effort - blad/niedostepnosc modelu NIGDY nie
     blokuje calego dokumentu. NIGDY nie nadpisuje ani nie dodaje zgadywanych pozycji - tylko
@@ -62,13 +62,13 @@ async def _check_full_document_consistency(
     try:
         if dzial == "hydraulika":
             confirm = await recognize_document_hydraulika(
-                files, catalog, magazyn=magazyn, chain=quantity_verification_chain(),
+                files, catalog, magazyn=magazyn, chain=background_verification_chain(),
                 log_context={**dict(log_context), "ai_stage_override": "full_document_verification"},
                 event_callback=event_callback, cooldown_store=cooldown_store,
             )
         else:
             confirm = await recognize_document(
-                files, catalog, special_rules or [], magazyn=magazyn, chain=quantity_verification_chain(),
+                files, catalog, special_rules or [], magazyn=magazyn, chain=background_verification_chain(),
                 log_context={**dict(log_context), "ai_stage_override": "full_document_verification"},
                 event_callback=event_callback, cooldown_store=cooldown_store,
             )

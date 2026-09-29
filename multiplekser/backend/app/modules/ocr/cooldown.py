@@ -30,6 +30,7 @@ class OCRCooldownStore(Protocol):
     def remaining_seconds(self, step_label: str) -> int: ...
     def record_rate_limit(self, step_label: str) -> int: ...
     def record_unavailable(self, step_label: str) -> int: ...
+    def record_timeout(self, step_label: str) -> int: ...
     def reset(self, step_label: str) -> None: ...
 
 
@@ -78,6 +79,20 @@ class RedisOCRCooldownStore:
             return max(1, (current_ttl + 59) // 60)
         except (RedisError, OSError, ValueError):
             logger.warning("OCR AI - nie udalo sie ustawic cooldownu po 503 w Redis", exc_info=True)
+            return 0
+
+    def record_timeout(self, step_label: str) -> int:
+        """Krotki cooldown po timeoutcie, zeby seria wydawek nie czekala na ten sam wolny model."""
+        blocked_key, _ = self._keys(step_label)
+        seconds = 2 * 60
+        try:
+            current_ttl = int(self.client.ttl(blocked_key))
+            if current_ttl < seconds:
+                self.client.set(blocked_key, "1", ex=seconds)
+                return 2
+            return max(1, (current_ttl + 59) // 60)
+        except (RedisError, OSError, ValueError):
+            logger.warning("OCR AI - nie udalo sie ustawic cooldownu po timeout w Redis", exc_info=True)
             return 0
 
     def reset(self, step_label: str) -> None:

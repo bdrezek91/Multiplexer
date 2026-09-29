@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
-from app.modules.ocr.image import _detect_skew_angle_deg, deskew_image
+from app.modules.ocr.image import _detect_skew_angle_deg, classification_header_preview, deskew_image
 
 
 def _synthetic_form_jpeg(rotate_deg: float = 0.0) -> bytes:
@@ -137,3 +137,24 @@ def test_detect_skew_z_kilkoma_ale_zgodnymi_liniami_siatki_uzywa_hougha():
     (obnizony prog + kontrola zgodnosci katow, patrz _MIN_HOUGH_LINES/_MAX_HOUGH_ANGLE_STD_DEG)."""
     raw = _synthetic_form_jpeg_kilka_dlugich_linii(rows=6)
     assert abs(_measured_angle(raw)) < 0.5
+
+
+def test_classification_header_preview_tnie_dol_i_zmniejsza_obraz():
+    img = Image.new("RGB", (2200, 3200), "white")
+    draw = ImageDraw.Draw(img)
+    draw.rectangle([(0, 0), (2200, 1200)], fill="black")
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=95)
+    raw = buf.getvalue()
+
+    preview = classification_header_preview(raw)
+
+    with Image.open(BytesIO(preview)) as out:
+        assert max(out.width, out.height) <= 1400
+        assert out.height < out.width
+    assert len(preview) < len(raw)
+
+
+def test_classification_header_preview_nie_wywraca_sie_na_zlych_bajtach():
+    raw = b"to nie jest obraz"
+    assert classification_header_preview(raw) == raw

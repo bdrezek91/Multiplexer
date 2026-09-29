@@ -1,13 +1,20 @@
 """Testy Etapu 7: run_ocr_task() - logika przetwarzania w tle, testowana bez brokera/workera
 (sesja przekazana wprost, jak w reszcie testow integracyjnych - patrz docstring tasks.py)."""
 from io import BytesIO
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from PIL import Image
 
 from app.modules.documents import repository as doc_repo
 from app.modules.documents.storage import get_storage
-from app.modules.documents.tasks import _append_auto_zasilacz_led, process_ocr_document, run_ocr_task
+from app.modules.documents.tasks import (
+    _append_auto_zasilacz_led,
+    _background_review_item,
+    process_ocr_document,
+    run_full_document_verification_task,
+    run_ocr_task,
+)
 from app.modules.ocr.providers import OCRProviderError
 from scripts.import_catalog import import_catalog
 from scripts.import_special_rules import import_special_rules
@@ -63,22 +70,23 @@ def test_run_ocr_task_dwa_pliki_wysyla_oba_w_jednym_zapytaniu(
     ocr_response = (
         '{"pozycje": [{"nazwa": "Grzejnik 1800W", "ilosc_wydana": "1", "confidence": 98}]}'
     )
-    # Trzecie wywolanie to pelna, niezalezna kontrola calego dokumentu (_check_full_document_
-    # consistency, 2026-09-18) - potwierdza ten sam wynik co glowny odczyt.
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
     ) as mock_recognize:
         run_ocr_task(str(document.id), db_session)
 
-    # KAZDE wywolanie recognize() (klasyfikacja + pelny odczyt + kontrola) musi dostac OBIE
-    # strony naraz.
-    assert mock_recognize.call_count == 3
-    for call in mock_recognize.call_args_list:
-        files = call.kwargs["files"]
-        assert len(files) == 2
-        assert files[0][1] == "image/jpeg"
-        assert files[1][1] == "image/jpeg"
+    # Klasyfikacja dostaje tylko miniaturke naglowka pierwszej strony; glowny OCR nadal OBIE
+    # strony naraz. Druga pelna kontrola jest osobnym taskiem i nie blokuje run_ocr_task().
+    assert mock_recognize.call_count == 2
+    classify_files = mock_recognize.call_args_list[0].kwargs["files"]
+    assert len(classify_files) == 1
+    assert classify_files[0][1] == "image/jpeg"
+
+    ocr_files = mock_recognize.call_args_list[1].kwargs["files"]
+    assert len(ocr_files) == 2
+    assert ocr_files[0][1] == "image/jpeg"
+    assert ocr_files[1][1] == "image/jpeg"
 
     saved = doc_repo.get_document(db_session, str(document.id))
     assert saved.status == "done"
@@ -128,11 +136,15 @@ def test_run_ocr_task_pdf_wielostronicowy_rozbity_na_osobne_obrazy(
     ) as mock_recognize:
         run_ocr_task(str(document.id), db_session)
 
-    for call in mock_recognize.call_args_list:
-        files = call.kwargs["files"]
-        assert len(files) == 2  # dwie strony PDF = dwie osobne czesci zapytania
-        for _file_bytes, mime in files:
-            assert mime == "image/jpeg"  # rozbite na obrazy, nie natywny "application/pdf"
+    assert mock_recognize.call_count == 2
+    classify_files = mock_recognize.call_args_list[0].kwargs["files"]
+    assert len(classify_files) == 1
+    assert classify_files[0][1] == "image/jpeg"
+
+    ocr_files = mock_recognize.call_args_list[1].kwargs["files"]
+    assert len(ocr_files) == 2  # dwie strony PDF = dwie osobne czesci glownego zapytania
+    for _file_bytes, mime in ocr_files:
+        assert mime == "image/jpeg"  # rozbite na obrazy, nie natywny "application/pdf"
 
     saved = doc_repo.get_document(db_session, str(document.id))
     assert saved.status == "done"
@@ -612,13 +624,24 @@ def test_run_ocr_task_pelna_kontrola_wykrywa_przesuniecie_miedzy_niepodobnymi_et
     )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, main_response, confirm_response]),
+        new=AsyncMock(side_effect=[classify_response, main_response]),
     ):
         run_ocr_task(document_id, db_session)
 
+    # Główny wynik jest gotowy bez czekania na drugi pełny odczyt.
     document = doc_repo.get_document(db_session, document_id)
     assert document.status == "done"
-    assert len(document.items) == 1  # nic nie zostalo dodane - tylko oflagowane
+    assert len(document.items) == 1
+    assert document.items[0].needs_review is False
+
+    # Drugi odczyt jest osobnym zadaniem w tle i dopiero on dopisuje flagi.
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(return_value=confirm_response),
+    ):
+        run_full_document_verification_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
     item = document.items[0]
     assert item.rozpoznana_nazwa == "Końcówka tulejkowa  TE 1,5-10"
     assert item.ilosc_wydana == 13.0
@@ -627,6 +650,10 @@ def test_run_ocr_task_pelna_kontrola_wykrywa_przesuniecie_miedzy_niepodobnymi_et
 
     trace_reasons = " ".join(e.get("reason") or "" for e in document.ai_trace)
     assert "Szyna grzebieniowa widełkowa" in trace_reasons
+    assert any(
+        e.get("stage") == "full_document_verification" and e.get("status") == "completed"
+        for e in document.ai_trace
+    )
 
     from app.modules.documents.models import OcrRowGroupFlagModel
     flags = db_session.query(OcrRowGroupFlagModel).filter(
@@ -650,15 +677,28 @@ def test_run_ocr_task_pelna_kontrola_zgodnosc_nic_nie_zmienia(
     ocr_response = '{"pozycje": [{"nazwa": "Zawór kątowy 1/2x3/4", "ilosc_wydana": "1", "confidence": 98}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
     ):
         run_ocr_task(document_id, db_session)
 
     document = doc_repo.get_document(db_session, document_id)
     assert document.status == "done"
+    assert document.items[0].needs_review is False
+
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(return_value=ocr_response),
+    ):
+        run_full_document_verification_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
     item = document.items[0]
     assert item.needs_review is False
     assert item.ilosc_z_dodatkowej_kontroli is False
+    assert any(
+        e.get("stage") == "full_document_verification" and e.get("status") == "completed"
+        for e in document.ai_trace
+    )
 
 
 def test_auto_zasilacz_nie_dubluje_zasilacza_juz_odczytanego_z_kartki():
@@ -674,3 +714,36 @@ def test_auto_zasilacz_nie_dubluje_zasilacza_juz_odczytanego_z_kartki():
     assert len(zasilacze) == 1
     assert zasilacze[0]["rozpoznana_nazwa"] == "Zasilacz do LED"
     assert zasilacze[0]["ilosc_finalna"] == 1.0
+
+
+def test_background_review_pomija_pozycje_dodana_automatycznie():
+    row = SimpleNamespace(
+        form_note="Dodano automatycznie - 1 szt. za każde wystąpienie taśmy LED w tym dokumencie.",
+        rozpoznana_nazwa="Zasilacz LED 75W",
+        ilosc_wydana=None,
+        ilosc_zuzyta=None,
+        match_kod="ZASILACZ LED 75W",
+        uwagi="",
+        needs_review=False,
+        ilosc_z_dodatkowej_kontroli=False,
+    )
+    assert _background_review_item(row) is None
+
+
+def test_background_review_cofa_mnoznik_gniazda_przed_porownaniem_z_papierem():
+    row = SimpleNamespace(
+        form_note="",
+        rozpoznana_nazwa="Gniazdo podwójne białe niemieckie podtynkowe",
+        ilosc_wydana=4.0,
+        ilosc_zuzyta=2.0,
+        match_kod="GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE NIEMIECKIE",
+        uwagi="Gniazdo podwójne = 2x gniazdo pojedyncze podtynkowe z klapką - ilość podwojona automatycznie.",
+        needs_review=False,
+        ilosc_z_dodatkowej_kontroli=False,
+    )
+
+    review = _background_review_item(row)
+
+    assert review is not None
+    assert review["ilosc_wydana"] == 2.0
+    assert review["ilosc_zuzyta"] == 1.0

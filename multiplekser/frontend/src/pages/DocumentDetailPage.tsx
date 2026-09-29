@@ -62,17 +62,20 @@ const AI_STAGE_LABELS: Record<string, string> = {
   full_ocr_elektryka: 'Odczyt wydawki — Elektryka',
   full_ocr_hydraulika: 'Odczyt wydawki — Hydraulika',
   quantity_verification: 'Dodatkowa kontrola ilości',
+  full_document_verification: 'Pełna kontrola dokumentu w tle',
 }
 
 const AI_STATUS: Record<string, {
   label: string
   color: 'default' | 'info' | 'warning' | 'error' | 'success'
 }> = {
+  queued: { label: 'W tle', color: 'info' },
   attempt: { label: 'Próba', color: 'info' },
   skipped: { label: 'Pominięty', color: 'default' },
   rejected: { label: 'Odrzucony', color: 'error' },
   selected: { label: 'Wybrany', color: 'success' },
   no_result: { label: 'Bez wyniku', color: 'warning' },
+  completed: { label: 'Zakończona', color: 'success' },
   failed: { label: 'Niepowodzenie', color: 'error' },
 }
 
@@ -766,11 +769,23 @@ export function DocumentDetailPage() {
     queryKey: ['documents', id],
     queryFn: () => getDocument(id as string),
     enabled: Boolean(id),
-    // Polling co 2s dopoki dokument jest w trakcie przetwarzania w tle (Celery, Etap 7) -
-    // zatrzymuje sie automatycznie po osiagnieciu stanu koncowego (done/error).
+    // Po szybkim status=done nadal przez chwile trwa druga pelna kontrola Gemini w osobnym
+    // tasku. Polling zatrzymuje sie dopiero po jej completed/failed, wiec ostrzezenia pojawiaja
+    // sie automatycznie bez recznego odswiezania strony.
     refetchInterval: (query) => {
-      const status = query.state.data?.status
-      return status === 'queued' || status === 'processing' ? 2000 : false
+      const data = query.state.data
+      const status = data?.status
+      if (status === 'queued' || status === 'processing') return 2000
+      if (status !== 'done') return false
+      const trace = data?.ai_trace ?? []
+      const backgroundQueued = trace.some(
+        (event) => event.stage === 'full_document_verification' && event.status === 'queued',
+      )
+      const backgroundFinished = trace.some(
+        (event) => event.stage === 'full_document_verification'
+          && (event.status === 'completed' || event.status === 'failed'),
+      )
+      return backgroundQueued && !backgroundFinished ? 2000 : false
     },
   })
 

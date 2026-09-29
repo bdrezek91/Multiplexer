@@ -30,7 +30,7 @@ from app.modules.matcher.result import QUALITY_OK
 from app.modules.ocr.chain import AllProvidersFailedError, OCRChainEventCallback, quantity_verification_chain
 from app.modules.ocr.classify import classify_document
 from app.modules.ocr.cooldown import OCRCooldownStore, get_ocr_cooldown_store
-from app.modules.ocr.image import downscale_image, is_blank_page, pdf_to_page_images
+from app.modules.ocr.image import classification_header_preview, downscale_image, is_blank_page, pdf_to_page_images
 from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline_elektryka import OCRUnparsableResponseError, recognize_document
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
@@ -80,8 +80,14 @@ def _classify_and_recognize(
         if attempt > 0:
             time.sleep(_RETRY_DELAYS_S[attempt - 1])
         try:
+            # Klasyfikacja potrzebuje tylko pola Elektryka/Hydraulika z naglowka.
+            # Nie wysylamy drugi raz calej wydawki: pierwsza strona + gorne 45% + mniejszy JPEG.
+            # Glowny OCR ponizej nadal dostaje pelne files.
+            classification_files = [
+                (classification_header_preview(files[0][0]), "image/jpeg")
+            ] if files else files
             classify_result = asyncio.run(classify_document(
-                files, log_context=log_context, event_callback=event_callback,
+                classification_files, log_context=log_context, event_callback=event_callback,
                 cooldown_store=cooldown_store,
             ))
             dzial = classify_result.dzial
@@ -163,7 +169,7 @@ async def _check_full_document_consistency(
     event_callback: OCRChainEventCallback,
     cooldown_store: OCRCooldownStore,
     log_context: Mapping[str, object],
-) -> None:
+) -> bool:
     """Druga, PELNA, niezalezna kontrola calego dokumentu (2026-09-18) - porownuje KAZDA pozycje
     z drugim, niezaleznym pelnym odczytem calego dokumentu (nie tylko wybrane grupy podobnych
     etykiet - wczesniejsza, waskaza wersja tego mechanizmu, _check_row_group_alignment,
@@ -183,16 +189,18 @@ async def _check_full_document_consistency(
         if dzial == "hydraulika":
             confirm = await recognize_document_hydraulika(
                 files, catalog, magazyn=magazyn, chain=quantity_verification_chain(),
-                log_context=log_context, cooldown_store=cooldown_store,
+                log_context={**dict(log_context), "ai_stage_override": "full_document_verification"},
+                event_callback=event_callback, cooldown_store=cooldown_store,
             )
         else:
             confirm = await recognize_document(
                 files, catalog, special_rules or [], magazyn=magazyn, chain=quantity_verification_chain(),
-                log_context=log_context, cooldown_store=cooldown_store,
+                log_context={**dict(log_context), "ai_stage_override": "full_document_verification"},
+                event_callback=event_callback, cooldown_store=cooldown_store,
             )
     except Exception:
         logger.warning("Pelna kontrola spojnosci dokumentu nieudana - pomijam", exc_info=True)
-        return
+        return False
 
     confirm_by_label: dict[str, tuple[Optional[float], Optional[float]]] = {}
     for it in confirm.pozycje:
@@ -255,6 +263,8 @@ async def _check_full_document_consistency(
             )
         except Exception:
             logger.warning("Nie udalo sie zapisac logu full-reread-missing", exc_info=True)
+
+    return True
 
 
 async def _verify_ambiguous_items(
@@ -405,6 +415,126 @@ def _download_and_prepare(get_storage, file_key: str, mime: str) -> list[tuple[b
     return [(downscale_image(raw), "image/jpeg")]
 
 
+def _background_review_item(row) -> Optional[dict]:
+    """Buduje stan do drugiego OCR tak, jak wygladal PRZED automatycznymi regulami biznesowymi.
+
+    Automatycznie dopisanych pozycji (np. zasilacz LED) nie ma na papierze, wiec nie wolno ich
+    porownywac z drugim odczytem. Gniazdo podwojne jest w systemie mnozone x2 dopiero po OCR;
+    kontrola obrazu musi porownac sie z surowa iloscia z kartki, czyli przed mnoznikiem.
+    """
+    form_note = str(getattr(row, "form_note", "") or "")
+    if form_note.startswith("Dodano automatycznie"):
+        return None
+
+    wydana = getattr(row, "ilosc_wydana", None)
+    zuzyta = getattr(row, "ilosc_zuzyta", None)
+    kod = str(getattr(row, "match_kod", "") or "").strip()
+    uwagi = str(getattr(row, "uwagi", "") or "").lower()
+    if kod in GNIAZDO_PODTYNKOWE_Z_KLAPKA_KODY and "podwojona automatycznie" in uwagi:
+        wydana = wydana / 2 if wydana is not None else None
+        zuzyta = zuzyta / 2 if zuzyta is not None else None
+
+    return {
+        "rozpoznana_nazwa": row.rozpoznana_nazwa,
+        "ilosc_wydana": wydana,
+        "ilosc_zuzyta": zuzyta,
+        "needs_review": row.needs_review,
+        "ilosc_z_dodatkowej_kontroli": row.ilosc_z_dodatkowej_kontroli,
+        "form_note": form_note,
+    }
+
+
+def run_full_document_verification_task(document_id: str, session: Session) -> None:
+    """Drugi pelny odczyt Gemini uruchamiany PO zapisaniu glownego wyniku.
+
+    Nie zmienia dopasowan ani ilosci. Moze tylko ustawic needs_review,
+    ilosc_z_dodatkowej_kontroli i dopisac ostrzezenie do form_note / ai_trace.
+    """
+    from .storage import get_storage
+
+    document = repository.get_document(session, document_id)
+    if document is None or document.status != "done" or document.dzial not in {"elektryka", "hydraulika"}:
+        return
+
+    try:
+        files = list(_download_and_prepare(get_storage, document.file_key, document.mime))
+        for extra in document.extra_files:
+            files += _download_and_prepare(get_storage, extra.file_key, extra.mime)
+
+        review_rows = []
+        review_items = []
+        for row in document.items:
+            review = _background_review_item(row)
+            if review is None:
+                continue
+            review_rows.append(row)
+            review_items.append(review)
+
+        def save_ai_event(event: dict[str, object]) -> None:
+            repository.append_ai_trace_event(session, document, event)
+
+        catalog = Catalog.from_db(session, dzial=document.dzial)
+        special_rules = None if document.dzial == "hydraulika" else rules_from_db(session)
+        verification_ok = asyncio.run(_check_full_document_consistency(
+            files,
+            review_items,
+            document.dzial,
+            catalog,
+            special_rules,
+            document.magazyn,
+            session,
+            document.id,
+            save_ai_event,
+            get_ocr_cooldown_store(),
+            {"document_id": document_id, "background_check": True},
+        ))
+        if not verification_ok:
+            save_ai_event({
+                "status": "failed", "stage": "full_document_verification",
+                "provider": None, "model": None, "label": None,
+                "reason": "Pełna kontrola dokumentu w tle nie zakończyła się poprawnym odczytem.",
+                "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
+                "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            return
+
+        # Kolejnosc review_items odpowiada DocumentItem.sequence (relationship ma order_by).
+        # Druga kontrola nie dotyka ilosci ani kodow - tylko flagi/komunikat dla operatora.
+        for row, review in zip(review_rows, review_items):
+            row.needs_review = bool(review["needs_review"])
+            row.ilosc_z_dodatkowej_kontroli = bool(review["ilosc_z_dodatkowej_kontroli"])
+            row.form_note = str(review["form_note"] or "")
+        session.commit()
+        save_ai_event({
+            "status": "completed", "stage": "full_document_verification",
+            "provider": None, "model": None, "label": None,
+            "reason": "Pełna kontrola dokumentu w tle zakończona.",
+            "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
+            "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        logger.info(
+            "Pelna kontrola dokumentu w tle - zakonczona",
+            extra={"document_id": document_id, "dzial": document.dzial},
+        )
+    except Exception:
+        session.rollback()
+        logger.warning(
+            "Pelna kontrola dokumentu w tle nieudana - wynik glowny pozostaje bez zmian",
+            exc_info=True,
+            extra={"document_id": document_id},
+        )
+        try:
+            repository.append_ai_trace_event(session, document, {
+                "status": "failed", "stage": "full_document_verification",
+                "provider": None, "model": None, "label": None,
+                "reason": "Pełna kontrola dokumentu w tle zakończyła się błędem.",
+                "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
+                "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception:
+            session.rollback()
+
+
 def run_ocr_task(document_id: str, session: Session) -> None:
     from .storage import get_storage  # lazy import - unika inicjalizacji klienta S3 przy imporcie modulu
 
@@ -447,21 +577,6 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             files, items, document_id, save_ai_event, cooldown_store, dzial,
         ))
 
-        # Ponizsza kontrola jest czysto opcjonalnym, dodatkowym zabezpieczeniem (patrz jej
-        # docstring) - NIEOCZEKIWANY wyjatek (np. blad sieci nie zlapany przez wewnetrzna obsluge
-        # AllProvidersFailedError) NIGDY nie moze zepsuc juz poprawnie odczytanego dokumentu.
-        # Ma tez wlasna, wewnetrzna obsluge bledow - to dodatkowa, zewnetrzna siatka
-        # bezpieczenstwa.
-        try:
-            catalog = Catalog.from_db(session, dzial=dzial)
-            special_rules = None if dzial == "hydraulika" else rules_from_db(session)
-            asyncio.run(_check_full_document_consistency(
-                files, items, dzial, catalog, special_rules, document.magazyn, session, document.id,
-                save_ai_event, cooldown_store, {"document_id": document_id},
-            ))
-        except Exception:
-            logger.warning("Pelna kontrola spojnosci dokumentu nieudana - pomijam", exc_info=True)
-
         # Najpierw zachowujemy wszystkie istniejace reguly biznesowe matchera. Auto-zasilacz
         # i mnoznik gniazda sa czescia sprawdzonej logiki i nie powinny zalezec od decyzji AI.
         _append_auto_zasilacz_led(items, dzial, session)
@@ -493,6 +608,13 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             dzial=dzial, dzial_confidence=classify_result.confidence,
             pracownik=result.pracownik, numer_plomby=result.numer_plomby,
         )
+        repository.append_ai_trace_event(session, document, {
+            "status": "queued", "stage": "full_document_verification",
+            "provider": None, "model": None, "label": None,
+            "reason": "Główny wynik jest gotowy. Pełna kontrola dokumentu została zlecona w tle.",
+            "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
+            "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
+        })
 
         if active_jev_rows:
             try:
@@ -540,6 +662,26 @@ def process_ocr_document(document_id: str) -> None:
     session = SessionLocal()
     try:
         run_ocr_task(document_id, session)
+        completed = repository.get_document(session, document_id)
+        if completed is not None and completed.status == "done":
+            try:
+                dispatch_full_document_verification_task(document_id)
+            except Exception:
+                logger.warning(
+                    "Pelna kontrola dokumentu - nie udalo sie zlecic zadania w tle",
+                    exc_info=True,
+                    extra={"document_id": document_id},
+                )
+                try:
+                    repository.append_ai_trace_event(session, completed, {
+                        "status": "failed", "stage": "full_document_verification",
+                        "provider": None, "model": None, "label": None,
+                        "reason": "Nie udało się uruchomić pełnej kontroli dokumentu w tle.",
+                        "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
+                        "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                except Exception:
+                    session.rollback()
     finally:
         session.close()
 
@@ -549,3 +691,16 @@ def dispatch_ocr_task(document_id: str) -> None:
     `process_ocr_document` bezposrednio - cienka warstwa oddzielajaca "co robi zadanie" od
     "jak jest zlecane"."""
     process_ocr_document.delay(document_id)
+
+
+@celery_app.task(name="documents.full_document_verification")
+def process_full_document_verification(document_id: str) -> None:
+    session = SessionLocal()
+    try:
+        run_full_document_verification_task(document_id, session)
+    finally:
+        session.close()
+
+
+def dispatch_full_document_verification_task(document_id: str) -> None:
+    process_full_document_verification.delay(document_id)

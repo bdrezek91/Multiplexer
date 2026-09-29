@@ -158,6 +158,33 @@ def is_blank_page(file_bytes: bytes) -> bool:
     return (ink_pixels / img.size) < _BLANK_PAGE_MAX_INK_RATIO
 
 
+def classification_header_preview(file_bytes: bytes) -> bytes:
+    """Maly podglad naglowka pierwszej strony tylko do klasyfikacji Elektryka/Hydraulika.
+
+    Klasyfikator potrzebuje pola dzialu z naglowka, nie calej tabeli. Glowny OCR nadal dostaje
+    pelny obraz przygotowany przez downscale_image(). Tu bierzemy gorne 45% strony i ograniczamy
+    dluzszy bok do 1400 px, JPEG quality=82. Gdy obrazu nie da sie otworzyc, bezpiecznie zwracamy
+    oryginalne bajty.
+    """
+    try:
+        with Image.open(BytesIO(file_bytes)) as img:
+            img = img.convert("RGB")
+            crop_h = max(1, round(img.height * 0.45))
+            img = img.crop((0, 0, img.width, crop_h))
+            longer = max(img.width, img.height)
+            if longer > 1400:
+                k = 1400 / longer
+                img = img.resize(
+                    (round(img.width * k), round(img.height * k)),
+                    Image.Resampling.LANCZOS,
+                )
+            out = BytesIO()
+            img.save(out, format="JPEG", quality=82)
+            return out.getvalue()
+    except Exception:
+        return file_bytes
+
+
 def downscale_image(file_bytes: bytes, max_side: Optional[int] = None, quality: Optional[int] = None) -> bytes:
     """Zwraca bajty JPEG przeskalowane tak, ze dluzszy bok <= max_side. Obrazy juz mniejsze niz
     max_side NIE sa powiekszane (jak w oryginale JS - skalowanie tylko w dol). Prostowanie

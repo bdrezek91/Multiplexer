@@ -1,9 +1,11 @@
-"""Wspolna blokada modeli po API 429.
+"""Wspolna blokada modeli po API 429/503.
 
 Redis jest juz brokerem Celery, wiec ten sam stan widza wszystkie procesy workera oraz kolejne
-dokumenty. Czasy rosna przy kolejnych bledach danego kroku: 10, 15, 20 minut; nastepne pozostaja
-na 20 minut. Poprawna odpowiedz po wygasnieciu blokady zeruje licznik; sukces requestu, ktory
-wystartowal jeszcze przed rownoleglym 429, nie kasuje aktywnej blokady.
+dokumenty. Po 429 czasy rosna przy kolejnych bledach danego kroku: 10, 15, 20 minut; nastepne
+pozostaja na 20 minut. Po 503/high demand model dostaje krotka blokade 3 minuty, zeby kolejne
+wydawki nie czekaly ponownie na przeciazony endpoint. Poprawna odpowiedz po wygasnieciu blokady
+zeruje licznik; sukces requestu, ktory wystartowal jeszcze przed rownoleglym bledem, nie kasuje
+aktywnej blokady.
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ _KEY_PREFIX = "multiplekser:ocr:model-cooldown"
 class OCRCooldownStore(Protocol):
     def remaining_seconds(self, step_label: str) -> int: ...
     def record_rate_limit(self, step_label: str) -> int: ...
+    def record_unavailable(self, step_label: str) -> int: ...
     def reset(self, step_label: str) -> None: ...
 
 
@@ -61,6 +64,20 @@ class RedisOCRCooldownStore:
             return minutes
         except (RedisError, OSError, ValueError):
             logger.warning("OCR AI - nie udalo sie ustawic cooldownu w Redis", exc_info=True)
+            return 0
+
+    def record_unavailable(self, step_label: str) -> int:
+        """Krotki cooldown po 503/high demand, zeby kolejne dokumenty nie wisialy na tym samym modelu."""
+        blocked_key, _ = self._keys(step_label)
+        seconds = 3 * 60
+        try:
+            current_ttl = int(self.client.ttl(blocked_key))
+            if current_ttl < seconds:
+                self.client.set(blocked_key, "1", ex=seconds)
+                return 3
+            return max(1, (current_ttl + 59) // 60)
+        except (RedisError, OSError, ValueError):
+            logger.warning("OCR AI - nie udalo sie ustawic cooldownu po 503 w Redis", exc_info=True)
             return 0
 
     def reset(self, step_label: str) -> None:

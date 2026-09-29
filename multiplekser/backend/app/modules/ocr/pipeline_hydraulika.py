@@ -106,10 +106,12 @@ async def recognize_document_hydraulika(
     cooldown_store: Optional[OCRCooldownStore] = None,
 ) -> OCRResultHydraulika:
     try:
+        context = dict(log_context or {})
+        ai_stage = str(context.pop("ai_stage_override", "full_ocr_hydraulika"))
         chain_result = await run_ocr_chain(
             files, AI_OCR_PROMPT_HYDRAULIKA, chain=chain,
             response_validator=is_valid_ocr_response,
-            log_context={**dict(log_context or {}), "ai_stage": "full_ocr_hydraulika"},
+            log_context={**context, "ai_stage": ai_stage},
             event_callback=event_callback,
             cooldown_store=cooldown_store,
         )

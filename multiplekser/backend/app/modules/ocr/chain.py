@@ -223,7 +223,7 @@ async def run_ocr_chain(
     `response_validator` odrzuca odpowiedz HTTP 200 w zlym formacie i uruchamia kolejny krok.
     `log_context` pozwala dopiac np. document_id i etap OCR bez logowania prompta/pliku/klucza.
     `event_callback` zapisuje ten sam bezpieczny slad do widoku dokumentu. `cooldown_store`
-    pomija modele czasowo zablokowane po API 429 (w produkcji wspolny Redis)."""
+    pomija modele czasowo zablokowane po API 429/503 (w produkcji wspolny Redis)."""
     steps = chain if chain is not None else default_ocr_chain()
     total_steps = chain_total_steps if chain_total_steps is not None else len(steps)
     last_error: Optional[Exception] = None
@@ -261,7 +261,7 @@ async def run_ocr_chain(
         remaining_seconds = cooldown_store.remaining_seconds(step.label) if cooldown_store else 0
         if remaining_seconds > 0:
             remaining_minutes = max(1, math.ceil(remaining_seconds / 60))
-            reason = f"blokada po API 429, pozostalo ok. {remaining_minutes} min"
+            reason = f"czasowa blokada modelu po bledzie API, pozostalo ok. {remaining_minutes} min"
             skipped.append(f"{step.label} ({reason})")
             logger.info("OCR AI - model pominiety", extra={**step_extra, "reason": reason})
             _publish_event("skipped", {**step_extra, "reason": reason}, event_callback)
@@ -326,6 +326,14 @@ async def run_ocr_chain(
                 reason = "Przekroczony limit zapytan API (429)"
                 if cooldown_store:
                     cooldown_minutes = cooldown_store.record_rate_limit(step.label)
+                    if cooldown_minutes:
+                        reason = f"{reason} | blokada modelu na {cooldown_minutes} min"
+            elif exc.status_code == 503:
+                # High demand potrafil kosztowac kilkanascie sekund, a kolejne dokumenty od razu
+                # probowaly tego samego modelu. Po pierwszym 503 omijamy go przez 3 minuty.
+                reason = "API 503 - model chwilowo przeciazony"
+                if cooldown_store:
+                    cooldown_minutes = cooldown_store.record_unavailable(step.label)
                     if cooldown_minutes:
                         reason = f"{reason} | blokada modelu na {cooldown_minutes} min"
             logger.warning(

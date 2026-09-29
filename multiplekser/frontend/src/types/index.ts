@@ -74,7 +74,7 @@ export interface DocumentItem {
 }
 
 export interface AITraceEvent {
-  status: 'attempt' | 'skipped' | 'rejected' | 'selected' | 'failed' | 'no_result'
+  status: 'queued' | 'attempt' | 'skipped' | 'rejected' | 'selected' | 'failed' | 'no_result' | 'completed'
   stage: string | null
   provider: string | null
   model: string | null

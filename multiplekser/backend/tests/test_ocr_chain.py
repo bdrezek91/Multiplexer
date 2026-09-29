@@ -28,6 +28,7 @@ class _FakeCooldown:
         self.remaining = remaining or {}
         self.cooldown_minutes = cooldown_minutes
         self.rate_limits: list[str] = []
+        self.unavailable: list[str] = []
         self.resets: list[str] = []
 
     def remaining_seconds(self, step_label: str) -> int:
@@ -36,6 +37,10 @@ class _FakeCooldown:
     def record_rate_limit(self, step_label: str) -> int:
         self.rate_limits.append(step_label)
         return self.cooldown_minutes
+
+    def record_unavailable(self, step_label: str) -> int:
+        self.unavailable.append(step_label)
+        return 3
 
     def reset(self, step_label: str) -> None:
         self.resets.append(step_label)
@@ -263,3 +268,29 @@ async def test_model_z_aktywnym_cooldownem_jest_pominiety_bez_wywolania_api():
     skipped = next(event for event in events if event["status"] == "skipped")
     assert skipped["model"] == "model-a"
     assert "pozostalo ok. 10 min" in str(skipped["reason"])
+
+
+async def test_api_503_ustawia_krotki_cooldown_i_przechodzi_do_kolejnego_modelu():
+    def behavior(model):
+        if model == "model-a":
+            raise OCRProviderError("API 503: high demand", status_code=503)
+        return "OK"
+
+    provider = _FakeProvider(behavior)
+    cooldown = _FakeCooldown()
+    events: list[dict[str, object]] = []
+    steps = [
+        OCRChainStep("Pierwszy", provider, "model-a", "klucz-a"),
+        OCRChainStep("Drugi", provider, "model-b", "klucz-b"),
+    ]
+
+    result = await run_ocr_chain(
+        [(b"dane", "image/jpeg")], "prompt", chain=steps,
+        cooldown_store=cooldown, event_callback=events.append,
+    )
+
+    assert result.used_label == "Drugi"
+    assert cooldown.unavailable == ["Pierwszy"]
+    rejected = next(event for event in events if event["status"] == "rejected")
+    assert "API 503" in str(rejected["reason"])
+    assert "blokada modelu na 3 min" in str(rejected["reason"])

@@ -1,0 +1,15 @@
+[Unit]
+Description=Multiplekser - backup PostgreSQL i MinIO
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/root/Multiplexer/multiplekser
+Environment=BACKUP_ROOT=/var/backups/multiplekser
+Environment=RETENTION_DAYS=14
+ExecStart=/root/Multiplexer/multiplekser/ops/backup.sh
+ExecStartPost=/root/Multiplexer/multiplekser/ops/check-backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

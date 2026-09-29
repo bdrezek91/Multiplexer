@@ -34,6 +34,20 @@ from .jev_client import JevError, ask_choice, jev_enabled, jev_mode
 
 logger = logging.getLogger(__name__)
 
+# Wiedza domenowa DAMPOL, ktora nie musi wystepowac 1:1 w nazwie Optimy ani w imporcie katalogu.
+# Trzymamy ja obok Jev, zeby model dostawal semantyczne odpowiedniki papierowych nazw nawet po
+# ponownym imporcie katalogu (import potrafi zastapic aliasy produktu danymi ze zrodla).
+_DAMPOL_DOMAIN_ALIASES: dict[str, list[str]] = {
+    "PRZYCISK ŻALUZJOWY": [
+        "Przełącznik do żaluzji",
+        "Przycisk do rolet",
+        "Przełącznik do rolet",
+        "Łącznik żaluzjowy",
+        "Włącznik do rolet",
+        "Przycisk żaluzjowy",
+    ],
+}
+
 
 @dataclass(frozen=True)
 class ShadowCandidate:
@@ -123,12 +137,29 @@ def _soft_matcher_rules(query_features: dict) -> list[str]:
 
 
 def _candidate_aliases(product, query_tokens: set[str], limit: int = 6) -> list[str]:
-    """Najbardziej przydatne aliasy produktu, ograniczone tokenowo dla kosztu Jev."""
+    """Najbardziej przydatne aliasy produktu + trwala wiedza domenowa DAMPOL dla Jev."""
     rows = []
+    seen: set[str] = set()
+
     for alias in product.aliasy:
+        normalized = alias.text.strip().casefold()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
         tokens = set(alias.tokens)
         overlap = len(tokens & query_tokens)
         rows.append((overlap, len(tokens), alias.text))
+
+    for alias_text in _DAMPOL_DOMAIN_ALIASES.get(product.kod.strip(), []):
+        normalized = alias_text.strip().casefold()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        tokens = set(plain_tokens(alias_text))
+        overlap = len(tokens & query_tokens)
+        # +1 przy remisie: jawna wiedza DAMPOL ma wygrac z przypadkowym aliasem importowym.
+        rows.append((overlap, len(tokens) + 1, alias_text))
+
     rows.sort(reverse=True)
     return [text for _, _, text in rows[:limit]]
 

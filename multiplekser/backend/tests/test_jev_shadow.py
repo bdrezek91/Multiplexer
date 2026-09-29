@@ -11,6 +11,7 @@ import pytest
 
 from app.modules.decision.jev_shadow import build_shortlist, evaluate_shadow
 from app.modules.matcher import match_against_catalog
+from app.modules.matcher.special_rules import DEFAULT_SPECIAL_RULES
 from app.modules.products import Catalog
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -249,3 +250,20 @@ async def test_evaluate_shadow_przekazuje_wiedze_dampol_do_jev(monkeypatch, cata
     assert knowledge["relevant_business_rule"]["authoritative"] is True
     assert all("aliasy_z_wydawek" in candidate for candidate in state["candidates"])
     assert "aliasy_z_wydawek" in captured_payload["questions"]["produkt"]["instructions"]
+
+
+def test_jev_zna_synonimy_przycisku_zaluzjowego(catalog):
+    query = "Przycisk do rolet"
+    match = match_against_catalog(query, catalog, special_rules=DEFAULT_SPECIAL_RULES)
+    assert match.kod == "PRZYCISK ŻALUZJOWY"
+
+    candidates = build_shortlist(
+        query_name=query,
+        catalog=catalog,
+        current_match=match,
+        dzial="elektryka",
+        include_current_match=True,
+    )
+    target = next(c for c in candidates if c.kod == "PRZYCISK ŻALUZJOWY")
+    assert "Przycisk do rolet" in target.aliasy
+    assert "Przełącznik do żaluzji" in target.aliasy

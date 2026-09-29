@@ -181,6 +181,10 @@ def test_stary_r1b_gniazdo_grafit_pokryty_regula_ogolna(catalog):
     "Przełącznik do żaluzji",
     "przelacznik zaluzjowy",
     "Przełącznik żaluzji",
+    "Przycisk do rolet",
+    "Przełącznik do rolet",
+    "Łącznik żaluzjowy",
+    "Włącznik do rolet",
 ])
 def test_przelacznik_do_zaluzji_mapuje_na_przycisk_zaluzjowy(catalog, nazwa):
     """Papierowa nazwa wydawki ma byc stalym odpowiednikiem kodu z Optimy."""

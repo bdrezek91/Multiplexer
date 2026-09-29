@@ -209,11 +209,11 @@ DEFAULT_SPECIAL_RULES: list[SpecialRule] = [
     ),
     SpecialRule(
         rule_type="override",
-        pattern=r"(?=.*\bprzelacznik\b)(?=.*zaluzj)",
+        pattern=r"(?=.*\b(?:przelacznik|przycisk|lacznik|wlacznik)\b)(?=.*\b(?:zaluzj|rolet))",
         normalize=True,
         target_kod="PRZYCISK ŻALUZJOWY",
         priority=82,
-        description="Nazwa z papierowej wydawki 'Przelacznik do zaluzji/zaluzjowy' -> PRZYCISK ZALUZJOWY w Optimie.",
+        description="Rodzina nazw z papierowej wydawki: przycisk/przelacznik/lacznik/wlacznik do zaluzji lub rolet -> PRZYCISK ZALUZJOWY w Optimie.",
     ),
 ]
 

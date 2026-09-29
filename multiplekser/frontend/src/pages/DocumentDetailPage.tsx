@@ -324,12 +324,26 @@ function JevShadowPanel({ summary }: { summary: JevShadowSummary | undefined }) 
                 Jev: {item.jev_kod ?? 'OTHER'} • confidence: {item.confidence?.toFixed(2) ?? '-'} • {(item.duration_ms / 1000).toFixed(1)} s
               </Typography>
               {summary.mode === 'active' && (
-                <Typography variant="caption" display="block" color={item.applied ? 'success.main' : 'text.secondary'}>
+                <Typography
+                  variant="caption"
+                  display="block"
+                  color={
+                    item.applied
+                      ? 'success.main'
+                      : item.rejected_by_poles || item.cleared_weak_match
+                        ? 'warning.main'
+                        : 'text.secondary'
+                  }
+                >
                   {item.locked_by_special_rule
                     ? 'Zachowano naszą regułę specjalną — Jev nie może jej nadpisać.'
-                    : item.applied
-                      ? 'Zastosowano decyzję Jev jako finalne dopasowanie.'
-                      : 'Pozostawiono wynik matchera (fallback/brak zmiany).'}
+                    : item.rejected_by_poles
+                      ? 'Odrzucono decyzję Jev — brak 3P na wydawce oznacza 1P.'
+                      : item.cleared_weak_match
+                        ? 'Jev zwrócił OTHER, a matcher był słaby — kod wyczyszczono i wymagana jest ręczna weryfikacja.'
+                        : item.applied
+                          ? 'Zastosowano decyzję Jev jako finalne dopasowanie.'
+                          : 'Pozostawiono wynik matchera (fallback/brak zmiany).'}
                 </Typography>
               )}
               {!item.matcher_in_shortlist && (

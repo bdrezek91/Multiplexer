@@ -218,6 +218,11 @@ def test_shortlist_25a_niemiecki_premiuje_zgodne_atrybuty(catalog):
     assert candidates[0].kod == match.kod
     assert any(c.kod == match.kod for c in candidates)
 
+    one_p = next(c for c in candidates if c.kod == "BEZPIECZNIK 25A NIEMIECKI 1P")
+    three_p = next(c for c in candidates if c.kod == "BEZPIECZNIK 25A NIEMIECKI 3P")
+    assert one_p.diagnostics["biegunow_match"] is True
+    assert three_p.diagnostics["biegunow_conflict"] is True
+
 async def test_evaluate_shadow_przekazuje_wiedze_dampol_do_jev(monkeypatch, catalog):
     monkeypatch.setenv("JEV_ENABLED", "true")
     monkeypatch.setenv("JEV_MODE", "shadow")

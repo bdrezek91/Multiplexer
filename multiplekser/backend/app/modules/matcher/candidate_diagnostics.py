@@ -93,7 +93,10 @@ def diagnose_candidate_elektryka(q: ParsedAttrs, cand: Product) -> CandidateDiag
 
     przekroj = _signal(q.przekroj, a.get("przekroj_mm2"))
     zyl = _signal(q.zyl, a.get("liczba_zyl"))
-    biegunow = _signal(q.biegunow, a.get("liczba_biegunow"))
+    # Konwencja DAMPOL: jesli wydawka nie podaje xP/3P, traktujemy pozycje jako 1P.
+    # To jest tylko diagnostyka dla Jev - bazowego matchera i wariantow magazynowych nie zmieniamy.
+    q_biegunow_eff = q.biegunow if q.biegunow is not None else 1
+    biegunow = _signal(q_biegunow_eff, a.get("liczba_biegunow"))
     modulow = _signal(q.modulow, a.get("liczba_modulow"))
     srednica = _signal(q.srednica, a.get("srednica_mm"))
 

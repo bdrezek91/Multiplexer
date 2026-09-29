@@ -100,6 +100,8 @@ export interface JevShadowItem {
   duration_ms: number
   applied: boolean | null
   locked_by_special_rule: boolean
+  cleared_weak_match: boolean
+  rejected_by_poles: boolean
 }
 
 export interface JevShadowSummary {

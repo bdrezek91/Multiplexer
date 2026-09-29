@@ -275,6 +275,8 @@ def get_document_jev_shadow(
                 duration_ms=row.duration_ms,
                 applied=(row.query_features or {}).get("active_applied"),
                 locked_by_special_rule=bool((row.query_features or {}).get("active_locked_by_special_rule", False)),
+                cleared_weak_match=bool((row.query_features or {}).get("active_cleared_weak_match", False)),
+                rejected_by_poles=bool((row.query_features or {}).get("active_rejected_by_poles", False)),
             )
             for row in rows
         ],

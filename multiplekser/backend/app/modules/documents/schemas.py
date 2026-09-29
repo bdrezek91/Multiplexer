@@ -165,6 +165,8 @@ class JevShadowItemOut(BaseModel):
     duration_ms: int
     applied: bool | None = None
     locked_by_special_rule: bool = False
+    cleared_weak_match: bool = False
+    rejected_by_poles: bool = False
 
 
 class JevShadowSummaryOut(BaseModel):

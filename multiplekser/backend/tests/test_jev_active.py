@@ -129,3 +129,79 @@ async def test_active_other_zostawia_matcher(monkeypatch, catalog):
 
     assert items[0]["match_kod"] == match.kod
     assert rows[0]["applied"] is False
+
+
+def test_konwencja_dampol_brak_3p_oznacza_1p(catalog):
+    one_p = catalog.find_by_kod("BEZPIECZNIK 25A NIEMIECKI 1P")
+    three_p = catalog.find_by_kod("BEZPIECZNIK 25A NIEMIECKI 3P")
+    assert one_p is not None
+    assert three_p is not None
+
+    assert active._candidate_respects_poles("Wyłącznik nadprądowy 25A niemiecki", one_p) is True
+    assert active._candidate_respects_poles("Wyłącznik nadprądowy 25A niemiecki", three_p) is False
+    assert active._candidate_respects_poles("Wyłącznik nadprądowy 25A niemiecki 3P", three_p) is True
+    assert active._candidate_respects_poles("Wyłącznik nadprądowy 25A niemiecki 3P", one_p) is False
+
+
+@pytest.mark.asyncio
+async def test_active_nie_pozwala_jev_zmienic_1p_na_3p_bez_3p_na_wydawce(monkeypatch, catalog):
+    monkeypatch.setenv("JEV_ENABLED", "true")
+    monkeypatch.setenv("JEV_MODE", "active")
+
+    query = "Wyłącznik nadprądowy 25A niemiecki"
+    match = match_against_catalog(query, catalog, magazyn="Czekanów")
+    assert match.kod == "BEZPIECZNIK 25A NIEMIECKI 1P"
+
+    target = catalog.find_by_kod("BEZPIECZNIK 25A NIEMIECKI 3P")
+    assert target is not None
+    items = [_item(query, match)]
+
+    async def fake(**kwargs):
+        return _result(match, target.kod)
+
+    monkeypatch.setattr(active, "evaluate_shadow", fake)
+    rows = await active.apply_jev_active(
+        items=items,
+        catalog=catalog,
+        special_rules=DEFAULT_SPECIAL_RULES,
+        magazyn="Czekanów",
+        dzial="elektryka",
+        resolve_product_id=lambda kod: "pid",
+    )
+
+    assert items[0]["match_kod"] == "BEZPIECZNIK 25A NIEMIECKI 1P"
+    assert rows[0]["applied"] is False
+    assert rows[0]["query_features"]["active_rejected_by_poles"] is True
+
+
+@pytest.mark.asyncio
+async def test_active_other_czysci_slaby_matcher_i_wymaga_weryfikacji(monkeypatch, catalog):
+    monkeypatch.setenv("JEV_ENABLED", "true")
+    monkeypatch.setenv("JEV_MODE", "active")
+
+    query = "wtyk RJ45"
+    match = match_against_catalog(query, catalog)
+    assert match.quality == "bad"
+    items = [_item(query, match)]
+
+    async def fake(**kwargs):
+        return _result(match, None)
+
+    monkeypatch.setattr(active, "evaluate_shadow", fake)
+    rows = await active.apply_jev_active(
+        items=items,
+        catalog=catalog,
+        special_rules=DEFAULT_SPECIAL_RULES,
+        magazyn=None,
+        dzial="elektryka",
+        resolve_product_id=lambda kod: "pid",
+    )
+
+    assert items[0]["match_kod"] is None
+    assert items[0]["match_nazwa"] is None
+    assert items[0]["matched_product_id"] is None
+    assert items[0]["needs_review"] is True
+    assert items[0]["match_quality"] == "bad"
+    assert "OTHER" in items[0]["form_note"]
+    assert rows[0]["applied"] is False
+    assert rows[0]["query_features"]["active_cleared_weak_match"] is True

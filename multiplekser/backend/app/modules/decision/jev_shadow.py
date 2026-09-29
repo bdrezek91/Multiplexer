@@ -108,6 +108,8 @@ def _query_features(query_name: str, dzial: str) -> dict:
         "przekroj": parsed.przekroj,
         "srednica": parsed.srednica,
         "biegunow": parsed.biegunow,
+        "biegunow_effective": parsed.biegunow if parsed.biegunow is not None else 1,
+        "biegunow_defaulted": parsed.biegunow is None,
         "modulow": parsed.modulow,
         "montaz": parsed.montaz,
         "mult": parsed.mult,
@@ -127,6 +129,11 @@ def _soft_matcher_rules(query_features: dict) -> list[str]:
         )
     if not query_features.get("mult"):
         rules.append("Brak podanej krotnosci oznacza wariant pojedynczy (1).")
+    if query_features.get("biegunow") is None:
+        rules.append(
+            "Twarda konwencja DAMPOL: jesli wydawka nie podaje xP/3P, oznacza to 1P. "
+            "Nie wybieraj wariantu 3P bez jawnego 3P na wydawce."
+        )
     if query_features.get("montaz") == "PODTYNKOWY":
         rules.append("Dla PODTYNKOWEGO brak atrybutu montazu u produktu jest akceptowany jako wariant domyslny.")
     if query_features.get("phase"):

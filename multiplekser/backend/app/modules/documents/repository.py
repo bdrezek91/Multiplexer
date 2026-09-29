@@ -129,12 +129,23 @@ def mark_processing(session: Session, document: DocumentModel) -> None:
 def append_ai_trace_event(
     session: Session, document: DocumentModel, event: dict[str, object], *, max_events: int = 200,
 ) -> None:
-    """Dopisuje zdarzenie widoczne w UI i od razu je zatwierdza, aby polling strony pokazal
-    postep jeszcze podczas trwajacego OCR. Lista ma limit, zeby uszkodzony dokument/retry nie
-    powiekszal rekordu bez konca. Przypisanie nowej listy zapewnia wykrycie zmiany JSONB przez
-    SQLAlchemy bez MutableList."""
+    """Dopisuje jedno zdarzenie widoczne w UI i od razu je zatwierdza."""
+    append_ai_trace_events(session, document, [event], max_events=max_events)
+
+
+def append_ai_trace_events(
+    session: Session, document: DocumentModel, events: list[dict[str, object]], *, max_events: int = 200,
+) -> None:
+    """Dopisuje kilka zdarzen ai_trace jednym commitem.
+
+    Uzywane m.in. przez telemetryke czasu po zakonczeniu OCR, aby sam pomiar nie dokladal kilku
+    osobnych commitow do krytycznej sciezki. Przypisanie nowej listy zapewnia wykrycie zmiany
+    JSONB przez SQLAlchemy bez MutableList.
+    """
+    if not events:
+        return
     trace = list(document.ai_trace or [])
-    trace.append(event)
+    trace.extend(events)
     document.ai_trace = trace[-max_events:]
     try:
         session.commit()

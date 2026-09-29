@@ -54,6 +54,57 @@ _PDF_MIME = "application/pdf"
 _MAX_ATTEMPTS = 3
 _RETRY_DELAYS_S = (5, 15)
 
+
+def _timing_event(stage: str, duration_ms: int, reason: str | None = None) -> dict[str, object]:
+    return {
+        "status": "completed",
+        "stage": stage,
+        "provider": None,
+        "model": None,
+        "label": None,
+        "reason": reason,
+        "step": None,
+        "total_steps": None,
+        "duration_ms": max(0, int(duration_ms)),
+        "attempt": None,
+        "target": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _elapsed_ms(started: float) -> int:
+    return round((time.perf_counter() - started) * 1000)
+
+
+def _queue_wait_ms(created_at: datetime | None) -> int | None:
+    if created_at is None:
+        return None
+    try:
+        value = created_at
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return max(0, round((datetime.now(timezone.utc) - value).total_seconds() * 1000))
+    except Exception:
+        return None
+
+
+def _background_queue_wait_ms(document) -> int | None:
+    for event in reversed(list(document.ai_trace or [])):
+        if event.get("stage") != "full_document_verification" or event.get("status") != "queued":
+            continue
+        raw = event.get("created_at")
+        if not raw:
+            return None
+        try:
+            value = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return max(0, round((datetime.now(timezone.utc) - value).total_seconds() * 1000))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _resolve_product_id(session: Session, kod):
     if not kod:
         return None
@@ -75,10 +126,15 @@ def _classify_and_recognize(
     trafiaja do Gemini w JEDNYM zapytaniu (patrz ocr/providers.py), prompt uczy model laczyc je
     w jeden wynik."""
     last_exc: Exception | None = None
+    classification_ms = 0
+    ocr_matcher_ms = 0
+    retry_wait_ms = 0
     for attempt in range(_MAX_ATTEMPTS):
         log_context = {"document_id": str(document.id), "ocr_attempt": attempt + 1}
         if attempt > 0:
-            time.sleep(_RETRY_DELAYS_S[attempt - 1])
+            delay_s = _RETRY_DELAYS_S[attempt - 1]
+            retry_wait_ms += delay_s * 1000
+            time.sleep(delay_s)
         try:
             # Klasyfikacja potrzebuje tylko pola Elektryka/Hydraulika z naglowka.
             # Nie wysylamy drugi raz calej wydawki: pierwsza strona + gorne 45% + mniejszy JPEG.
@@ -86,31 +142,46 @@ def _classify_and_recognize(
             classification_files = [
                 (classification_header_preview(files[0][0]), "image/jpeg")
             ] if files else files
-            classify_result = asyncio.run(classify_document(
-                classification_files, log_context=log_context, event_callback=event_callback,
-                cooldown_store=cooldown_store,
-            ))
+            stage_started = time.perf_counter()
+            try:
+                classify_result = asyncio.run(classify_document(
+                    classification_files, log_context=log_context, event_callback=event_callback,
+                    cooldown_store=cooldown_store,
+                ))
+            finally:
+                classification_ms += _elapsed_ms(stage_started)
             dzial = classify_result.dzial
 
-            catalog = Catalog.from_db(session, dzial=dzial)
-            if dzial == "hydraulika":
-                result = asyncio.run(
-                    recognize_document_hydraulika(
-                        files, catalog, magazyn=document.magazyn, log_context=log_context,
-                        event_callback=event_callback,
-                        cooldown_store=cooldown_store,
+            # Ten pomiar obejmuje zaladowanie katalogu + glowny request OCR + parsing +
+            # bazowy matcher dla wszystkich pozycji. Matcher dziala wewnatrz pipeline, wiec
+            # uczciwie mierzymy caly etap razem zamiast udawac osobny, niedokladny czas.
+            stage_started = time.perf_counter()
+            try:
+                catalog = Catalog.from_db(session, dzial=dzial)
+                if dzial == "hydraulika":
+                    result = asyncio.run(
+                        recognize_document_hydraulika(
+                            files, catalog, magazyn=document.magazyn, log_context=log_context,
+                            event_callback=event_callback,
+                            cooldown_store=cooldown_store,
+                        )
                     )
-                )
-            else:
-                special_rules = rules_from_db(session)
-                result = asyncio.run(
-                    recognize_document(
-                        files, catalog, special_rules, magazyn=document.magazyn,
-                        log_context=log_context, event_callback=event_callback,
-                        cooldown_store=cooldown_store,
+                else:
+                    special_rules = rules_from_db(session)
+                    result = asyncio.run(
+                        recognize_document(
+                            files, catalog, special_rules, magazyn=document.magazyn,
+                            log_context=log_context, event_callback=event_callback,
+                            cooldown_store=cooldown_store,
+                        )
                     )
-                )
-            return classify_result, dzial, result
+            finally:
+                ocr_matcher_ms += _elapsed_ms(stage_started)
+            return classify_result, dzial, result, {
+                "timing_retry_wait": retry_wait_ms,
+                "timing_classification": classification_ms,
+                "timing_ocr_matcher": ocr_matcher_ms,
+            }
         except (AllProvidersFailedError, OCRProviderError) as exc:
             last_exc = exc
             logger.warning(
@@ -456,10 +527,18 @@ def run_full_document_verification_task(document_id: str, session: Session) -> N
     if document is None or document.status != "done" or document.dzial not in {"elektryka", "hydraulika"}:
         return
 
+    background_started = time.perf_counter()
+    background_timings: dict[str, int] = {}
+    queue_wait = _background_queue_wait_ms(document)
+    if queue_wait is not None:
+        background_timings["timing_background_queue_wait"] = queue_wait
+
     try:
+        stage_started = time.perf_counter()
         files = list(_download_and_prepare(get_storage, document.file_key, document.mime))
         for extra in document.extra_files:
             files += _download_and_prepare(get_storage, extra.file_key, extra.mime)
+        background_timings["timing_background_prepare"] = _elapsed_ms(stage_started)
 
         review_rows = []
         review_items = []
@@ -475,6 +554,7 @@ def run_full_document_verification_task(document_id: str, session: Session) -> N
 
         catalog = Catalog.from_db(session, dzial=document.dzial)
         special_rules = None if document.dzial == "hydraulika" else rules_from_db(session)
+        stage_started = time.perf_counter()
         verification_ok = asyncio.run(_check_full_document_consistency(
             files,
             review_items,
@@ -488,14 +568,18 @@ def run_full_document_verification_task(document_id: str, session: Session) -> N
             get_ocr_cooldown_store(),
             {"document_id": document_id, "background_check": True},
         ))
+        background_timings["timing_background_verification"] = _elapsed_ms(stage_started)
         if not verification_ok:
-            save_ai_event({
+            background_timings["timing_background_total"] = _elapsed_ms(background_started)
+            events = [_timing_event(stage, duration) for stage, duration in background_timings.items()]
+            events.append({
                 "status": "failed", "stage": "full_document_verification",
                 "provider": None, "model": None, "label": None,
                 "reason": "Pełna kontrola dokumentu w tle nie zakończyła się poprawnym odczytem.",
                 "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
                 "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
             })
+            repository.append_ai_trace_events(session, document, events)
             return
 
         # Kolejnosc review_items odpowiada DocumentItem.sequence (relationship ma order_by).
@@ -505,13 +589,16 @@ def run_full_document_verification_task(document_id: str, session: Session) -> N
             row.ilosc_z_dodatkowej_kontroli = bool(review["ilosc_z_dodatkowej_kontroli"])
             row.form_note = str(review["form_note"] or "")
         session.commit()
-        save_ai_event({
+        background_timings["timing_background_total"] = _elapsed_ms(background_started)
+        events = [_timing_event(stage, duration) for stage, duration in background_timings.items()]
+        events.append({
             "status": "completed", "stage": "full_document_verification",
             "provider": None, "model": None, "label": None,
             "reason": "Pełna kontrola dokumentu w tle zakończona.",
             "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
             "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
         })
+        repository.append_ai_trace_events(session, document, events)
         logger.info(
             "Pelna kontrola dokumentu w tle - zakonczona",
             extra={"document_id": document_id, "dzial": document.dzial},
@@ -524,13 +611,16 @@ def run_full_document_verification_task(document_id: str, session: Session) -> N
             extra={"document_id": document_id},
         )
         try:
-            repository.append_ai_trace_event(session, document, {
+            background_timings["timing_background_total"] = _elapsed_ms(background_started)
+            events = [_timing_event(stage, duration) for stage, duration in background_timings.items()]
+            events.append({
                 "status": "failed", "stage": "full_document_verification",
                 "provider": None, "model": None, "label": None,
                 "reason": "Pełna kontrola dokumentu w tle zakończyła się błędem.",
                 "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
                 "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
             })
+            repository.append_ai_trace_events(session, document, events)
         except Exception:
             session.rollback()
 
@@ -541,6 +631,12 @@ def run_ocr_task(document_id: str, session: Session) -> None:
     document = repository.get_document(session, document_id)
     if document is None:
         return
+
+    task_started = time.perf_counter()
+    timings: dict[str, int] = {}
+    queue_wait = _queue_wait_ms(document.created_at)
+    if queue_wait is not None:
+        timings["timing_ocr_queue_wait"] = queue_wait
 
     repository.mark_processing(session, document)
     logger.info("OCR - start przetwarzania", extra={"document_id": document_id})
@@ -557,35 +653,45 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         # powyzej i historia czatu) - patrz tez ocr/providers.py. Pierwszy plik to zawsze
         # document.file_key/mime (wsteczna zgodnosc), kolejne to document.extra_files w kolejnosci
         # `sequence`. Wszystkie razem trafiaja do Gemini w jednym zapytaniu.
+        stage_started = time.perf_counter()
         files = list(_download_and_prepare(get_storage, document.file_key, document.mime))
         for extra in document.extra_files:
             files += _download_and_prepare(get_storage, extra.file_key, extra.mime)
+        timings["timing_file_prepare"] = _elapsed_ms(stage_started)
 
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
         # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
-        classify_result, dzial, result = _classify_and_recognize(
+        classify_result, dzial, result, core_timings = _classify_and_recognize(
             files, session, document, save_ai_event, cooldown_store,
         )
+        timings.update(core_timings)
 
+        stage_started = time.perf_counter()
         items = [
             _row_dict_from_ocritem(it, it.ilosc_wydana, it.ilosc_zuzyta, session)
             for it in result.pozycje
         ]
+        timings["timing_item_materialization"] = _elapsed_ms(stage_started)
 
+        stage_started = time.perf_counter()
         asyncio.run(_verify_ambiguous_items(
             files, items, document_id, save_ai_event, cooldown_store, dzial,
         ))
+        timings["timing_ambiguous_verification"] = _elapsed_ms(stage_started)
 
         # Najpierw zachowujemy wszystkie istniejace reguly biznesowe matchera. Auto-zasilacz
         # i mnoznik gniazda sa czescia sprawdzonej logiki i nie powinny zalezec od decyzji AI.
+        stage_started = time.perf_counter()
         _append_auto_zasilacz_led(items, dzial, session)
         _podwoj_ilosc_gniazda_podwojnego_podtynkowego(items)
+        timings["timing_postprocessing"] = _elapsed_ms(stage_started)
 
         # Jev ACTIVE: Gemini czyta dokument, obecny matcher daje bazowe dopasowanie, a Jev
         # wybiera finalny kod tylko dla Elektryki. Twarde special rules maja pierwszenstwo;
         # blad/OTHER zostawia stary matcher. Wszystkie pozycje ida do Jev rownolegle.
         active_jev_rows = []
+        stage_started = time.perf_counter()
         try:
             from app.modules.decision.active import apply_jev_active
             catalog_for_jev = Catalog.from_db(session, dzial=dzial)
@@ -600,7 +706,10 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             ))
         except Exception:
             logger.warning("Jev active - blad, zostawiam wyniki matchera", exc_info=True)
+        finally:
+            timings["timing_jev_active"] = _elapsed_ms(stage_started)
 
+        stage_started = time.perf_counter()
         repository.mark_done(
             session, document,
             numer_projektu=result.numer_projektu, used_provider=result.used_provider,
@@ -608,13 +717,18 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             dzial=dzial, dzial_confidence=classify_result.confidence,
             pracownik=result.pracownik, numer_plomby=result.numer_plomby,
         )
-        repository.append_ai_trace_event(session, document, {
+        timings["timing_finalize_db"] = _elapsed_ms(stage_started)
+        timings["timing_to_done"] = _elapsed_ms(task_started)
+
+        timing_events = [_timing_event(stage, duration) for stage, duration in timings.items()]
+        timing_events.append({
             "status": "queued", "stage": "full_document_verification",
             "provider": None, "model": None, "label": None,
             "reason": "Główny wynik jest gotowy. Pełna kontrola dokumentu została zlecona w tle.",
             "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
             "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
         })
+        repository.append_ai_trace_events(session, document, timing_events)
 
         if active_jev_rows:
             try:

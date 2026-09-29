@@ -65,6 +65,113 @@ const AI_STAGE_LABELS: Record<string, string> = {
   full_document_verification: 'Pełna kontrola dokumentu w tle',
 }
 
+const TIMING_STAGE_LABELS: Record<string, string> = {
+  timing_ocr_queue_wait: 'Kolejka OCR',
+  timing_file_prepare: 'Przygotowanie pliku',
+  timing_retry_wait: 'Czekanie retry',
+  timing_classification: 'Klasyfikacja',
+  timing_ocr_matcher: 'OCR + matcher',
+  timing_item_materialization: 'Budowanie pozycji',
+  timing_ambiguous_verification: 'Kontrola niepewnych',
+  timing_postprocessing: 'Reguły',
+  timing_jev_active: 'Jev active',
+  timing_finalize_db: 'Zapis wyniku',
+  timing_to_done: 'Do wyniku',
+  timing_background_queue_wait: 'Kolejka background',
+  timing_background_prepare: 'Przygotowanie background',
+  timing_background_verification: 'Drugi Gemini',
+  timing_background_total: 'Kontrola w tle',
+}
+
+const MAIN_TIMING_ORDER = [
+  'timing_ocr_queue_wait',
+  'timing_file_prepare',
+  'timing_retry_wait',
+  'timing_classification',
+  'timing_ocr_matcher',
+  'timing_item_materialization',
+  'timing_ambiguous_verification',
+  'timing_postprocessing',
+  'timing_jev_active',
+  'timing_finalize_db',
+]
+
+const BACKGROUND_TIMING_ORDER = [
+  'timing_background_queue_wait',
+  'timing_background_prepare',
+  'timing_background_verification',
+]
+
+function formatDurationMs(value: number) {
+  if (value < 1000) return `${value} ms`
+  return `${(value / 1000).toFixed(1)} s`
+}
+
+function PerformancePanel({ events }: { events: AITraceEvent[] }) {
+  const metrics = new Map<string, number>()
+  for (const event of events) {
+    if (event.stage?.startsWith('timing_') && event.duration_ms !== null) {
+      metrics.set(event.stage, event.duration_ms)
+    }
+  }
+  if (metrics.size === 0) return null
+
+  const mainTotal = metrics.get('timing_to_done')
+  const backgroundTotal = metrics.get('timing_background_total')
+
+  const renderMetric = (stage: string) => {
+    const value = metrics.get(stage)
+    if (value === undefined) return null
+    return (
+      <Chip
+        key={stage}
+        size="small"
+        variant="outlined"
+        label={`${TIMING_STAGE_LABELS[stage] ?? stage}: ${formatDurationMs(value)}`}
+      />
+    )
+  }
+
+  return (
+    <Box
+      sx={{
+        mt: 2,
+        p: 1.5,
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 1,
+        bgcolor: (theme) => alpha(theme.palette.background.default, 0.35),
+      }}
+    >
+      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+        <Typography variant="subtitle2">Wydajność</Typography>
+        {mainTotal !== undefined && (
+          <Chip size="small" color="success" label={`Do wyniku: ${formatDurationMs(mainTotal)}`} />
+        )}
+        {backgroundTotal !== undefined && (
+          <Chip size="small" color="info" label={`Kontrola w tle: ${formatDurationMs(backgroundTotal)}`} />
+        )}
+      </Stack>
+
+      <Typography variant="caption" color="text.secondary">Główna ścieżka</Typography>
+      <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+        {MAIN_TIMING_ORDER.map(renderMetric)}
+      </Stack>
+
+      {BACKGROUND_TIMING_ORDER.some((stage) => metrics.has(stage)) && (
+        <>
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+            Background
+          </Typography>
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+            {BACKGROUND_TIMING_ORDER.map(renderMetric)}
+          </Stack>
+        </>
+      )}
+    </Box>
+  )
+}
+
 const AI_STATUS: Record<string, {
   label: string
   color: 'default' | 'info' | 'warning' | 'error' | 'success'
@@ -80,7 +187,8 @@ const AI_STATUS: Record<string, {
 }
 
 function AITracePanel({ events }: { events: AITraceEvent[] }) {
-  if (events.length === 0) return null
+  const visibleEvents = events.filter((event) => !event.stage?.startsWith('timing_'))
+  if (visibleEvents.length === 0) return null
 
   return (
     <Box
@@ -97,7 +205,7 @@ function AITracePanel({ events }: { events: AITraceEvent[] }) {
         Przebieg AI
       </Typography>
       <Stack spacing={0.75} sx={{ maxHeight: 240, overflowY: 'auto', pr: 0.5 }}>
-        {events.map((event, index) => {
+        {visibleEvents.map((event, index) => {
           const status = AI_STATUS[event.status] ?? AI_STATUS.failed
           const stage = event.stage ? (AI_STAGE_LABELS[event.stage] ?? event.stage) : 'Łańcuch AI'
           const model = event.label ?? event.model ?? 'Wszystkie modele'
@@ -927,6 +1035,7 @@ export function DocumentDetailPage() {
               </Stack>
             </Stack>
 
+            <PerformancePanel events={document.ai_trace} />
             <AITracePanel events={document.ai_trace} />
             <JevShadowPanel summary={jevShadow} />
 

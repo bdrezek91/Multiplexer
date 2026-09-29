@@ -207,6 +207,14 @@ DEFAULT_SPECIAL_RULES: list[SpecialRule] = [
         priority=81,
         description="Profil do tasmy LED (dowolny zapis) -> PROFIL CZARNY 16X12 2M (prawidlowy kod magazynowy Optima, 'PROFIL DO TASMY LED' to duplikat bez pokrycia w magazynie).",
     ),
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\bprzelacznik\b)(?=.*zaluzj)",
+        normalize=True,
+        target_kod="PRZYCISK ŻALUZJOWY",
+        priority=82,
+        description="Nazwa z papierowej wydawki 'Przelacznik do zaluzji/zaluzjowy' -> PRZYCISK ZALUZJOWY w Optimie.",
+    ),
 ]
 
 # Kody docelowe powyzszych 4 regul "podwojne podtynkowe" - tasks.py: _podwoj_ilosc_gniazda_

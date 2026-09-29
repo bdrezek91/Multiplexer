@@ -7,7 +7,7 @@ from PIL import Image
 
 from app.modules.documents import repository as doc_repo
 from app.modules.documents.storage import get_storage
-from app.modules.documents.tasks import process_ocr_document, run_ocr_task
+from app.modules.documents.tasks import _append_auto_zasilacz_led, process_ocr_document, run_ocr_task
 from app.modules.ocr.providers import OCRProviderError
 from scripts.import_catalog import import_catalog
 from scripts.import_special_rules import import_special_rules
@@ -659,3 +659,18 @@ def test_run_ocr_task_pelna_kontrola_zgodnosc_nic_nie_zmienia(
     item = document.items[0]
     assert item.needs_review is False
     assert item.ilosc_z_dodatkowej_kontroli is False
+
+
+def test_auto_zasilacz_nie_dubluje_zasilacza_juz_odczytanego_z_kartki():
+    """Jesli zasilacz 75W jest juz na papierowej wydawce, auto-regula tasmy nie dodaje drugiego."""
+    items = [
+        {"match_kod": "TAŚMA LED DO DEKORÓW", "rozpoznana_nazwa": "Taśma LED 5M"},
+        {"match_kod": "ZASILACZ LED 75W", "rozpoznana_nazwa": "Zasilacz do LED", "ilosc_finalna": 1.0},
+    ]
+
+    _append_auto_zasilacz_led(items, "elektryka", session=None)
+
+    zasilacze = [it for it in items if it.get("match_kod") == "ZASILACZ LED 75W"]
+    assert len(zasilacze) == 1
+    assert zasilacze[0]["rozpoznana_nazwa"] == "Zasilacz do LED"
+    assert zasilacze[0]["ilosc_finalna"] == 1.0

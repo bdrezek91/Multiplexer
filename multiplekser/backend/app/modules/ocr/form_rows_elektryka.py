@@ -88,6 +88,7 @@ FORM_ROWS: list[str] = [
     'Oprawa panel LED BLINGO 60X60 biała',
     'Oprawa panel LED BLINGO 60X60 czarna',
     'Peszel  Ø.....',
+    'Przełącznik do żaluzji',
     'Przewód 1x10 kolor',
     'Przewód 3X16',
     'Przewód 3x1,5',

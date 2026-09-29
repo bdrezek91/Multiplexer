@@ -175,3 +175,15 @@ def test_stary_r1b_gniazdo_grafit_pokryty_regula_ogolna(catalog):
     assert r_brak.kod == r_pl.kod  # remis/brak danych -> PL (zasada z oryginalnego rekordu)
     assert "POLSKIE" in r_pl.kod
     assert "NIEMIECKIE" in r_de.kod
+
+
+@pytest.mark.parametrize("nazwa", [
+    "Przełącznik do żaluzji",
+    "przelacznik zaluzjowy",
+    "Przełącznik żaluzji",
+])
+def test_przelacznik_do_zaluzji_mapuje_na_przycisk_zaluzjowy(catalog, nazwa):
+    """Papierowa nazwa wydawki ma byc stalym odpowiednikiem kodu z Optimy."""
+    r = match_against_catalog(nazwa, catalog)
+    assert r.kod == "PRZYCISK ŻALUZJOWY"
+    assert r.quality == "ok"

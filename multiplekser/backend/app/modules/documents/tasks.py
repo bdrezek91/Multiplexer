@@ -331,6 +331,13 @@ def _append_auto_zasilacz_led(items: list[dict], dzial: str, session: Session) -
     count = sum(1 for it in items if it.get("match_kod") == _TASMA_LED_KOD)
     if count == 0:
         return
+
+    # Jezeli zasilacz zostal juz rzeczywiscie odczytany z papierowej wydawki, NIE dopisujemy
+    # drugiego automatycznie. Pozycja z kartki ma pierwszenstwo przed regułą "1 zasilacz do LED".
+    # Naprawa 2026-09-29: w przeciwnym razie ten sam ZASILACZ LED 75W byl widoczny dwa razy.
+    if any(it.get("match_kod") == _ZASILACZ_LED_KOD for it in items):
+        return
+
     items.append({
         "rozpoznana_nazwa": "Zasilacz LED 75W",
         "ilosc_wydana": None,

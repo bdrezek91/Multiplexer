@@ -11,7 +11,7 @@ from typing import Callable, Optional
 
 from app.modules.matcher.result import MatchResult, QUALITY_OK
 from app.modules.matcher.shared import apply_warehouse_variant, resolve_by_kod
-from app.modules.matcher.special_rules import SpecialRule, evaluate_special_rules
+from app.modules.matcher.special_rules import SpecialRule, evaluate_special_rules, find_matching_special_rule
 from app.modules.products import Catalog
 
 from .jev_client import jev_enabled, jev_mode
@@ -43,6 +43,7 @@ async def apply_jev_active(
             ratio=float(item.get("match_score") or 0.0),
             jm_override=item.get("match_jm"),
         )
+        matched_rule = find_matching_special_rule(name, special_rules)
         special_result = evaluate_special_rules(
             name,
             special_rules,
@@ -54,6 +55,23 @@ async def apply_jev_active(
         auto_generated = str(item.get("form_note") or "").startswith("Dodano automatycznie")
         locked = special_result is not None or auto_generated
 
+        rule_context = None
+        if matched_rule is not None:
+            rule_context = {
+                "authoritative": True,
+                "kind": "special_rule",
+                "rule_type": matched_rule.rule_type,
+                "description": matched_rule.description,
+                "target_kod": special_result.kod if special_result is not None else matched_rule.target_kod,
+            }
+        elif auto_generated:
+            rule_context = {
+                "authoritative": True,
+                "kind": "auto_generated",
+                "description": item.get("form_note"),
+                "target_kod": current_match.kod,
+            }
+
         meta.append((sequence, item, current_match, locked))
         jobs.append(evaluate_shadow(
             query_name=name,
@@ -61,6 +79,7 @@ async def apply_jev_active(
             current_match=current_match,
             dzial=dzial,
             magazyn=magazyn,
+            business_rule_context=rule_context,
         ))
 
     if not jobs:

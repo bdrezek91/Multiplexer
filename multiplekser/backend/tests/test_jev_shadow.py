@@ -216,3 +216,36 @@ def test_shortlist_25a_niemiecki_premiuje_zgodne_atrybuty(catalog):
     assert match.kod == "BEZPIECZNIK 25A NIEMIECKI 1P"
     assert candidates[0].kod == match.kod
     assert any(c.kod == match.kod for c in candidates)
+
+async def test_evaluate_shadow_przekazuje_wiedze_dampol_do_jev(monkeypatch, catalog):
+    monkeypatch.setenv("JEV_ENABLED", "true")
+    monkeypatch.setenv("JEV_MODE", "shadow")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "test-key")
+
+    query = "Różnicówka niemiecka 1 fazowa 40A"
+    match = match_against_catalog(query, catalog)
+    captured_payload = {}
+
+    async def fake_post(self, url, headers=None, json=None, **kwargs):
+        captured_payload.update(json)
+        return _jev_ok_response("C0")
+
+    with patch("httpx.AsyncClient.post", new=fake_post):
+        await evaluate_shadow(
+            query_name=query,
+            catalog=catalog,
+            current_match=match,
+            dzial="elektryka",
+            business_rule_context={
+                "authoritative": True,
+                "description": "Testowa reguła DAMPOL",
+                "target_kod": match.kod,
+            },
+        )
+
+    state = captured_payload["state"]
+    knowledge = state["dampol_knowledge"]
+    assert knowledge["soft_matcher_rules"]
+    assert knowledge["relevant_business_rule"]["authoritative"] is True
+    assert all("aliasy_z_wydawek" in candidate for candidate in state["candidates"])
+    assert "aliasy_z_wydawek" in captured_payload["questions"]["produkt"]["instructions"]

@@ -80,8 +80,10 @@ async def test_active_nie_nadpisuje_special_rule(monkeypatch, catalog):
     match = match_against_catalog(query, catalog, special_rules=DEFAULT_SPECIAL_RULES)
     target = next(p for p in catalog.products if p.kod != match.kod)
     items = [_item(query, match)]
+    captured = {}
 
     async def fake(**kwargs):
+        captured.update(kwargs)
         return _result(match, target.kod)
 
     monkeypatch.setattr(active, "evaluate_shadow", fake)
@@ -97,6 +99,11 @@ async def test_active_nie_nadpisuje_special_rule(monkeypatch, catalog):
     assert items[0]["match_kod"] == match.kod
     assert rows[0]["applied"] is False
     assert rows[0]["locked_by_special_rule"] is True
+    ctx = captured["business_rule_context"]
+    assert ctx["authoritative"] is True
+    assert ctx["kind"] == "special_rule"
+    assert ctx["target_kod"] == match.kod
+    assert "peszel" in ctx["description"].lower()
 
 
 @pytest.mark.asyncio

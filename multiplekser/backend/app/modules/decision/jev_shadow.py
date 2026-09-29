@@ -43,6 +43,7 @@ class ShadowCandidate:
     jm: str
     grupa: str
     atrybuty: dict
+    aliasy: list[str]
     score: float
     alias_hit: bool
     current_match: bool
@@ -95,7 +96,41 @@ def _query_features(query_name: str, dzial: str) -> dict:
         "biegunow": parsed.biegunow,
         "modulow": parsed.modulow,
         "montaz": parsed.montaz,
+        "mult": parsed.mult,
     }
+
+
+def _soft_matcher_rules(query_features: dict) -> list[str]:
+    """Zwiezla wiedza DAMPOL przekazywana Jev bez wysylania calego silnika matchera."""
+    rules = [
+        "Nazwy na papierowej wydawce moga byc skrotami lub nazwami potocznymi; aliasy produktu sa znanymi rownowaznymi nazwami i sa silnym sygnalem.",
+        "Jawny konflikt atrybutu technicznego jest gorszy niz brak atrybutu u kandydata.",
+        "Wariant magazynowy kandydata jest juz uwzgledniony przed decyzja Jev.",
+    ]
+    if not query_features.get("color"):
+        rules.append(
+            "Gdy wydawka nie podaje koloru, matcher przyjmuje BIALY; dla montazu STALY 3F domyslny jest CZERWONY, a STALY 1F NIEBIESKI."
+        )
+    if not query_features.get("mult"):
+        rules.append("Brak podanej krotnosci oznacza wariant pojedynczy (1).")
+    if query_features.get("montaz") == "PODTYNKOWY":
+        rules.append("Dla PODTYNKOWEGO brak atrybutu montazu u produktu jest akceptowany jako wariant domyslny.")
+    if query_features.get("phase"):
+        rules.append("Jawna niezgodnosc liczby faz jest twardym konfliktem i nie powinna byc przykryta podobienstwem nazwy.")
+    if query_features.get("country"):
+        rules.append("Jawnie podany kraj/standard gniazda musi miec pierwszenstwo przed podobienstwem tekstowym.")
+    return rules
+
+
+def _candidate_aliases(product, query_tokens: set[str], limit: int = 6) -> list[str]:
+    """Najbardziej przydatne aliasy produktu, ograniczone tokenowo dla kosztu Jev."""
+    rows = []
+    for alias in product.aliasy:
+        tokens = set(alias.tokens)
+        overlap = len(tokens & query_tokens)
+        rows.append((overlap, len(tokens), alias.text))
+    rows.sort(reverse=True)
+    return [text for _, _, text in rows[:limit]]
 
 
 def _compact_attrs(attrs: dict) -> dict:
@@ -231,6 +266,7 @@ def build_shortlist(
         )
 
         alias_hit = product.kod in alias_codes
+        candidate_aliases = _candidate_aliases(product, query_tokens)
 
         diagnostics = None
         if q_elektryka is not None:
@@ -246,13 +282,14 @@ def build_shortlist(
             float(score),
             alias_hit,
             diagnostics,
+            candidate_aliases,
         )
 
         if previous is None:
             ranked_by_code[effective.kod] = row
             continue
 
-        _, previous_score, previous_alias, previous_diagnostics = previous
+        _, previous_score, previous_alias, previous_diagnostics, _previous_aliases = previous
         row_rank = (
             1 if alias_hit else 0,
             *_diagnostic_rank(diagnostics),
@@ -290,7 +327,7 @@ def build_shortlist(
 
     candidates = []
 
-    for index, (product, score, is_alias, diagnostics) in enumerate(ranked):
+    for index, (product, score, is_alias, diagnostics, candidate_aliases) in enumerate(ranked):
 
         candidates.append(
             ShadowCandidate(
@@ -300,6 +337,7 @@ def build_shortlist(
                 jm=product.jm,
                 grupa=product.grupa,
                 atrybuty=_compact_attrs(product.atrybuty or {}),
+                aliasy=candidate_aliases,
                 score=score,
                 alias_hit=is_alias,
                 current_match=(
@@ -320,6 +358,7 @@ async def evaluate_shadow(
     dzial: str,
     magazyn: Optional[str] = None,
     limit: int = 5,
+    business_rule_context: Optional[dict] = None,
 ) -> Optional[JevShadowResult]:
     """Niezalezna ocena kandydatow przez Jev.
 
@@ -349,6 +388,7 @@ async def evaluate_shadow(
             return None
 
         query_features = _query_features(query_name, dzial)
+        soft_rules = _soft_matcher_rules(query_features) if dzial != "hydraulika" else []
 
         key_to_code = {
             candidate.key: candidate.kod
@@ -373,6 +413,8 @@ async def evaluate_shadow(
                     "jm": candidate.jm,
                     "grupa": candidate.grupa,
                     "atrybuty": candidate.atrybuty,
+                    "aliasy_z_wydawek": candidate.aliasy,
+                    "alias_hit": candidate.alias_hit,
                     "score": candidate.score,
                     "diagnostics": candidate.diagnostics,
                 }
@@ -389,7 +431,8 @@ async def evaluate_shadow(
                 f"Nazwa: {candidate.nazwa}; "
                 f"Grupa: {candidate.grupa}; "
                 f"JM: {candidate.jm}; "
-                f"Atrybuty: {attrs_text}"
+                f"Atrybuty: {attrs_text}; "
+                f"Znane aliasy z papierowych wydawek: {', '.join(candidate.aliasy) if candidate.aliasy else 'brak'}"
                 f"{diag_text}"
             )
 
@@ -408,6 +451,10 @@ async def evaluate_shadow(
                 "dzial": dzial,
                 "magazyn": magazyn,
                 "query_features": query_features,
+                "dampol_knowledge": {
+                    "soft_matcher_rules": soft_rules,
+                    "relevant_business_rule": business_rule_context,
+                },
                 "candidates": state_candidates,
             },
             question_name="produkt",
@@ -419,8 +466,13 @@ async def evaluate_shadow(
                 "i inne dostepne atrybuty, oraz pole 'diagnostics' przy "
                 "kazdym kandydacie (opisuje zgodnosc/konflikt/brak danych "
                 "per atrybut wzgledem query_features). "
-                "Nie wybieraj produktu tylko na podstawie podobienstwa "
-                "tekstu. Jezeli zaden kandydat nie pasuje, wybierz OTHER."
+                "Nazwy na papierowej wydawce czesto roznia sie od nazw w Optimie. "
+                "Pole aliasy_z_wydawek zawiera nasze znane, rzeczywiste odpowiedniki nazw i "
+                "nalezy traktowac je jako silna wiedze domenowa DAMPOL. Zastosuj tez "
+                "soft_matcher_rules. Jesli relevant_business_rule jest podana i oznaczona jako "
+                "authoritative, jest to nasza jawna regula biznesowa i ma pierwszenstwo. "
+                "Nie wybieraj produktu tylko na podstawie podobienstwa tekstu. "
+                "Jezeli zaden kandydat nie pasuje, wybierz OTHER."
             ),
             criteria=criteria,
         )

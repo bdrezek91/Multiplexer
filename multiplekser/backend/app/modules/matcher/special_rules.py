@@ -229,31 +229,41 @@ def _snap_to_step(value: float, steps: list[float]) -> float:
     return best
 
 
+def find_matching_special_rule(
+    query_name: str,
+    rules: list[SpecialRule],
+) -> Optional[SpecialRule]:
+    """Zwraca pierwsza aktywna regule pasujaca do tekstu, z ta sama kolejnoscia co evaluator."""
+    for rule in sorted((r for r in rules if r.active), key=lambda r: r.priority):
+        haystack = strip_diacritics(query_name.lower()) if rule.normalize else query_name
+        if re.search(rule.pattern, haystack, re.IGNORECASE):
+            return rule
+    return None
+
+
 def evaluate_special_rules(
     query_name: str,
     rules: list[SpecialRule],
     resolve_by_kod: Callable[[str], MatchResult],
 ) -> Optional[MatchResult]:
-    for rule in sorted((r for r in rules if r.active), key=lambda r: r.priority):
-        haystack = strip_diacritics(query_name.lower()) if rule.normalize else query_name
-        if not re.search(rule.pattern, haystack, re.IGNORECASE):
-            continue
+    rule = find_matching_special_rule(query_name, rules)
+    if rule is None:
+        return None
 
-        if rule.rule_type == "exclude":
-            return MatchResult(kod=None, nazwa=None, quality=QUALITY_EXCLUDED, ratio=0.0)
+    if rule.rule_type == "exclude":
+        return MatchResult(kod=None, nazwa=None, quality=QUALITY_EXCLUDED, ratio=0.0)
 
-        if rule.rule_type == "override":
-            return resolve_by_kod(rule.target_kod)
+    if rule.rule_type == "override":
+        return resolve_by_kod(rule.target_kod)
 
-        if rule.rule_type == "power_rounding":
-            value_match = re.search(rule.value_regex, query_name, re.IGNORECASE) if rule.value_regex else None
-            value = float(value_match.group(1)) if value_match else rule.default_value
-            snapped = _snap_to_step(value, rule.rounding_steps)
-            kod = rule.kod_template.format(value=int(snapped))
-            return resolve_by_kod(kod)
+    if rule.rule_type == "power_rounding":
+        value_match = re.search(rule.value_regex, query_name, re.IGNORECASE) if rule.value_regex else None
+        value = float(value_match.group(1)) if value_match else rule.default_value
+        snapped = _snap_to_step(value, rule.rounding_steps)
+        kod = rule.kod_template.format(value=int(snapped))
+        return resolve_by_kod(kod)
 
-        raise ValueError(f"Nieznany rule_type reguły specjalnej: {rule.rule_type!r}")
-    return None
+    raise ValueError(f"Nieznany rule_type reguły specjalnej: {rule.rule_type!r}")
 
 
 def rules_from_db(session) -> list[SpecialRule]:

@@ -29,17 +29,18 @@ CABLE_TRAYS_WHITE: list[dict] = [
     {"kod": "KORYTKO 60X40", "jm": "M"},
 ]
 
-# R2: KORYTKO CZARNE 40X20 (90 STOPNI) to NOWY, ODREBNY asortyment - NIE jest czarnym odpowiednikiem
-# KORYTKO 90X60. Czarna wersja 90x60 dzis NIE ISTNIEJE w Optimie, wiec tu tylko 3 pozycje.
+# R2: stare czarne wiersze formularza zostaly polaczone z nowymi kodami Optimy (2026-09-30):
+# 32x15 -> 40x20 (90 STOPNI), 40x25 -> 40x40 (90 STOPNI). Czarna wersja 90x60 nadal nie istnieje.
 CABLE_TRAYS_BLACK: list[dict] = [
-    {"kod": "KORYTKO CZARNE 32X15", "jm": "M"},
-    {"kod": "KORYTKO CZARNE 40X25", "jm": "M"},
+    {"kod": "KORYTKO CZARNE 40X20 (90 STOPNI)", "jm": "M"},
+    {"kod": "KORYTKO CZARNE 40X40 (90 STOPNI)", "jm": "M"},
     {"kod": "KORYTKO CZARNE 60X40", "jm": "M"},
 ]
 
-# Mapowanie rozmiar korytka -> kod w kolorze projektu (regula spojnosci koloru). "Twarda zasada"
+# Mapowanie wymiaru Z FORMULARZA -> aktualny kod w Optimie wg koloru projektu. Dla czarnych
+# pierwsze dwa wymiary sa nazwami historycznymi na papierze, a nie aktualnymi wymiarami kodu.
 # R2: czarne 60x90 celowo brak kodu (None) - nie wolno zgadywac zamiennika.
 TRAY_BY_SIZE: dict[str, dict[str, str | None]] = {
     "white": {"15x32": "KORYTKO 32X15", "25x40": "KORYTKO 40X25", "40x60": "KORYTKO 60X40", "60x90": "KORYTKO 90X60"},
-    "black": {"15x32": "KORYTKO CZARNE 32X15", "25x40": "KORYTKO CZARNE 40X25", "40x60": "KORYTKO CZARNE 60X40", "60x90": None},
+    "black": {"15x32": "KORYTKO CZARNE 40X20 (90 STOPNI)", "25x40": "KORYTKO CZARNE 40X40 (90 STOPNI)", "40x60": "KORYTKO CZARNE 60X40", "60x90": None},
 }

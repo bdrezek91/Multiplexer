@@ -18,6 +18,15 @@ FIXTURES = Path(__file__).parent / "fixtures"
 @pytest.fixture(scope="module")
 def catalog() -> Catalog:
     db = json.loads((FIXTURES / "baza_elektryka.json").read_text(encoding="utf-8"))
+    # Rekord dodany do Optimy po utworzeniu starego fixture; produkcyjna baza ma go juz normalnie.
+    db.setdefault("generyczne", {})["KORYTKO CZARNE 40X40 (90 STOPNI)"] = {
+        "kod": "KORYTKO CZARNE 40X40 (90 STOPNI)",
+        "nazwa": "Korytko czarne 40x40 (90 stopni)",
+        "jm": "M",
+        "grupa": "Korytka",
+        "atrybuty": {"kolor": "CZARNY", "wymiar_mm": "40x40"},
+        "aliasy": [],
+    }
     return Catalog.from_json_dict(db)
 
 
@@ -126,6 +135,18 @@ def test_kazda_tasma_led_wymuszona_na_tasme_do_dekorow(catalog, nazwa):
     zawsze mapuje sie na jeden, ten sam kod - bez wzgledu na to, co dokladnie ktos dopisal."""
     r = match_against_catalog(nazwa, catalog)
     assert r.kod == "TAŚMA LED DO DEKORÓW"
+    assert r.quality == "ok"
+
+
+@pytest.mark.parametrize("nazwa,oczekiwany_kod", [
+    ("Korytko 32x15 czarne 41 x 18", "KORYTKO CZARNE 40X20 (90 STOPNI)"),
+    ("Korytko 32x15 czarne", "KORYTKO CZARNE 40X20 (90 STOPNI)"),
+    ("Korytko 40x25 czarne 40 x 40", "KORYTKO CZARNE 40X40 (90 STOPNI)"),
+    ("Korytko 40x25 czarne", "KORYTKO CZARNE 40X40 (90 STOPNI)"),
+])
+def test_stare_czarne_korytka_mapuja_na_nowe_kody_optimy(catalog, nazwa, oczekiwany_kod):
+    r = match_against_catalog(nazwa, catalog)
+    assert r.kod == oczekiwany_kod
     assert r.quality == "ok"
 
 

@@ -215,6 +215,24 @@ DEFAULT_SPECIAL_RULES: list[SpecialRule] = [
         priority=82,
         description="Rodzina nazw z papierowej wydawki: przycisk/przelacznik/lacznik/wlacznik do zaluzji lub rolet -> PRZYCISK ZALUZJOWY w Optimie.",
     ),
+    # Formularz zachowal stare nazwy handlowe wymiarow, ale od 2026-09-30 odpowiadaja one
+    # nowym kodom Optimy: 32x15 czarne (faktycznie ok. 41x18) = 40x20 (90 stopni),
+    # a 40x25 czarne (faktycznie 40x40) = 40x40 (90 stopni). To twarda podmiana kodu,
+    # nie fuzzy-match ani decyzja Jev.
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\bkoryt\w*)(?=.*\bczarn\w*)(?=.*\b32\s*x\s*15\b)",
+        target_kod="KORYTKO CZARNE 40X20 (90 STOPNI)",
+        priority=83,
+        description="Stary wiersz formularza Korytko 32x15 czarne -> nowy kod KORYTKO CZARNE 40X20 (90 STOPNI).",
+    ),
+    SpecialRule(
+        rule_type="override",
+        pattern=r"(?=.*\bkoryt\w*)(?=.*\bczarn\w*)(?=.*\b40\s*x\s*25\b)",
+        target_kod="KORYTKO CZARNE 40X40 (90 STOPNI)",
+        priority=84,
+        description="Stary wiersz formularza Korytko 40x25 czarne -> nowy kod KORYTKO CZARNE 40X40 (90 STOPNI).",
+    ),
 ]
 
 # Kody docelowe powyzszych 4 regul "podwojne podtynkowe" - tasks.py: _podwoj_ilosc_gniazda_

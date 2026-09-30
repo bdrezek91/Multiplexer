@@ -73,6 +73,18 @@ def _tray_kod_for(name: str, current_color: str) -> Optional[str] | dict:
         return None
     a, b = sorted((int(dm.group(1)), int(dm.group(2))))
     key = f"{a}x{b}"
+
+    # Dwa historyczne CZARNE wiersze formularza maja od 2026-09-30 nowe kody Optimy.
+    # Jawne slowo "czarne" ma tu pierwszenstwo przed kolorem dominujacym projektu, bo to nie jest
+    # wybor stylistyczny tylko identyfikacja konkretnego, przemianowanego asortymentu.
+    if re.search(r"\bczarn\w*", name, re.IGNORECASE):
+        legacy_black = {
+            "15x32": "KORYTKO CZARNE 40X20 (90 STOPNI)",
+            "25x40": "KORYTKO CZARNE 40X40 (90 STOPNI)",
+        }
+        if key in legacy_black:
+            return legacy_black[key]
+
     color_key = "black" if current_color == "black" else "white"
     kod = TRAY_BY_SIZE[color_key].get(key)
     if kod:

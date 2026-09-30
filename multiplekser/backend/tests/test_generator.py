@@ -19,6 +19,15 @@ FIXTURES = Path(__file__).parent / "fixtures"
 @pytest.fixture(scope="module")
 def catalog() -> Catalog:
     db = json.loads((FIXTURES / "baza_elektryka.json").read_text(encoding="utf-8"))
+    # Rekord dodany do Optimy po utworzeniu starego fixture; produkcyjna baza ma go juz normalnie.
+    db.setdefault("generyczne", {})["KORYTKO CZARNE 40X40 (90 STOPNI)"] = {
+        "kod": "KORYTKO CZARNE 40X40 (90 STOPNI)",
+        "nazwa": "Korytko czarne 40x40 (90 stopni)",
+        "jm": "M",
+        "grupa": "Korytka",
+        "atrybuty": {"kolor": "CZARNY", "wymiar_mm": "40x40"},
+        "aliasy": [],
+    }
     return Catalog.from_json_dict(db)
 
 
@@ -162,7 +171,20 @@ def test_korytko_mapowane_na_kolor_dominujacy_niezaleznie_od_wlasnej_nazwy(catal
     result = generate_output(items, catalog, magazyn="Czekanów")
     assert result.dominant_color == "black"
     by_kod = _lines_by_kod(result.lines)
-    assert "KORYTKO CZARNE 40X25" in by_kod
+    assert "KORYTKO CZARNE 40X40 (90 STOPNI)" in by_kod
+
+
+def test_stare_czarne_wymiary_formularza_generuja_nowe_kody_optimy(catalog):
+    items = [
+        GeneratorItem(name="Korytko 32x15 czarne 41 x 18", qty=26),
+        GeneratorItem(name="Korytko 40x25 czarne 40 x 40", qty=14),
+    ]
+    result = generate_output(items, catalog, magazyn="Zabrze")
+    by_kod = _lines_by_kod(result.lines)
+    assert by_kod["KORYTKO CZARNE 40X20 (90 STOPNI)"] == "KORYTKO CZARNE 40X20 (90 STOPNI);26;;M;Zabrze"
+    assert by_kod["KORYTKO CZARNE 40X40 (90 STOPNI)"] == "KORYTKO CZARNE 40X40 (90 STOPNI);14;;M;Zabrze"
+    assert "KORYTKO CZARNE 32X15" not in by_kod
+    assert "KORYTKO CZARNE 40X25" not in by_kod
 
 
 def test_korytko_czarne_60x90_brak_dopasowania_bez_zgadywania(catalog):
@@ -250,6 +272,17 @@ def test_first_wydawka_dodaje_baze_i_korytka_w_kolorze_projektu(catalog):
     assert "SZYNA GRZEBIENIOWA WIDEŁKOWA;1;;SZT;" == by_kod["SZYNA GRZEBIENIOWA WIDEŁKOWA"]
     assert "KORYTKO 32X15;1;;M;" == by_kod["KORYTKO 32X15"]  # bialy = domyslny (brak przewagi czarnych)
     assert "WKRĘT 4,2X16 (OCYNK) (50 SZT);1;;OPAK;" == by_kod["WKRĘT 4,2X16 (OCYNK) (50 SZT)"]
+
+
+def test_first_wydawka_czarna_uzywa_nowych_kodow_korytek(catalog):
+    items = [GeneratorItem(name="Wyłącznik jednobiegunowy czarny", qty=2)]
+    result = generate_output(items, catalog, magazyn="Zabrze", first_wydawka=True)
+    assert result.dominant_color == "black"
+    by_kod = _lines_by_kod(result.lines)
+    assert "KORYTKO CZARNE 40X20 (90 STOPNI)" in by_kod
+    assert "KORYTKO CZARNE 40X40 (90 STOPNI)" in by_kod
+    assert "KORYTKO CZARNE 32X15" not in by_kod
+    assert "KORYTKO CZARNE 40X25" not in by_kod
 
 
 def test_first_wydawka_nie_dodaje_usunietych_przewodow(catalog):

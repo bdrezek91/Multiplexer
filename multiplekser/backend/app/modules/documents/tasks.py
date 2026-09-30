@@ -27,6 +27,7 @@ from app.modules.products import Catalog
 from . import repository
 from .background_verification import _background_review_item, run_full_document_verification_task
 from .ocr_processing import (
+    _append_auto_osprzet_gniazda_podwojnego_podtynkowego,
     _append_auto_zasilacz_led,
     _classify_and_recognize,
     _download_and_prepare,
@@ -118,6 +119,8 @@ def run_ocr_task(document_id: str, session: Session) -> None:
         # i mnoznik gniazda sa czescia sprawdzonej logiki i nie powinny zalezec od decyzji AI.
         stage_started = time.perf_counter()
         _append_auto_zasilacz_led(items, dzial, session)
+        if dzial == "elektryka":
+            _append_auto_osprzet_gniazda_podwojnego_podtynkowego(items, session)
         _podwoj_ilosc_gniazda_podwojnego_podtynkowego(items)
         timings["timing_postprocessing"] = _elapsed_ms(stage_started)
 

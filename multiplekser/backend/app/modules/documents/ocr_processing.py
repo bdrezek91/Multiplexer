@@ -262,12 +262,74 @@ def _append_auto_zasilacz_led(items: list[dict], dzial: str, session: Session) -
     })
 
 
-# Na zyczenie uzytkownika (2026-09-10): "Gniazdo podwojne [kolor] [kraj] podtynkowe" nie ma
-# wlasnego kodu w Optimie - fizycznie sklada sie z DWOCH pojedynczych gniazd podtynkowych z
-# klapka. special_rules.py juz ustawil poprawny kod POJEDYNCZEGO gniazda (patrz
-# GNIAZDO_PODTYNKOWE_Z_KLAPKA_KODY) - tu tylko PODWAJAMY ilosc, bo MatchResult (uzywany przy
-# dopasowywaniu) nie niesie ze soba ilosci, wiec special_rules.py nie moze tego zrobic sam.
+# Na zyczenie uzytkownika (2026-09-10, rozszerzone 2026-09-30): "Gniazdo podwojne
+# [kolor] [kraj] podtynkowe" nie ma wlasnego kodu w Optimie. Fizyczny komplet to DWA
+# pojedyncze gniazda z klapka + JEDNA ramka podwojna w tym samym kolorze + JEDNA puszka
+# instalacyjna 2-polowa podtynkowa. special_rules.py ustawia kod pojedynczego gniazda, a tutaj
+# materializujemy pozostale elementy zestawu i mnozymy gniazdo x2.
 _PODWOJNE_WZORZEC = re.compile(r"\bpodw[oó]jne\b", re.IGNORECASE)
+_PUSZKA_2_POLOWA_KOD = "PUSZKA INSTALACYJNA 2 POLOWA PODTYNKOWA"
+_RAMKA_PODWOJNA_BY_GNIAZDO_KOD = {
+    "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE NIEMIECKIE": "RAMKA PODWÓJNA BIAŁA",
+    "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ BIAŁE POLSKIE": "RAMKA PODWÓJNA BIAŁA",
+    "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ GRAFIT NIEMIECKIE": "RAMKA PODWÓJNA ANTRACYT",
+    "GNIAZDO 16A PODTYNKOWE Z KLAPKĄ GRAFIT POLSKIE": "RAMKA PODWÓJNA ANTRACYT",
+}
+
+
+def _auto_component_item(
+    *, source: dict, kod: str, session: Session, opis: str,
+) -> dict:
+    product = session.query(ProductModel).filter(ProductModel.kod == kod).first()
+    nazwa = product.nazwa if product is not None else kod
+    jm = product.jm if product is not None else "SZT"
+    return {
+        "rozpoznana_nazwa": nazwa,
+        "ilosc_wydana": source.get("ilosc_wydana"),
+        "ilosc_zuzyta": source.get("ilosc_zuzyta"),
+        "ilosc_finalna": source.get("ilosc_finalna"),
+        "match_quality": QUALITY_OK,
+        "match_score": 1.0,
+        "off_form": False,
+        "needs_review": False,
+        "form_note": f"Dodano automatycznie - {opis}",
+        "uwagi": "",
+        "confidence": None,
+        "matched_product_id": product.id if product is not None else None,
+        "match_kod": kod,
+        "match_nazwa": nazwa,
+        "match_jm": jm,
+        "ilosc_z_dodatkowej_kontroli": False,
+    }
+
+
+def _append_auto_osprzet_gniazda_podwojnego_podtynkowego(
+    items: list[dict], session: Session,
+) -> None:
+    """Do każdego podwójnego gniazda podtynkowego dodaje 1 ramkę + 1 puszkę na zestaw."""
+    additions: list[dict] = []
+    for it in list(items):
+        kod = str(it.get("match_kod") or "").strip()
+        if kod not in GNIAZDO_PODTYNKOWE_Z_KLAPKA_KODY:
+            continue
+        if not _PODWOJNE_WZORZEC.search(it.get("rozpoznana_nazwa") or ""):
+            continue
+        ramka_kod = _RAMKA_PODWOJNA_BY_GNIAZDO_KOD.get(kod)
+        if ramka_kod is None:
+            continue
+        additions.append(_auto_component_item(
+            source=it,
+            kod=ramka_kod,
+            session=session,
+            opis="1 ramka podwójna na każde gniazdo podwójne podtynkowe.",
+        ))
+        additions.append(_auto_component_item(
+            source=it,
+            kod=_PUSZKA_2_POLOWA_KOD,
+            session=session,
+            opis="1 puszka instalacyjna 2-polowa podtynkowa na każde gniazdo podwójne podtynkowe.",
+        ))
+    items.extend(additions)
 
 
 def _podwoj_ilosc_gniazda_podwojnego_podtynkowego(items: list[dict]) -> None:

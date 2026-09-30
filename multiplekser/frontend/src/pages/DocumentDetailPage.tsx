@@ -489,7 +489,7 @@ function MatchKodCell({ documentId, item, dzial }: { documentId: string; item: D
   return (
     <Autocomplete
       size="small"
-      sx={{ minWidth: 480 }}
+      sx={{ minWidth: { xs: 320, md: 360, xl: 440 }, width: "100%" }}
       options={options}
       loading={loading}
       defaultValue={defaultValue}
@@ -580,7 +580,7 @@ function AddItemRow({ documentId, dzial }: { documentId: string; dzial: Dzial })
       <TableCell>
         <Autocomplete
           size="small"
-          sx={{ minWidth: 480 }}
+          sx={{ minWidth: { xs: 320, md: 360, xl: 440 }, width: "100%" }}
           options={options}
           loading={loading}
           value={selected}
@@ -1103,11 +1103,18 @@ export function DocumentDetailPage() {
                   </Button>
                 </Stack>
               )}
-              <TableContainer component={Paper} sx={{ mb: 2 }}>
-                <Table size="small">
+              <TableContainer component={Paper} sx={{ mb: 2, overflowX: "auto" }}>
+                <Table
+                  size="small"
+                  sx={{
+                    width: "100%",
+                    "& .MuiTableCell-root": { px: 1 },
+                    "& .MuiTableCell-head": { whiteSpace: "nowrap" },
+                  }}
+                >
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ minWidth: 260 }}>Rozpoznana nazwa</TableCell>
+                      <TableCell sx={{ minWidth: 230 }}>Rozpoznana nazwa</TableCell>
                       <TableCell>Ilość wydana</TableCell>
                       <TableCell>Ilość zużyta</TableCell>
                       <TableCell>Ilość finalna (do generowania)</TableCell>

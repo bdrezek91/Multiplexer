@@ -21,6 +21,42 @@
 		reverse_proxy kalkulator-web:8000
 	}
 
+	# BEGIN PAWILONOS
+	redir /PawilonOs /PawilonOs/ 308
+
+	handle_path /PawilonOs/* {
+		reverse_proxy pawilonos-web:8000
+	}
+	# END PAWILONOS
+
+        # BEGIN SALDEO
+        redir /saldeo /saldeo/ 308
+
+        handle /saldeo/* {
+                reverse_proxy saldeo-test-app:8080
+        }
+        # END SALDEO
+
+	# BEGIN REKLAMACJEOS
+	redir /reklamacjeOS /reklamacjeOS/ 308
+
+	handle_path /reklamacjeOS/* {
+		basic_auth {
+			"admin" "$2a$14$KAHkUXyECBb9J62Yn0dzuulGpQ0pd.3A98tzRusXQ/61sfnrjdTcu"
+		}
+
+		reverse_proxy reklamacjeos-backend:8000
+	}
+	# END REKLAMACJEOS
+
+	# BEGIN KONFIGURATOR3D
+	redir /konfigurator3d /konfigurator3d/ 308
+
+	handle_path /konfigurator3d/* {
+		reverse_proxy konfigurator3d-web:80
+	}
+	# END KONFIGURATOR3D
+
 	handle {
 		reverse_proxy web:80
 	}

@@ -157,3 +157,31 @@ def test_jednostki_niezgodne_z_optima_poprawione(catalog):
     assert catalog.find_by_kod("PRZYBLATÓWKA SREBRNA").jm == "M"
     assert catalog.find_by_kod("SZYNA DO MONTAŻU SZAFEK").jm == "M"
     assert catalog.find_by_kod("RURA PEX FI 16").jm == "M"
+
+
+def test_ogolna_zaslepka_czarna_biala_mapuje_na_m10_bez_psucia_starych_fi():
+    data = json.loads((FIXTURES / "baza_hydraulika.json").read_text(encoding="utf-8"))
+    for kod, nazwa, kolor in (
+        ("ZAŚLEPKA M10 CZARNA + PODKŁADKA", "Zaślepka M10 czarna + podkładka", "CZARNY"),
+        ("ZAŚLEPKA M10 BIAŁA + PODKŁADKA", "Zaślepka M10 biała + podkładka", "BIALY"),
+    ):
+        data["generyczne"][kod] = {
+            "kod": kod,
+            "nazwa": nazwa,
+            "jm": "SZT",
+            "grupa": "Mocowania i drobny osprzęt",
+            "atrybuty": {"kolor": kolor, "gwint_metryczny": "M10"},
+            "aliasy": [],
+        }
+    local_catalog = Catalog.from_json_dict(data, dzial="hydraulika")
+
+    assert match_against_catalog_hydraulika("Zaślepka czarna", local_catalog).kod == (
+        "ZAŚLEPKA M10 CZARNA + PODKŁADKA"
+    )
+    assert match_against_catalog_hydraulika("Zaslepka M10 biala", local_catalog).kod == (
+        "ZAŚLEPKA M10 BIAŁA + PODKŁADKA"
+    )
+    # Jawny stary wymiar nie moze wpasc w ogolny override M10.
+    assert match_against_catalog_hydraulika("Zaślepka fi 13 biała", local_catalog).kod == (
+        "ZAŚLEPKA FI 13 BIAŁA"
+    )

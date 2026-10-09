@@ -150,3 +150,17 @@ async def test_niepoprawny_json_pierwszego_modelu_uruchamia_drugi(catalog):
     assert result.used_provider == "Drugi"
     assert result.pozycje[0].match.kod == "BOJLER 80 L"
     assert mock_recognize.await_count == 2
+
+
+async def test_sruba_8mm_jest_calkowicie_ignorowana(catalog, gemini_key_configured):
+    ai_response = (
+        '{"pozycje":['
+        '{"nazwa":"Sruba 8mm","ilosc_wydana":2,"ilosc_zuzyta":2},'
+        '{"nazwa":"Bojler 80 L","ilosc_wydana":1,"ilosc_zuzyta":null}'
+        ']}'
+    )
+    with _mock_recognize(ai_response):
+        result = await recognize_document_hydraulika([(b"dane", "image/jpeg")], catalog)
+
+    assert [item.rozpoznana_nazwa for item in result.pozycje] == ["Bojler 80 L"]
+    assert result.pozycje[0].match.kod == "BOJLER 80 L"

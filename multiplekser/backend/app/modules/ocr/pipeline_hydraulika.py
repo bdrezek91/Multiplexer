@@ -24,10 +24,12 @@ ustalonego ukladu. Patrz docs/RAPORT_OCR_NIEZAWODNOSC_4.md.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any, Mapping, Optional
 
 from app.modules.matcher import MatchResult, match_against_catalog_hydraulika
 from app.modules.products import Catalog
+from app.modules.parser.shared import strip_diacritics
 
 from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, run_ocr_chain
 from .cooldown import OCRCooldownStore
@@ -77,21 +79,51 @@ _FORM_NOTES = {
 }
 
 
+def _plain_name(value: object) -> str:
+    text = strip_diacritics(str(value or "").lower())
+    text = re.sub(r"[^a-z0-9+ ]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _ignore_hydraulika_item(raw_name: object) -> bool:
+    # Konkretna dopisana recznie "Sruba 8 mm" nie jest materialem do receptury.
+    # Nie dotyka "Sruba do laczenia szafek", "Sruby montazowe" ani innych srub.
+    return bool(re.fullmatch(r"sruba\s*8\s*mm", _plain_name(raw_name)))
+
+
+def _is_generic_m10_zaslepka(raw_name: object) -> bool:
+    return bool(
+        re.fullmatch(
+            r"zaslepka\s+(?:m\s*10\s+)?(?:czarna|biala)(?:\s*\+\s*podkladka)?",
+            _plain_name(raw_name),
+        )
+    )
+
+
 def _build_item_hydraulika(item: dict, catalog: Catalog, magazyn: Optional[str]) -> OCRItemHydraulika:
     raw = str(item["nazwa"]).strip()
-    snap = snap_to_known_item_hydraulika(raw)
 
-    match = match_against_catalog_hydraulika(snap.name, catalog, magazyn=magazyn)
+    # "Zaslepka czarna/biala" jest zweryfikowana nazwa biznesowa, a nie kandydat do fuzzy
+    # snapowania na stare FI 13/17/19. Matcher dostaje surowa nazwe i twarda regula wybiera M10.
+    if _is_generic_m10_zaslepka(raw):
+        recognized_name = raw
+        snap_status = "exact"
+    else:
+        snap = snap_to_known_item_hydraulika(raw)
+        recognized_name = snap.name
+        snap_status = snap.status
+
+    match = match_against_catalog_hydraulika(recognized_name, catalog, magazyn=magazyn)
 
     return OCRItemHydraulika(
-        rozpoznana_nazwa=snap.name,
+        rozpoznana_nazwa=recognized_name,
         ilosc_wydana=_pick_raw_qty(item, "ilosc_wydana"),
         ilosc_zuzyta=_pick_raw_qty(item, "ilosc_zuzyta"),
         uwagi=str(item.get("uwagi") or ""),
         confidence=item.get("confidence"),
-        needs_review=snap.status != "exact",
-        off_form=snap.status == "off",
-        form_note=_FORM_NOTES.get(snap.status, "").format(raw=raw) if snap.status != "exact" else "",
+        needs_review=snap_status != "exact",
+        off_form=snap_status == "off",
+        form_note=_FORM_NOTES.get(snap_status, "").format(raw=raw) if snap_status != "exact" else "",
         match=match,
     )
 
@@ -133,7 +165,10 @@ async def recognize_document_hydraulika(
         numer_plomby = _clean_header_text(parsed.get("numer_plomby"))
 
     schema_items = [it for it in raw_items if validate_item(it)]
-    valid_items = [it for it in schema_items if is_actionable_item(it)]
+    valid_items = [
+        it for it in schema_items
+        if is_actionable_item(it) and not _ignore_hydraulika_item(it.get("nazwa"))
+    ]
     rejected_count = len(raw_items) - len(schema_items)
 
     pozycje = [_build_item_hydraulika(it, catalog, magazyn) for it in valid_items]

@@ -18,11 +18,27 @@ from .result import MatchResult, QUALITY_OK, QUALITY_WARN, QUALITY_BAD
 from .shared import alias_hits, apply_warehouse_variant, resolve_by_kod
 from .special_rules import SpecialRule, evaluate_special_rules
 
-# Domyslnie brak regul specjalnych dla Hydrauliki - MANUAL_OVERRIDES/WAREHOUSE_OVERRIDES byly
-# swiadomie puste juz w oryginalnej analizie katalogu (patrz docs/MIGRATION_PLAN_HYDRAULIKA.md,
-# tabela w sekcji 2). Ten sam mechanizm co special_rules.py (Elektryka) - gotowy punkt
-# rozszerzenia, gdy pojawi sie pierwszy realny wyjatek do obsluzenia.
-DEFAULT_SPECIAL_RULES_HYDRAULIKA: list[SpecialRule] = []
+# Zweryfikowane wyjatki biznesowe Hydrauliki. Papierowa nazwa "Zaslepka czarna/biala"
+# oznacza obecnie zestaw M10 z podkladka w Optimie. Jawne stare warianty FI 13/17/19 nie
+# wpadaja w te reguly, bo wymagamy dokladnie ogolnej nazwy (opcjonalnie z M10/podkladka).
+DEFAULT_SPECIAL_RULES_HYDRAULIKA: list[SpecialRule] = [
+    SpecialRule(
+        rule_type="override",
+        pattern=r"^\s*zaslepka\s+(?:m\s*10\s+)?czarna(?:\s*\+\s*podkladka)?\s*$",
+        target_kod="ZAŚLEPKA M10 CZARNA + PODKŁADKA",
+        normalize=True,
+        priority=10,
+        description="Hydraulika: ogolna zaslepka czarna -> aktualny zestaw M10 czarny + podkladka.",
+    ),
+    SpecialRule(
+        rule_type="override",
+        pattern=r"^\s*zaslepka\s+(?:m\s*10\s+)?biala(?:\s*\+\s*podkladka)?\s*$",
+        target_kod="ZAŚLEPKA M10 BIAŁA + PODKŁADKA",
+        normalize=True,
+        priority=11,
+        description="Hydraulika: ogolna zaslepka biala -> aktualny zestaw M10 bialy + podkladka.",
+    ),
+]
 
 
 def match_against_catalog_hydraulika(

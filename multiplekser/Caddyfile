@@ -41,10 +41,6 @@
 	redir /reklamacjeOS /reklamacjeOS/ 308
 
 	handle_path /reklamacjeOS/* {
-		basic_auth {
-			"admin" "$2a$14$KAHkUXyECBb9J62Yn0dzuulGpQ0pd.3A98tzRusXQ/61sfnrjdTcu"
-		}
-
 		reverse_proxy reklamacjeos-backend:8000
 	}
 	# END REKLAMACJEOS
@@ -56,6 +52,20 @@
 		reverse_proxy konfigurator3d-web:80
 	}
 	# END KONFIGURATOR3D
+
+	# BEGIN ONEDRIVE REPORT PROXY
+	handle_path /api/raport-onedrive/* {
+		reverse_proxy onedrive-report-proxy:3000
+	}
+	# END ONEDRIVE REPORT PROXY
+
+	# BEGIN PLYTYOS
+	redir /plytyOS /plytyOS/ 308
+
+	handle_path /plytyOS/* {
+		reverse_proxy plytyos-app:8000
+	}
+	# END PLYTYOS
 
 	handle {
 		reverse_proxy web:80

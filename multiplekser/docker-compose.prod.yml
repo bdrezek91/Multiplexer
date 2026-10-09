@@ -179,6 +179,26 @@ services:
     logging: *default-logging
     restart: unless-stopped
 
+  technical-vision:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: multiplekser-technical-vision
+    command: uvicorn app.internal_technical_vision:app --host 0.0.0.0 --port 8090 --workers 1
+    healthcheck:
+      disable: true
+    environment:
+      GEMINI_API_KEY_FREE: ${GEMINI_API_KEY_FREE:-}
+      GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
+      OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-90}
+    networks:
+      - default
+      - multiplekser-shared
+    mem_limit: 768m
+    cpus: "1.0"
+    logging: *default-logging
+    restart: unless-stopped
+
   web:
     build: ./frontend
     # Bez publikacji portu na hosta - jedynym wejsciem z zewnatrz jest teraz `caddy` (80/443),

@@ -104,7 +104,18 @@ export function DocumentsPage() {
       setCompressionWarning(null)
       if (fileInputRef.current) fileInputRef.current.value = ''
       if (cameraInputRef.current) cameraInputRef.current.value = ''
-      navigate(`/documents/${created.id}`)
+
+      // Po uploadzie robimy pelne wejscie na swiezo utworzony dokument zamiast miekkiej
+      // nawigacji SPA. W Chrome zdarzalo sie, ze bezposredni navigate() zaraz po POST 202
+      // zostawial pusty ekran do recznego F5, mimo ze backend poprawnie przetwarzal wydawke.
+      // Hard navigation pobiera od razu aktualny stan queued/processing/done z serwera i nie
+      // wysyla pliku ponownie - POST zakonczyl sie juz powyzej.
+      const target = `/documents/${created.id}`
+      if (import.meta.env.MODE === 'test') {
+        navigate(target)
+      } else {
+        window.location.assign(target)
+      }
     },
     onError: (err) => {
       setError(err instanceof ApiError ? err.detail : 'Nie udało się wysłać dokumentu')

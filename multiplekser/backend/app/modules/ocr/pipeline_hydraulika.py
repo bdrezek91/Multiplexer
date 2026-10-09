@@ -125,9 +125,13 @@ def _plain_name(value: object) -> str:
 
 
 def _ignore_hydraulika_item(raw_name: object) -> bool:
-    # Konkretna dopisana recznie "Sruba 8 mm" nie jest materialem do receptury.
-    # Nie dotyka "Sruba do laczenia szafek", "Sruby montazowe" ani innych srub.
-    return bool(re.fullmatch(r"sruba\s*8\s*mm", _plain_name(raw_name)))
+    # Zweryfikowane koszty, ktore NIE przechodza przez Optime i nie maja trafic do receptury/TXT.
+    # Reguly sa celowo bardzo waskie, zeby nie wyciac innych srub ani innych zaslepek.
+    name = _plain_name(raw_name)
+    return bool(
+        re.fullmatch(r"sruba\s*8\s*mm", name)
+        or re.fullmatch(r"zaslepka\s*127\s*czerwona", name)
+    )
 
 
 def _is_generic_m10_zaslepka(raw_name: object) -> bool:

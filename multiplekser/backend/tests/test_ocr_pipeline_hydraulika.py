@@ -152,6 +152,19 @@ async def test_niepoprawny_json_pierwszego_modelu_uruchamia_drugi(catalog):
     assert mock_recognize.await_count == 2
 
 
+async def test_zaslepka_127_czerwona_jest_calkowicie_ignorowana(catalog, gemini_key_configured):
+    ai_response = (
+        '{"pozycje":['
+        '{"nazwa":"Zaślepka 127 CZERWONA","ilosc_wydana":1,"ilosc_zuzyta":null},'
+        '{"nazwa":"Bojler 80 L","ilosc_wydana":1,"ilosc_zuzyta":null}'
+        ']}'
+    )
+    with _mock_recognize(ai_response):
+        result = await recognize_document_hydraulika([(b"dane", "image/jpeg")], catalog)
+
+    assert [item.rozpoznana_nazwa for item in result.pozycje] == ["Bojler 80 L"]
+
+
 async def test_sruba_8mm_jest_calkowicie_ignorowana(catalog, gemini_key_configured):
     ai_response = (
         '{"pozycje":['

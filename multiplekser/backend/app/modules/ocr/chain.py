@@ -7,10 +7,9 @@ Dwa warianty lancucha, obydwa budowane na biezaco z `settings` (patrz kazda funk
   kluczu platnym (ostatni krok, uzywany WYLACZNIE gdy wszystkie kroki Gemini zawioda - nie przy
   kazdym dokumencie). Tu liczy sie przede wszystkim jakosc, wiec zaczynamy od najmocniejszego
   modelu.
-- `classify_ocr_chain()` - sama klasyfikacja dzialu (ocr/classify.py, Krok A), zadanie na tyle
-  proste (jedno pole tekstowe z naglowka), ze zaczyna od NAJSLABSZEGO/najtanszego modelu Gemini,
-  zeby nie marnowac zasobow mocniejszych modeli na ten krok; fallback dalej przez te same
-  modele/klucze co wyzej.
+- `classify_ocr_chain()` - sama klasyfikacja dzialu (ocr/classify.py, Krok A). Po pomiarach
+  produkcyjnych zaczyna od 3.5 Flash Lite, bo 3.1 Flash Lite potrafil zuzyc pelny timeout
+  bez wyniku; fallback dalej przez pozostale modele/klucze.
 - `quantity_verification_chain()` - dodatkowa kontrola ilosci dla pojedynczych niejasnych
   wierszy (ocr/verify.py), wspolna dla Elektryki i Hydrauliki. Na zyczenie uzytkownika (2026-08-07)
   BEZ platnych krokow (Gemini platny, OpenAI) - to dorazne sprawdzenie kilku komorek, nie caly
@@ -83,19 +82,18 @@ def default_ocr_chain() -> list[OCRChainStep]:
 
 
 def classify_ocr_chain() -> list[OCRChainStep]:
-    """Lancuch dla samej klasyfikacji dzialu (Krok A z ocr/classify.py) - to zadanie jest
-    bardzo proste (odczytanie jednego pola tekstowego z naglowka), wiec w odroznieniu od
-    `default_ocr_chain()` (uzywanego do pelnego odczytu pozycji, gdzie na pierwszym miejscu
-    liczy sie jakosc) zaczynamy od NAJSLABSZEGO/najtanszego modelu Gemini na kluczu darmowym,
-    zeby nie marnowac zasobow mocniejszych modeli na tak prosty krok. Fallback nadal przechodzi
-    przez te same modele/klucze co domyslny lancuch (w razie bledu/przeciazenia), z tym samym
-    ostatecznym zabezpieczeniem na OpenAI jako ostatni krok."""
+    """Lancuch dla samej klasyfikacji dzialu.
+
+    Po pomiarze na realnych wydawkach 3.5 Flash Lite jest pierwszy: 3.1 Flash Lite potrafil
+    zuzyc cale 8 s timeoutu bez wyniku, podczas gdy 3.5 Flash Lite klasyfikowal ten sam dokument
+    w ok. 1-2 s. Fallback pozostaje bez zmian.
+    """
     gemini = GeminiProvider()
     free_key = settings.gemini_api_key_free
     paid_key = settings.gemini_api_key_paid
     return [
-        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 8),
         OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 8),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 8),
         OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 10),
         OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 10),
         OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key, 10),

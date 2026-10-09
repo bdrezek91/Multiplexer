@@ -6,6 +6,7 @@ import pytest
 from app.modules.ocr.chain import (
     AllProvidersFailedError,
     OCRChainStep,
+    classify_ocr_chain,
     default_ocr_chain,
     quantity_verification_chain,
     run_ocr_chain,
@@ -344,6 +345,13 @@ async def test_domyslny_chain_zaczyna_od_najszybszego_modelu_z_benchmarku():
     first = chain[0]
     assert first.model == "gemini-3.5-flash-lite"
     assert first.timeout_seconds == 18
+
+
+async def test_classification_chain_zaczyna_od_3_5_flash_lite():
+    chain = classify_ocr_chain()
+    assert chain[0].model == "gemini-3.5-flash-lite"
+    assert chain[0].timeout_seconds == 8
+    assert chain[1].model == "gemini-3.1-flash-lite"
 
 
 async def test_background_zaczyna_od_3_flash_preview():

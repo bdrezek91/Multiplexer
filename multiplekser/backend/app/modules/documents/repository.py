@@ -42,8 +42,11 @@ HISTORICAL_ADJUSTMENT_BY_EMAIL = {
 }
 
 
-# Szacunkowy rozklad dzienny do wykresu. Wartosci sa stale (nie losuja sie przy odswiezeniu),
-# ale celowo nierowne miedzy dniami, zeby nie sugerowac sztucznego stalego tempa.
+# Rozklad dzienny do wykresu:
+# - 2026-09-08..2026-09-25: tylko korekta szacunkowa 177 wydawek, rozlozona nierowno,
+# - od 2026-09-28: przyrosty trwalego licznika odtworzone z codziennych backupow bazy.
+# Nie rozrzucamy realnych 130 wydawek losowo po dniach. 2026-10-09 ma 0, bo backup
+# z rana i stan biezacy maja identyczne liczniki.
 # Tylko dni robocze; w okresie 2026-09-08..2026-10-09 nie przypada polskie swieto ustawowe.
 _STATS_WORKDAYS = [
     "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11",
@@ -57,25 +60,25 @@ _STATS_HISTORICAL_DAYS = 14
 _STATS_DAILY_DOCUMENTS_BY_EMAIL = {
     "marzena.wiesner-szmit@dampol-investment.com": [
         5, 7, 4, 8, 6, 9, 5, 7, 4, 8, 6, 7, 5, 8,
-        6, 4, 7, 3, 5, 6, 4, 5, 3, 7,
+        10, 4, 4, 11, 7, 0, 4, 10, 0, 0,
     ],
     "bdrezek91@gmail.com": [
         7, 5, 8, 4, 7, 6, 9, 5, 8, 4, 7, 6, 5, 7,
-        5, 3, 6, 4, 5, 4, 3, 5, 2, 5,
+        23, 13, 1, 1, 0, 4, 0, 0, 0, 0,
     ],
     "paula.kordek@dampol-investment.com": [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        3, 4, 2, 5, 4, 3, 5, 2, 4, 4,
+        0, 4, 2, 4, 5, 0, 11, 2, 8, 0,
     ],
     "krzysztof.cabak@dampol-investment.com": [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+        0, 0, 0, 0, 0, 2, 0, 0, 0, 0,
     ],
 }
 
 
 def get_document_stats_daily(allowed_emails: set[str] | None = None) -> list[dict]:
-    """Staly, nierowny dzienny rozklad szacunkowy dla wykresu statystyk."""
+    """Dzienny rozklad: korekta szacunkowa + odtworzone realne przyrosty licznikow."""
     rows = []
     unit_money = MINUTES_PER_MANUAL_DOCUMENT / 60 * HOURLY_RATE_PLN
 

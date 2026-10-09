@@ -256,6 +256,30 @@ def list_documents(session: Session, *, user_id=None, limit: int = 50, offset: i
     return query.order_by(DocumentModel.created_at.desc()).offset(offset).limit(limit).all()
 
 
+def claim_document_for_processing(session: Session, document_id) -> Optional[DocumentModel]:
+    """Atomowo przejmuje dokument queued -> processing.
+
+    Celery moze dostarczyc ten sam task wiecej niz raz. Warunkowy UPDATE gwarantuje, ze tylko
+    jeden worker dostanie prawo do OCR; pozostale wyjda bez ponownego mark_done() i bez
+    podwojnego zwiekszenia dokumenty_ukonczone_licznik.
+    """
+    uid = _to_uuid(document_id)
+    if uid is None:
+        return None
+    claimed = (
+        session.query(DocumentModel)
+        .filter(DocumentModel.id == uid, DocumentModel.status == "queued")
+        .update(
+            {DocumentModel.status: "processing", DocumentModel.ai_trace: []},
+            synchronize_session=False,
+        )
+    )
+    session.commit()
+    if claimed != 1:
+        return None
+    return get_document(session, uid)
+
+
 def mark_processing(session: Session, document: DocumentModel) -> None:
     document.status = "processing"
     document.ai_trace = []

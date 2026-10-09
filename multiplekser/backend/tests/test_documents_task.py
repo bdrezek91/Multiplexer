@@ -239,6 +239,41 @@ def test_run_ocr_task_sukces_zapisuje_pozycje(
     assert item.off_form is True
 
 
+def test_run_ocr_task_drugi_raz_nie_przelicza_i_nie_dubluje_licznika(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Duplikat tasku dla document_id po status=done jest no-op i licznik rosnie tylko raz."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+    ai_response = (
+        '{"pozycje": [{"nazwa": "Grzejnik 1800W", '
+        '"ilosc_wydana": "2", "confidence": 98}]}'
+    )
+
+    with _mock_recognize(ai_response) as recognize:
+        assert run_ocr_task(document_id, db_session) is True
+        assert recognize.call_count >= 2  # klasyfikacja + glowny OCR
+
+    db_session.refresh(admin_user)
+    assert admin_user.dokumenty_ukonczone_licznik == 1
+    first = doc_repo.get_document(db_session, document_id)
+    assert first.status == "done"
+    assert len(first.items) == 1
+
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=AssertionError("duplikat nie moze wejsc do AI")),
+    ):
+        assert run_ocr_task(document_id, db_session) is False
+
+    db_session.refresh(admin_user)
+    assert admin_user.dokumenty_ukonczone_licznik == 1
+    second = doc_repo.get_document(db_session, document_id)
+    assert second.status == "done"
+    assert len(second.items) == 1
+
+
 def test_run_ocr_task_uzywa_openai_jako_ostatniego_fallbacku_lancucha(
     db_session, admin_user, mocked_storage, gemini_key_configured, openai_key_configured, baza_elektryka_json,
 ):

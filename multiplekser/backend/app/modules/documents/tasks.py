@@ -60,12 +60,18 @@ async def _verify_ambiguous_items(*args, **kwargs):
     )
 
 
-def run_ocr_task(document_id: str, session: Session) -> None:
+def run_ocr_task(document_id: str, session: Session) -> bool:
     from .storage import get_storage  # lazy import - unika inicjalizacji klienta S3 przy imporcie modulu
 
-    document = repository.get_document(session, document_id)
+    # Atomowy claim chroni przed ponownym dostarczeniem tego samego zadania przez broker,
+    # rownoleglym workerem i przypadkowym recznym odpaleniem tego samego document_id.
+    document = repository.claim_document_for_processing(session, document_id)
     if document is None:
-        return
+        logger.info(
+            "OCR - dokument nie jest juz queued, pomijam duplikat",
+            extra={"document_id": document_id},
+        )
+        return False
 
     task_started = time.perf_counter()
     timings: dict[str, int] = {}
@@ -73,7 +79,6 @@ def run_ocr_task(document_id: str, session: Session) -> None:
     if queue_wait is not None:
         timings["timing_ocr_queue_wait"] = queue_wait
 
-    repository.mark_processing(session, document)
     logger.info("OCR - start przetwarzania", extra={"document_id": document_id})
 
     def save_ai_event(event: dict[str, object]) -> None:
@@ -207,12 +212,16 @@ def run_ocr_task(document_id: str, session: Session) -> None:
             session.rollback()
             logger.exception("Retencja dokumentow nie powiodla sie")
 
+    return True
+
 
 @celery_app.task(name="documents.process_ocr")
 def process_ocr_document(document_id: str) -> None:
     session = SessionLocal()
     try:
-        run_ocr_task(document_id, session)
+        processed = run_ocr_task(document_id, session)
+        if not processed:
+            return
         completed = repository.get_document(session, document_id)
         if completed is not None and completed.status == "done":
             try:

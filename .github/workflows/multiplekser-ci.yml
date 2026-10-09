@@ -17,6 +17,10 @@ defaults:
 
 jobs:
   backend:
+    env:
+      DATABASE_URL: postgresql://multiplekser:multiplekser_dev@localhost:5432/multiplekser_test
+      TEST_DATABASE_URL: postgresql://multiplekser:multiplekser_dev@localhost:5432/multiplekser_test
+      REDIS_URL: redis://localhost:6379/0
     # Rekomendacja z walidacji architektury (2026-08-31): pelna suita testow backendu
     # wymaga prawdziwego Postgresa (testy katalogu/produktow/dokumentow uzywaja realnych
     # zapytan SQLAlchemy, nie sa mockowane) - bez tego CI nie wykrylby regresji, ktore

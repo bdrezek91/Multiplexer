@@ -144,11 +144,27 @@ class UserDocumentStatsOut(BaseModel):
     pieniadze_zaoszczedzone: float
 
 
+class DailyUserDocumentStatsOut(BaseModel):
+    email: str
+    dokumenty: int
+    minuty_zaoszczedzone: int
+    pieniadze_zaoszczedzone: float
+
+
+class DailyDocumentStatsOut(BaseModel):
+    data: str
+    per_user: list[DailyUserDocumentStatsOut]
+    dokumenty: int
+    minuty_zaoszczedzone: int
+    pieniadze_zaoszczedzone: float
+
+
 class DocumentStatsOut(BaseModel):
     """Zestawienie dla panelu administratora: ile dokumentow przerobil kazdy uzytkownik i ile to
     daje zaoszczedzonego czasu/pieniedzy wzgledem recznego wprowadzania - zalozenia (8 min/wydawke,
     55 zl brutto/h kosztu pracodawcy) patrz repository.py."""
     per_user: list[UserDocumentStatsOut]
+    daily: list[DailyDocumentStatsOut]
     razem_dokumenty: int
     razem_dokumenty_potwierdzone: int
     razem_dokumenty_historyczne_szacowane: int

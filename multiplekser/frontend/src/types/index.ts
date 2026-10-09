@@ -25,8 +25,24 @@ export interface UserDocumentStats {
   pieniadze_zaoszczedzone: number
 }
 
+export interface DailyUserDocumentStats {
+  email: string
+  dokumenty: number
+  minuty_zaoszczedzone: number
+  pieniadze_zaoszczedzone: number
+}
+
+export interface DailyDocumentStats {
+  data: string
+  per_user: DailyUserDocumentStats[]
+  dokumenty: number
+  minuty_zaoszczedzone: number
+  pieniadze_zaoszczedzone: number
+}
+
 export interface DocumentStats {
   per_user: UserDocumentStats[]
+  daily: DailyDocumentStats[]
   razem_dokumenty: number
   razem_dokumenty_potwierdzone: number
   razem_dokumenty_historyczne_szacowane: number

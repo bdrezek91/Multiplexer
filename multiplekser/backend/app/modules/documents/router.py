@@ -651,6 +651,7 @@ def get_document_stats(
     )
     return DocumentStatsOut(
         per_user=[UserDocumentStatsOut(**row) for row in per_user],
+        daily=repository.get_document_stats_daily({row["email"] for row in per_user}),
         razem_dokumenty=razem_dokumenty,
         razem_dokumenty_potwierdzone=razem_potwierdzone,
         razem_dokumenty_historyczne_szacowane=razem_historyczne,

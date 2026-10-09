@@ -13,6 +13,9 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import EditIcon from '@mui/icons-material/Edit'
@@ -26,7 +29,7 @@ import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { UserFormDialog } from './UserFormDialog'
 import { ResetPasswordDialog } from './ResetPasswordDialog'
-import type { CurrentUser } from '../types'
+import type { CurrentUser, DailyDocumentStats } from '../types'
 
 // Statystyki wydajnosci (2026-09-21, na zyczenie uzytkownika) - ile dokumentow przerobil kazdy
 // uzytkownik, zestawione z szacowanym zaoszczedzonym czasem/pieniedzmi wzgledem recznego
@@ -37,6 +40,172 @@ function StatCard({ label, value }: { label: string; value: string }) {
       <Typography variant="h5">{value}</Typography>
       <Typography variant="body2" color="text.secondary">{label}</Typography>
     </Paper>
+  )
+}
+
+type ChartMetric = 'documents' | 'hours' | 'money'
+
+const USER_COLORS = ['primary.main', 'secondary.main', 'success.main', 'warning.main']
+
+function displayUserName(email: string): string {
+  if (email.startsWith('marzena.')) return 'Marzena'
+  if (email.startsWith('bdrezek91@')) return 'Bartek'
+  if (email.startsWith('paula.')) return 'Paula'
+  if (email.startsWith('krzysztof.')) return 'Krzysztof'
+  return email.split('@')[0]
+}
+
+function metricValue(
+  row: { dokumenty: number; minuty_zaoszczedzone: number; pieniadze_zaoszczedzone: number },
+  metric: ChartMetric,
+): number {
+  if (metric === 'hours') return row.minuty_zaoszczedzone / 60
+  if (metric === 'money') return row.pieniadze_zaoszczedzone
+  return row.dokumenty
+}
+
+function formatMetric(value: number, metric: ChartMetric): string {
+  if (metric === 'hours') return value.toFixed(1) + ' h'
+  if (metric === 'money') return value.toFixed(2) + ' zł'
+  return String(Math.round(value))
+}
+
+function DailyStatsChart({ daily }: { daily: DailyDocumentStats[] }) {
+  const [metric, setMetric] = useState<ChartMetric>('documents')
+
+  if (daily.length === 0) return null
+
+  const emails = Array.from(new Set(daily.flatMap((day) => day.per_user.map((row) => row.email))))
+  const colorByEmail = new Map(emails.map((email, index) => [email, USER_COLORS[index % USER_COLORS.length]]))
+  const maxValue = Math.max(...daily.map((day) => metricValue(day, metric)), 1)
+
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        justifyContent="space-between"
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        gap={1}
+        sx={{ mb: 1.5 }}
+      >
+        <Typography variant="subtitle2">Przebieg dzienny</Typography>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={metric}
+          onChange={(_, value: ChartMetric | null) => value && setMetric(value)}
+        >
+          <ToggleButton value="documents">Wydawki</ToggleButton>
+          <ToggleButton value="hours">Godziny</ToggleButton>
+          <ToggleButton value="money">Oszczędności</ToggleButton>
+        </ToggleButtonGroup>
+      </Stack>
+
+      <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+        {emails.map((email) => (
+          <Stack key={email} direction="row" spacing={0.75} alignItems="center">
+            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: colorByEmail.get(email) }} />
+            <Typography variant="caption" color="text.secondary">
+              {displayUserName(email)}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+
+      <Box sx={{ overflowX: 'auto', pb: 1 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: 0.75,
+            minWidth: Math.max(860, daily.length * 42),
+            height: 245,
+            px: 1,
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
+        >
+          {daily.map((day) => {
+            const total = metricValue(day, metric)
+            const barHeight = Math.max(8, (total / maxValue) * 185)
+            const dateLabel = new Date(day.data + 'T00:00:00').toLocaleDateString('pl-PL', {
+              day: '2-digit',
+              month: '2-digit',
+            })
+            const fullDate = new Date(day.data + 'T00:00:00').toLocaleDateString('pl-PL', {
+              weekday: 'long',
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+            })
+
+            return (
+              <Box
+                key={day.data}
+                sx={{ width: 34, flex: '0 0 34px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+              >
+                <Tooltip
+                  arrow
+                  placement="top"
+                  title={
+                    <Box sx={{ minWidth: 180 }}>
+                      <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                        {fullDate}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mb: 0.75 }}>
+                        Razem: {formatMetric(total, metric)}
+                      </Typography>
+                      {day.per_user.map((row) => (
+                        <Typography key={row.email} variant="caption" display="block">
+                          {displayUserName(row.email)}: {formatMetric(metricValue(row, metric), metric)}
+                        </Typography>
+                      ))}
+                    </Box>
+                  }
+                >
+                  <Box
+                    sx={{
+                      width: 28,
+                      height: barHeight,
+                      minHeight: 8,
+                      display: 'flex',
+                      flexDirection: 'column-reverse',
+                      overflow: 'hidden',
+                      borderRadius: '5px 5px 2px 2px',
+                      cursor: 'default',
+                      boxShadow: 1,
+                      transition: 'height 180ms ease',
+                    }}
+                  >
+                    {day.per_user.map((row) => {
+                      const value = metricValue(row, metric)
+                      const share = total > 0 ? (value / total) * 100 : 0
+                      return (
+                        <Box
+                          key={row.email}
+                          sx={{
+                            height: share + '%',
+                            minHeight: value > 0 ? 2 : 0,
+                            bgcolor: colorByEmail.get(row.email),
+                          }}
+                        />
+                      )
+                    })}
+                  </Box>
+                </Tooltip>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 0.75, fontSize: '0.64rem', transform: 'rotate(-45deg)', transformOrigin: 'top center' }}
+                >
+                  {dateLabel}
+                </Typography>
+              </Box>
+            )
+          })}
+        </Box>
+      </Box>
+    </Box>
   )
 }
 
@@ -77,6 +246,9 @@ function DocumentStatsPanel() {
           value={`${stats.razem_pieniadze_zaoszczedzone.toFixed(2)} zł`}
         />
       </Stack>
+
+      <DailyStatsChart daily={stats.daily} />
+
       <TableContainer>
         <Table size="small">
           <TableHead>

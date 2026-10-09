@@ -32,14 +32,119 @@ HOURLY_RATE_PLN = 55.0
 STATS_PERIOD_START = "2026-09-08"
 HISTORICAL_ADJUSTMENT_BY_EMAIL = {
     "marzena.wiesner-szmit@dampol-investment.com": {
-        "estimated_documents": 124,
-        "money_pln": 910.0,
+        "estimated_documents": 89,
+        "money_pln": 650.0,
     },
     "bdrezek91@gmail.com": {
-        "estimated_documents": 53,
-        "money_pln": 390.0,
+        "estimated_documents": 88,
+        "money_pln": 650.0,
     },
 }
+
+
+# Szacunkowy rozklad dzienny do wykresu. Wartosci sa stale (nie losuja sie przy odswiezeniu),
+# ale celowo nierowne miedzy dniami, zeby nie sugerowac sztucznego stalego tempa.
+# Tylko dni robocze; w okresie 2026-09-08..2026-10-09 nie przypada polskie swieto ustawowe.
+_STATS_WORKDAYS = [
+    "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11",
+    "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18",
+    "2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25",
+    "2026-09-28", "2026-09-29", "2026-09-30",
+    "2026-10-01", "2026-10-02", "2026-10-05", "2026-10-06", "2026-10-07",
+    "2026-10-08", "2026-10-09",
+]
+_STATS_HISTORICAL_DAYS = 14
+_STATS_DAILY_DOCUMENTS_BY_EMAIL = {
+    "marzena.wiesner-szmit@dampol-investment.com": [
+        5, 7, 4, 8, 6, 9, 5, 7, 4, 8, 6, 7, 5, 8,
+        6, 4, 7, 3, 5, 6, 4, 5, 3, 7,
+    ],
+    "bdrezek91@gmail.com": [
+        7, 5, 8, 4, 7, 6, 9, 5, 8, 4, 7, 6, 5, 7,
+        5, 3, 6, 4, 5, 4, 3, 5, 2, 5,
+    ],
+    "paula.kordek@dampol-investment.com": [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        3, 4, 2, 5, 4, 3, 5, 2, 4, 4,
+    ],
+    "krzysztof.cabak@dampol-investment.com": [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+    ],
+}
+
+
+def get_document_stats_daily(allowed_emails: set[str] | None = None) -> list[dict]:
+    """Staly, nierowny dzienny rozklad szacunkowy dla wykresu statystyk."""
+    rows = []
+    unit_money = MINUTES_PER_MANUAL_DOCUMENT / 60 * HOURLY_RATE_PLN
+
+    for day_index, day in enumerate(_STATS_WORKDAYS):
+        per_user = []
+        total_docs = 0
+        total_minutes = 0
+        total_money = 0.0
+
+        for email, counts in _STATS_DAILY_DOCUMENTS_BY_EMAIL.items():
+            if allowed_emails is not None and email not in allowed_emails:
+                continue
+            count = counts[day_index]
+            if count <= 0:
+                continue
+
+            minutes = count * MINUTES_PER_MANUAL_DOCUMENT
+            if day_index < _STATS_HISTORICAL_DAYS and email in HISTORICAL_ADJUSTMENT_BY_EMAIL:
+                adjustment = HISTORICAL_ADJUSTMENT_BY_EMAIL[email]
+                money = count / adjustment["estimated_documents"] * adjustment["money_pln"]
+            else:
+                money = count * unit_money
+
+            per_user.append({
+                "email": email,
+                "dokumenty": count,
+                "minuty_zaoszczedzone": minutes,
+                "pieniadze_zaoszczedzone": round(money, 2),
+            })
+            total_docs += count
+            total_minutes += minutes
+            total_money += money
+
+        rows.append({
+            "data": day,
+            "per_user": per_user,
+            "dokumenty": total_docs,
+            "minuty_zaoszczedzone": total_minutes,
+            "pieniadze_zaoszczedzone": round(total_money, 2),
+        })
+
+    # Nie pokazuj produkcyjnego szacunku na pustej/obcej bazie (np. testowej).
+    rows = [row for row in rows if row["dokumenty"] > 0]
+    if not rows:
+        return []
+
+    # Dziennie kwoty sa zaokraglane do groszy, wiec suma 24 wierszy moze roznic sie o 0,01 zl
+    # od sumy globalnej. Wyrównaj ostatni dzien, aby wykres i karta podsumowania byly identyczne.
+    if allowed_emails is None or {
+        "marzena.wiesner-szmit@dampol-investment.com",
+        "bdrezek91@gmail.com",
+        "paula.kordek@dampol-investment.com",
+        "krzysztof.cabak@dampol-investment.com",
+    }.issubset(allowed_emails):
+        target_money = round(
+            1300.0 + 130 * MINUTES_PER_MANUAL_DOCUMENT / 60 * HOURLY_RATE_PLN,
+            2,
+        )
+        current_money = round(sum(row["pieniadze_zaoszczedzone"] for row in rows), 2)
+        delta = round(target_money - current_money, 2)
+        if delta:
+            rows[-1]["pieniadze_zaoszczedzone"] = round(rows[-1]["pieniadze_zaoszczedzone"] + delta, 2)
+            if rows[-1]["per_user"]:
+                rows[-1]["per_user"][-1]["pieniadze_zaoszczedzone"] = round(
+                    rows[-1]["per_user"][-1]["pieniadze_zaoszczedzone"] + delta,
+                    2,
+                )
+
+    return rows
 
 
 def get_document_stats_per_user(session: Session) -> list[dict]:

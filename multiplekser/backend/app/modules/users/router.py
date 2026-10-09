@@ -166,6 +166,24 @@ def update_user(
     return _to_user_out(user)
 
 
+
+
+@users_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(
+    user_id: str,
+    session: Session = Depends(get_db),
+    admin: UserModel = Depends(require_admin),
+) -> None:
+    if str(admin.id) == user_id:
+        raise HTTPException(status_code=400, detail="Nie można usunąć własnego konta administratora")
+    try:
+        repository.delete_user(session, user_id)
+    except repository.UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except repository.UserHasHistoryError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
 @users_router.post("/{user_id}/reset-password", response_model=UserOut, dependencies=[Depends(require_admin)])
 def reset_password(user_id: str, data: PasswordResetRequest, session: Session = Depends(get_db)):
     try:

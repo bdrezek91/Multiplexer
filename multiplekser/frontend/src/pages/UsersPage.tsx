@@ -18,8 +18,9 @@ import {
 import EditIcon from '@mui/icons-material/Edit'
 import AddIcon from '@mui/icons-material/Add'
 import KeyIcon from '@mui/icons-material/VpnKey'
-import { useQuery } from '@tanstack/react-query'
-import { listUsers } from '../api/users'
+import DeleteIcon from '@mui/icons-material/Delete'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { deleteUser, listUsers } from '../api/users'
 import { getDocumentStats } from '../api/documents'
 import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
@@ -109,10 +110,12 @@ function DocumentStatsPanel() {
 
 export function UsersPage() {
   const { user: currentUser } = useAuth()
+  const queryClient = useQueryClient()
 
   const [formOpen, setFormOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<CurrentUser | null>(null)
   const [resetTarget, setResetTarget] = useState<CurrentUser | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const { data: users, isLoading, error } = useQuery({
     queryKey: ['users'],
@@ -129,6 +132,28 @@ export function UsersPage() {
     setFormOpen(true)
   }
 
+  const deleteMutation = useMutation({
+    mutationFn: (u: CurrentUser) => deleteUser(u.id),
+    onSuccess: () => {
+      setDeleteError(null)
+      void queryClient.invalidateQueries({ queryKey: ['users'] })
+      void queryClient.invalidateQueries({ queryKey: ['documentStats'] })
+    },
+    onError: (err) => {
+      setDeleteError(err instanceof ApiError ? err.detail : 'Nie udało się usunąć użytkownika')
+    },
+  })
+
+  const handleDelete = (u: CurrentUser) => {
+    if (currentUser?.id === u.id) return
+    setDeleteError(null)
+    const confirmed = window.confirm(
+      'Usunąć użytkownika "' + u.email + '"? Tej operacji nie można cofnąć. ' +
+      'Jeśli konto ma historię operacyjną, system odmówi usunięcia i pozostawi możliwość dezaktywacji.',
+    )
+    if (confirmed) deleteMutation.mutate(u)
+  }
+
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
@@ -143,6 +168,11 @@ export function UsersPage() {
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error instanceof ApiError ? error.detail : 'Nie udało się pobrać listy użytkowników'}
+        </Alert>
+      )}
+      {deleteError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {deleteError}
         </Alert>
       )}
 
@@ -183,8 +213,17 @@ export function UsersPage() {
                   <IconButton size="small" onClick={() => openEditDialog(u)} aria-label={`Edytuj ${u.email}`}>
                     <EditIcon fontSize="small" />
                   </IconButton>
-                  <IconButton size="small" onClick={() => setResetTarget(u)} aria-label={`Resetuj hasło ${u.email}`}>
+                  <IconButton size="small" onClick={() => setResetTarget(u)} aria-label={'Resetuj hasło ' + u.email}>
                     <KeyIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleDelete(u)}
+                    aria-label={'Usuń ' + u.email}
+                    title={currentUser?.id === u.id ? 'Nie można usunąć własnego konta' : 'Usuń użytkownika'}
+                    disabled={currentUser?.id === u.id || deleteMutation.isPending}
+                  >
+                    <DeleteIcon fontSize="small" />
                   </IconButton>
                 </TableCell>
               </TableRow>

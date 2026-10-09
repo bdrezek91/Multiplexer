@@ -169,3 +169,49 @@ def test_reset_password_nieistniejacy_uzytkownik_zwraca_404(client, admin_header
 def test_list_users_bez_tokenu_zwraca_401(client):
     r = client.get("/users")
     assert r.status_code == 401
+
+def test_delete_user_sukces_dla_konta_bez_historii(client, db_session, admin_headers):
+    from app.modules.users.repository import create_user, get_user_by_id
+
+    user = create_user(db_session, email="do-usuniecia@test.local", password="haslo1234", rola="magazynier")
+    user_id = str(user.id)
+
+    r = client.delete(f"/users/{user_id}", headers=admin_headers)
+    assert r.status_code == 204, r.text
+    assert get_user_by_id(db_session, user_id) is None
+
+
+def test_delete_user_nie_mozna_usunac_samego_siebie(client, admin_headers, admin_user):
+    r = client.delete(f"/users/{admin_user.id}", headers=admin_headers)
+    assert r.status_code == 400
+
+
+def test_delete_user_wymaga_roli_admin(client, magazynier_headers, admin_user):
+    r = client.delete(f"/users/{admin_user.id}", headers=magazynier_headers)
+    assert r.status_code == 403
+
+
+def test_delete_user_nieistniejacy_zwraca_404(client, admin_headers):
+    r = client.delete("/users/00000000-0000-0000-0000-000000000000", headers=admin_headers)
+    assert r.status_code == 404
+
+
+def test_delete_user_z_historia_dokumentow_zwraca_409(
+    client, db_session, admin_headers, magazynier_user,
+):
+    from app.modules.documents.models import DocumentModel
+
+    document = DocumentModel(
+        user_id=magazynier_user.id,
+        file_key="documents/test/history.pdf",
+        mime="application/pdf",
+        original_filename="history.pdf",
+        status="done",
+        source_type="ai_scan",
+    )
+    db_session.add(document)
+    db_session.commit()
+
+    r = client.delete(f"/users/{magazynier_user.id}", headers=admin_headers)
+    assert r.status_code == 409
+    assert "dane historyczne" in r.json()["detail"]

@@ -23,6 +23,15 @@ class UserNotFoundError(Exception):
         super().__init__(f"Użytkownik {user_id!r} nie istnieje")
 
 
+class UserHasHistoryError(Exception):
+    def __init__(self, email: str):
+        self.email = email
+        super().__init__(
+            f"Nie można usunąć użytkownika {email!r}, ponieważ ma powiązane dane historyczne. "
+            "Zamiast usuwać konto, ustaw je jako nieaktywne."
+        )
+
+
 def get_user_by_email(session: Session, email: str) -> UserModel | None:
     return session.query(UserModel).filter(UserModel.email == email).first()
 
@@ -98,3 +107,36 @@ def set_password(session: Session, user_id: str, new_password: str) -> UserModel
     session.commit()
     session.refresh(user)
     return user
+
+
+def delete_user(session: Session, user_id: str) -> None:
+    """Trwale usuwa konto tylko wtedy, gdy nie ma zadnych danych audytowych."""
+    user = get_user_by_id(session, user_id)
+    if user is None:
+        raise UserNotFoundError(user_id)
+
+    from app.modules.documents.models import DocumentModel, DocumentReportModel
+    from app.modules.products.models import ProductAliasSuggestionModel
+
+    has_documents = session.query(DocumentModel.id).filter(DocumentModel.user_id == user.id).first() is not None
+    has_reports = (
+        session.query(DocumentReportModel.id)
+        .filter(DocumentReportModel.reported_by_id == user.id)
+        .first()
+        is not None
+    )
+    has_alias_history = (
+        session.query(ProductAliasSuggestionModel.id)
+        .filter(
+            (ProductAliasSuggestionModel.created_by_id == user.id)
+            | (ProductAliasSuggestionModel.resolved_by_id == user.id)
+        )
+        .first()
+        is not None
+    )
+
+    if has_documents or has_reports or has_alias_history:
+        raise UserHasHistoryError(user.email)
+
+    session.delete(user)
+    session.commit()

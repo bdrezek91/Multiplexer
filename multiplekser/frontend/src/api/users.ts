@@ -19,3 +19,7 @@ export function resetPassword(id: string, newPassword: string): Promise<CurrentU
     body: { new_password: newPassword },
   })
 }
+
+export function deleteUser(id: string): Promise<void> {
+  return apiRequest<void>('/users/' + encodeURIComponent(id), { method: 'DELETE' })
+}

@@ -137,6 +137,9 @@ class UserDocumentStatsOut(BaseModel):
     user_id: str
     email: str
     dokumenty: int
+    dokumenty_potwierdzone: int
+    dokumenty_historyczne_szacowane: int
+    korekta_historyczna_pln: float
     minuty_zaoszczedzone: int
     pieniadze_zaoszczedzone: float
 
@@ -147,6 +150,10 @@ class DocumentStatsOut(BaseModel):
     55 zl brutto/h kosztu pracodawcy) patrz repository.py."""
     per_user: list[UserDocumentStatsOut]
     razem_dokumenty: int
+    razem_dokumenty_potwierdzone: int
+    razem_dokumenty_historyczne_szacowane: int
+    korekta_historyczna_pln: float
+    data_od: str
     razem_minuty_zaoszczedzone: int
     razem_pieniadze_zaoszczedzone: float
     minuty_na_dokument: int

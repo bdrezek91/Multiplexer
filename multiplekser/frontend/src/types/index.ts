@@ -18,6 +18,9 @@ export interface UserDocumentStats {
   user_id: string
   email: string
   dokumenty: number
+  dokumenty_potwierdzone: number
+  dokumenty_historyczne_szacowane: number
+  korekta_historyczna_pln: number
   minuty_zaoszczedzone: number
   pieniadze_zaoszczedzone: number
 }
@@ -25,6 +28,10 @@ export interface UserDocumentStats {
 export interface DocumentStats {
   per_user: UserDocumentStats[]
   razem_dokumenty: number
+  razem_dokumenty_potwierdzone: number
+  razem_dokumenty_historyczne_szacowane: number
+  korekta_historyczna_pln: number
+  data_od: string
   razem_minuty_zaoszczedzone: number
   razem_pieniadze_zaoszczedzone: number
   minuty_na_dokument: number

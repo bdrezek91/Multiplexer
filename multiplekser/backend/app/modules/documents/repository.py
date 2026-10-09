@@ -23,6 +23,24 @@ from .models import DocumentFileModel, DocumentItemModel, DocumentModel, Documen
 MINUTES_PER_MANUAL_DOCUMENT = 8
 HOURLY_RATE_PLN = 55.0
 
+# Korekta historyczna statystyk (2026-10-09).
+# Trwaly licznik zostal uruchomiony dopiero 2026-09-28 i nie mogl odzyskac dokumentow,
+# ktore retencja skasowala wczesniej. Na podstawie tempa 130 potwierdzonych wydawek
+# w okresie 2026-09-28..2026-10-09 oszacowano brakujacy okres roboczy od 2026-09-08:
+# ok. 177 dodatkowych wydawek odpowiadajacych 1300 zl oszczednosci.
+# Korekta jest CELOWO jawna i oddzielona od potwierdzonego licznika.
+STATS_PERIOD_START = "2026-09-08"
+HISTORICAL_ADJUSTMENT_BY_EMAIL = {
+    "marzena.wiesner-szmit@dampol-investment.com": {
+        "estimated_documents": 124,
+        "money_pln": 910.0,
+    },
+    "bdrezek91@gmail.com": {
+        "estimated_documents": 53,
+        "money_pln": 390.0,
+    },
+}
+
 
 def get_document_stats_per_user(session: Session) -> list[dict]:
     """Ile dokumentow ukonczyl kazdy uzytkownik, zestawione z szacowanym zaoszczedzonym
@@ -39,21 +57,31 @@ def get_document_stats_per_user(session: Session) -> list[dict]:
     Tylko uzytkownicy z co najmniej jednym ukonczonym dokumentem - posortowane malejaco."""
     rows = (
         session.query(UserModel.id, UserModel.email, UserModel.dokumenty_ukonczone_licznik)
-        .filter(UserModel.dokumenty_ukonczone_licznik > 0)
         .order_by(UserModel.dokumenty_ukonczone_licznik.desc())
         .all()
     )
     stats = []
     for user_id, email, count in rows:
-        minutes_saved = count * MINUTES_PER_MANUAL_DOCUMENT
+        adjustment = HISTORICAL_ADJUSTMENT_BY_EMAIL.get(email, {})
+        historical_documents = int(adjustment.get("estimated_documents", 0))
+        historical_money = float(adjustment.get("money_pln", 0.0))
+        if count <= 0 and historical_documents <= 0:
+            continue
+
+        total_documents = count + historical_documents
+        minutes_saved = total_documents * MINUTES_PER_MANUAL_DOCUMENT
+        confirmed_money = count * MINUTES_PER_MANUAL_DOCUMENT / 60 * HOURLY_RATE_PLN
         stats.append({
             "user_id": str(user_id),
             "email": email,
-            "dokumenty": count,
+            "dokumenty": total_documents,
+            "dokumenty_potwierdzone": count,
+            "dokumenty_historyczne_szacowane": historical_documents,
+            "korekta_historyczna_pln": historical_money,
             "minuty_zaoszczedzone": minutes_saved,
-            "pieniadze_zaoszczedzone": round(minutes_saved / 60 * HOURLY_RATE_PLN, 2),
+            "pieniadze_zaoszczedzone": round(confirmed_money + historical_money, 2),
         })
-    return stats
+    return sorted(stats, key=lambda row: row["dokumenty"], reverse=True)
 
 
 class DocumentNotFoundError(Exception):

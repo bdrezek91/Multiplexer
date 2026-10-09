@@ -639,12 +639,25 @@ def get_document_stats(
     patrz repository.MINUTES_PER_MANUAL_DOCUMENT/HOURLY_RATE_PLN."""
     per_user = repository.get_document_stats_per_user(session)
     razem_dokumenty = sum(row["dokumenty"] for row in per_user)
+    razem_potwierdzone = sum(row["dokumenty_potwierdzone"] for row in per_user)
+    razem_historyczne = sum(row["dokumenty_historyczne_szacowane"] for row in per_user)
+    razem_korekta = sum(row["korekta_historyczna_pln"] for row in per_user)
     razem_minuty = sum(row["minuty_zaoszczedzone"] for row in per_user)
+    # Suma globalna liczona bez sumowania zaokraglonych kwot per-user, zeby nie powstawala
+    # roznica 0,01 zl od wielokrotnego round() na poszczegolnych wierszach.
+    razem_pieniadze = (
+        razem_potwierdzone * repository.MINUTES_PER_MANUAL_DOCUMENT / 60 * repository.HOURLY_RATE_PLN
+        + razem_korekta
+    )
     return DocumentStatsOut(
         per_user=[UserDocumentStatsOut(**row) for row in per_user],
         razem_dokumenty=razem_dokumenty,
+        razem_dokumenty_potwierdzone=razem_potwierdzone,
+        razem_dokumenty_historyczne_szacowane=razem_historyczne,
+        korekta_historyczna_pln=round(razem_korekta, 2),
+        data_od=repository.STATS_PERIOD_START,
         razem_minuty_zaoszczedzone=razem_minuty,
-        razem_pieniadze_zaoszczedzone=round(razem_minuty / 60 * repository.HOURLY_RATE_PLN, 2),
+        razem_pieniadze_zaoszczedzone=round(razem_pieniadze, 2),
         minuty_na_dokument=repository.MINUTES_PER_MANUAL_DOCUMENT,
         stawka_pln_za_h=repository.HOURLY_RATE_PLN,
     )

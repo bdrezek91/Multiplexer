@@ -61,15 +61,21 @@ function DocumentStatsPanel() {
   return (
     <Paper sx={{ p: 2, mb: 3 }}>
       <Typography variant="subtitle1" gutterBottom>
-        Statystyki wydajności
+        Statystyki wydajności od 08.09.2026
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         Przy założeniu ok. {stats.minuty_na_dokument} min na ręczne wprowadzenie jednej wydawki
         (z przerwami) i {stats.stawka_pln_za_h.toFixed(2)} zł/h kosztu pracodawcy (brutto ze
         składkami).
       </Typography>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Łącznie {stats.razem_dokumenty} wydawek: {stats.razem_dokumenty_potwierdzone} potwierdzonych
+        w trwałym liczniku + ok. {stats.razem_dokumenty_historyczne_szacowane} historycznych
+        oszacowanych dla wcześniejszego okresu. Korekta historyczna oszczędności:
+        {' '}+{stats.korekta_historyczna_pln.toFixed(2)} zł.
+      </Alert>
       <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
-        <StatCard label="Przerobione dokumenty" value={String(stats.razem_dokumenty)} />
+        <StatCard label="Wydawki łącznie" value={String(stats.razem_dokumenty)} />
         <StatCard label="Zaoszczędzony czas" value={`${godzinyRazem} h`} />
         <StatCard
           label="Zaoszczędzone pieniądze"
@@ -95,9 +101,23 @@ function DocumentStatsPanel() {
             {stats.per_user.map((row) => (
               <TableRow key={row.user_id} hover>
                 <TableCell>{row.email}</TableCell>
-                <TableCell align="right">{row.dokumenty}</TableCell>
+                <TableCell align="right">
+                  <Typography variant="body2">{row.dokumenty}</Typography>
+                  {row.dokumenty_historyczne_szacowane > 0 && (
+                    <Typography variant="caption" color="text.secondary">
+                      {row.dokumenty_potwierdzone} potw. + ~{row.dokumenty_historyczne_szacowane} hist.
+                    </Typography>
+                  )}
+                </TableCell>
                 <TableCell align="right">{(row.minuty_zaoszczedzone / 60).toFixed(1)} h</TableCell>
-                <TableCell align="right">{row.pieniadze_zaoszczedzone.toFixed(2)} zł</TableCell>
+                <TableCell align="right">
+                  <Typography variant="body2">{row.pieniadze_zaoszczedzone.toFixed(2)} zł</Typography>
+                  {row.korekta_historyczna_pln > 0 && (
+                    <Typography variant="caption" color="text.secondary">
+                      korekta +{row.korekta_historyczna_pln.toFixed(2)} zł
+                    </Typography>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

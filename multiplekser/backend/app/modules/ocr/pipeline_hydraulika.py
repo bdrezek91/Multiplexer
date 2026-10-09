@@ -62,7 +62,46 @@ class OCRResultHydraulika:
     rejected_count: int
 
 
+def _decode_literal_qty(raw_value: object) -> tuple[bool, Optional[str]]:
+    """Interpretuje SUROWY niebieski znak z formularza Hydrauliki.
+
+    Zwraca (czy_pole_raw_bylo_dostarczone, wartosc_do_dalszego_parsowania).
+    "/" to charakterystyczna reczna jedynka, pozioma kreska to brak. Przecinek dziesietny
+    normalizujemy tutaj do kropki, bo wspolny parse_float_loose celowo nie obsluguje przecinka.
+    """
+    if raw_value is None:
+        return True, None
+    text = str(raw_value).strip()
+    if not text:
+        return True, None
+
+    compact = re.sub(r"\s+", "", text)
+    if compact in {"-", "—", "–", "_"}:
+        return True, None
+    if compact in {"/", "\\", "|"}:
+        return True, "1"
+
+    # Gdy model mimo instrukcji zostawi w raw takze czarny ptaszek, ignorujemy go.
+    cleaned = re.sub(r"[✓✔Vv]", "", compact).strip()
+    if cleaned in {"/", "\\", "|"}:
+        return True, "1"
+    if cleaned in {"-", "—", "–", "_", ""}:
+        return True, None
+
+    # Doslowna liczba z polskim przecinkiem.
+    numeric = cleaned.replace(",", ".")
+    if re.fullmatch(r"\d+(?:\.\d+)?", numeric):
+        return True, numeric
+    return False, None
+
+
 def _pick_raw_qty(item: dict, field_name: str) -> Optional[str]:
+    literal_field = f"{field_name}_raw"
+    if literal_field in item:
+        handled, value = _decode_literal_qty(item.get(literal_field))
+        if handled:
+            return value
+
     value = item.get(field_name)
     if value is not None and value != "":
         return str(value)
@@ -100,12 +139,34 @@ def _is_generic_m10_zaslepka(raw_name: object) -> bool:
     )
 
 
+def _literal_blat_name(raw_name: object) -> str | None:
+    """Dla blatu z jawnym wymiarem zachowaj ostatni widoczny wymiar doslownie."""
+    raw = str(raw_name or "").strip()
+    if "blat kuchenny" not in _plain_name(raw):
+        return None
+    dims = re.findall(r"\b(\d{3,4})\s*[xX×]\s*(\d{3,4})\b", raw)
+    if not dims:
+        return None
+    width, depth = dims[-1]
+    return f"Blat kuchenny {width}x{depth}"
+
+
 def _build_item_hydraulika(item: dict, catalog: Catalog, magazyn: Optional[str]) -> OCRItemHydraulika:
     raw = str(item["nazwa"]).strip()
 
-    # "Zaslepka czarna/biala" jest zweryfikowana nazwa biznesowa, a nie kandydat do fuzzy
-    # snapowania na stare FI 13/17/19. Matcher dostaje surowa nazwe i twarda regula wybiera M10.
-    if _is_generic_m10_zaslepka(raw):
+    corrected_blat = _literal_blat_name(raw)
+    if corrected_blat is not None:
+        snap = snap_to_known_item_hydraulika(corrected_blat)
+        # Znany poprawiony wymiar (np. 1450x600) moze wejsc normalnie. Nieznany (np. 1440x600)
+        # pozostaje doslownie i ma zostac do recznej weryfikacji, bez fuzzy powrotu do starego.
+        if snap.status in {"exact", "additional"}:
+            recognized_name = snap.name
+            snap_status = snap.status
+        else:
+            recognized_name = corrected_blat
+            snap_status = "off"
+    # "Zaslepka czarna/biala" jest zweryfikowana nazwa biznesowa, a nie kandydat do fuzzy.
+    elif _is_generic_m10_zaslepka(raw):
         recognized_name = raw
         snap_status = "exact"
     else:
@@ -114,6 +175,10 @@ def _build_item_hydraulika(item: dict, catalog: Catalog, magazyn: Optional[str])
         snap_status = snap.status
 
     match = match_against_catalog_hydraulika(recognized_name, catalog, magazyn=magazyn)
+    if corrected_blat is not None and snap_status == "off":
+        # Nieznany skorygowany wymiar ma byc BRAK DOPASOWANIA, a nie przypadkowa podpowiedz
+        # do innej rodziny blatu.
+        match = MatchResult(kod=None, nazwa=None, quality="bad", ratio=0.0)
 
     return OCRItemHydraulika(
         rozpoznana_nazwa=recognized_name,
@@ -163,6 +228,17 @@ async def recognize_document_hydraulika(
         numer_projektu = normalize_project_number(str(pn).strip()) if pn else None
         pracownik = _clean_header_text(parsed.get("pracownik"))
         numer_plomby = _clean_header_text(parsed.get("numer_plomby"))
+
+    for it in raw_items:
+        if not isinstance(it, dict):
+            continue
+        for field in ("ilosc_wydana", "ilosc_zuzyta"):
+            literal_field = f"{field}_raw"
+            if literal_field not in it:
+                continue
+            handled, value = _decode_literal_qty(it.get(literal_field))
+            if handled:
+                it[field] = value
 
     schema_items = [it for it in raw_items if validate_item(it)]
     valid_items = [

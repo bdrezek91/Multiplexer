@@ -106,17 +106,22 @@ def classify_ocr_chain() -> list[OCRChainStep]:
     ]
 
 
-def quantity_verification_chain() -> list[OCRChainStep]:
-    """Lancuch dla dodatkowej kontroli ilosci pominietych przez glowny odczyt pozycji (Krok
-    verify.py, verify_ambiguous_quantities()) - wspolny dla Elektryki i Hydrauliki, dziala
-    zawsze na pelnym obrazie dokumentu (wycinanie konkretnych wierszy usuniete 2026-08-31,
-    patrz docstring verify.py). W odroznieniu od
-    default_ocr_chain() BEZ platnych krokow: to sprawdzenie kilku pojedynczych, juz niejasnych
-    komorek, nie caly dokument, a placony fallback (Gemini platny, OpenAI) tu nie jest tego
-    warty - user i tak zweryzykuje niejasna pozycje na oryginale, jesli zaden darmowy model jej
-    nie odczyta."""
+def quantity_verification_chain(dzial: str = "elektryka") -> list[OCRChainStep]:
+    """Lancuch dodatkowej kontroli ilosci.
+
+    Hydraulika zaczyna od 3.5 Flash Lite: na realnym dokumencie 94/08/2026 jako jedyny model
+    konsekwentnie rozroznial odreczna cyfre 1 od osobnego ptaszka i od poziomej kreski "-".
+    Elektryka zachowuje dotychczasowa kolejnosc 3 Flash Preview -> fallbacki.
+    """
     gemini = GeminiProvider()
     free_key = settings.gemini_api_key_free
+    if dzial == "hydraulika":
+        return [
+            OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 16),
+            OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 12),
+            OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 14),
+            OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 16),
+        ]
     return [
         OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 12),
         OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 14),

@@ -185,3 +185,9 @@ def test_ogolna_zaslepka_czarna_biala_mapuje_na_m10_bez_psucia_starych_fi():
     assert match_against_catalog_hydraulika("Zaślepka fi 13 biała", local_catalog).kod == (
         "ZAŚLEPKA FI 13 BIAŁA"
     )
+
+
+def test_czerwona_zaslepka_nie_dostaje_losowego_bialego_kodu(catalog):
+    r = match_against_catalog_hydraulika("Zaślepka 127 czerwona", catalog)
+    assert r.kod is None
+    assert r.quality == "excluded"

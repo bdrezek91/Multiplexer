@@ -164,3 +164,28 @@ async def test_sruba_8mm_jest_calkowicie_ignorowana(catalog, gemini_key_configur
 
     assert [item.rozpoznana_nazwa for item in result.pozycje] == ["Bojler 80 L"]
     assert result.pozycje[0].match.kod == "BOJLER 80 L"
+
+
+async def test_przekreslony_blat_z_nowym_nieznanym_wymiarem_nie_wraca_do_starego(catalog, gemini_key_configured):
+    ai_response = (
+        '{"pozycje":[{"nazwa":"Blat kuchenny 1200x600 1440x600",'
+        '"ilosc_wydana":1,"ilosc_zuzyta":1}]}'
+    )
+    with _mock_recognize(ai_response):
+        result = await recognize_document_hydraulika([(b"dane", "image/jpeg")], catalog)
+
+    item = result.pozycje[0]
+    assert item.rozpoznana_nazwa == "Blat kuchenny 1440x600"
+    assert item.match.kod is None
+    assert item.match.quality == "bad"
+    assert item.needs_review is True
+
+async def test_pojedynczy_nieznany_wymiar_blatu_nie_jest_fuzzy_snapowany(catalog, gemini_key_configured):
+    ai_response = ('{"pozycje":[{"nazwa":"Blat kuchenny 1440x600",' '"ilosc_wydana":1,"ilosc_zuzyta":1}]}')
+    with _mock_recognize(ai_response):
+        result = await recognize_document_hydraulika([(b"dane", "image/jpeg")], catalog)
+    item = result.pozycje[0]
+    assert item.rozpoznana_nazwa == "Blat kuchenny 1440x600"
+    assert item.match.kod is None
+    assert item.match.quality == "bad"
+    assert item.needs_review is True

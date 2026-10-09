@@ -24,7 +24,7 @@ from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline_elektryka import recognize_document
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
 from app.modules.ocr.providers import OCRProviderError
-from app.modules.ocr.verify import verify_ambiguous_quantities
+from app.modules.ocr.verify import VerifyResult, verify_ambiguous_quantities
 from app.modules.products import Catalog
 from app.modules.products.models import ProductModel
 
@@ -186,35 +186,137 @@ async def _verify_ambiguous_items(
             (item["ilosc_wydana"] is None and has_wydana)
             or (item["ilosc_zuzyta"] is None and has_zuzyta)
         )
-        if both_missing or marked_column_missing:
+        if dzial == "hydraulika":
+            # W Hydraulice najtrudniejszy przypadek to odreczna "1" podobna do "/" oraz
+            # pozioma kreska "-" oznaczajaca brak. Dlatego weryfikujemy:
+            # - kazdy wiersz z co najmniej jedna brakujaca kolumna (np. 3 / 1,5),
+            # - kazda odczytana jedynke, zeby skreslenie nie zostalo uznane za 1.
+            hyd_needs_check = (
+                item["ilosc_wydana"] is None
+                or item["ilosc_zuzyta"] is None
+                or item["ilosc_wydana"] == 1
+                or item["ilosc_zuzyta"] == 1
+            )
+            if hyd_needs_check:
+                targets.append(index)
+        elif both_missing or marked_column_missing:
             targets.append(index)
     if not targets:
         return
 
     verify_func = _verify_func or verify_ambiguous_quantities
+    target_names = [items[i]["rozpoznana_nazwa"] for i in targets]
     results = await verify_func(
         files,
-        [items[i]["rozpoznana_nazwa"] for i in targets],
+        target_names,
         dzial,
         log_context={"document_id": document_id},
         event_callback=event_callback,
         cooldown_store=cooldown_store,
     )
-    for idx, result in zip(targets, results):
-        if not result.found_anything:
-            continue
-        # Sygnal dla UI (patrz DocumentItemModel.ilosc_z_dodatkowej_kontroli) - ta ilosc
-        # pochodzi z drugiej, mniej pewnej probie odczytu, nie z glownego modelu.
-        items[idx]["ilosc_z_dodatkowej_kontroli"] = True
-        # Kontrola uzupelnia tylko brakujaca kolumne. Poprawny wynik glownego OCR nie moze
-        # zostac wyzerowany, gdy model kontrolny odczyta tylko druga z dwoch wartosci.
-        if items[idx]["ilosc_wydana"] is None and result.ilosc_wydana is not None:
-            items[idx]["ilosc_wydana"] = result.ilosc_wydana
-        if items[idx]["ilosc_zuzyta"] is None and result.ilosc_zuzyta is not None:
-            items[idx]["ilosc_zuzyta"] = result.ilosc_zuzyta
-        items[idx]["ilosc_finalna"] = pick_qty_razem(
-            items[idx]["ilosc_wydana"], items[idx]["ilosc_zuzyta"],
+
+    # Hydraulika: przy odręcznych "1" podobnych do "/" pojedynczy request bywa niestabilny.
+    # Drugi, niezależny odczyt tym samym mechanizmem działa jako konsensus: brak uzupełniamy
+    # wyłącznie wtedy, gdy OBA odczyty zwracają tę samą dodatnią wartość. Rozbieżność -> null
+    # i ręczna weryfikacja zamiast ryzyka wpisania poziomej kreski "-" jako cyfry 1.
+    disagreements: set[int] = set()
+    if dzial == "hydraulika":
+        confirmation = await verify_func(
+            files,
+            target_names,
+            dzial,
+            log_context={"document_id": document_id, "quantity_consensus_pass": 2},
+            event_callback=None,
+            cooldown_store=cooldown_store,
         )
+        merged = []
+        for pos, (first, second) in enumerate(zip(results, confirmation)):
+            def agreed(a, b):
+                if a is None or b is None:
+                    return None
+                return a if abs(float(a) - float(b)) < 1e-9 else None
+
+            wydana = agreed(first.ilosc_wydana, second.ilosc_wydana)
+            zuzyta = agreed(first.ilosc_zuzyta, second.ilosc_zuzyta)
+            if (
+                (first.ilosc_wydana is not None or second.ilosc_wydana is not None)
+                and wydana is None
+            ) or (
+                (first.ilosc_zuzyta is not None or second.ilosc_zuzyta is not None)
+                and zuzyta is None
+            ):
+                disagreements.add(pos)
+            merged.append(VerifyResult(wydana, zuzyta))
+        results = merged
+
+        # Najtrudniejsza wartosc to 1 (ukosna kreska podobna do "/" vs poziome "-").
+        # Jesli dwa pierwsze odczyty zgodnie zwrocily 1, prosimy o trzeci glos TYLKO dla
+        # takich pozycji. Jedynke akceptujemy dopiero przy zgodzie 3/3.
+        third_positions = [
+            pos for pos, result in enumerate(results)
+            if result.ilosc_wydana == 1 or result.ilosc_zuzyta == 1
+        ]
+        if third_positions:
+            third_names = [target_names[pos] for pos in third_positions]
+            third_results = await verify_func(
+                files,
+                third_names,
+                dzial,
+                log_context={"document_id": document_id, "quantity_consensus_pass": 3},
+                event_callback=None,
+                cooldown_store=cooldown_store,
+            )
+            for pos, third in zip(third_positions, third_results):
+                result = results[pos]
+                wydana = result.ilosc_wydana
+                zuzyta = result.ilosc_zuzyta
+                if wydana == 1 and third.ilosc_wydana != 1:
+                    wydana = None
+                    disagreements.add(pos)
+                if zuzyta == 1 and third.ilosc_zuzyta != 1:
+                    zuzyta = None
+                    disagreements.add(pos)
+                results[pos] = VerifyResult(wydana, zuzyta)
+
+    for pos, (idx, result) in enumerate(zip(targets, results)):
+        item = items[idx]
+        changed = False
+
+        if dzial == "hydraulika":
+            # Brakujace pola uzupelniamy tylko zgodnym konsensusem; jedynka wymaga 3/3.
+            for field, verified in (
+                ("ilosc_wydana", result.ilosc_wydana),
+                ("ilosc_zuzyta", result.ilosc_zuzyta),
+            ):
+                original = item[field]
+                if original is None and verified is not None:
+                    item[field] = verified
+                    changed = True
+                elif original == 1:
+                    # Jedynka z glownego OCR musi byc potwierdzona przez konsensus. Jesli dwie
+                    # kontrole nie potwierdzily 1, usuwamy ja zamiast ryzykowac skreslenie/"-".
+                    if verified != 1:
+                        item[field] = None
+                        changed = True
+                        disagreements.add(pos)
+        else:
+            if item["ilosc_wydana"] is None and result.ilosc_wydana is not None:
+                item["ilosc_wydana"] = result.ilosc_wydana
+                changed = True
+            if item["ilosc_zuzyta"] is None and result.ilosc_zuzyta is not None:
+                item["ilosc_zuzyta"] = result.ilosc_zuzyta
+                changed = True
+
+        if pos in disagreements:
+            item["needs_review"] = True
+            note = "Kontrole AI nie zgodziły się co do ilości - sprawdź na oryginale."
+            current = str(item.get("form_note") or "").strip()
+            if note not in current:
+                item["form_note"] = f"{current} | {note}" if current else note
+
+        if changed or result.found_anything:
+            item["ilosc_z_dodatkowej_kontroli"] = True
+        item["ilosc_finalna"] = pick_qty_razem(item["ilosc_wydana"], item["ilosc_zuzyta"])
 
 
 # Na zyczenie uzytkownika (2026-08-31): kazda "tasma led" (wymuszana w special_rules.py na

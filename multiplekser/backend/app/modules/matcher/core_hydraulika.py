@@ -38,6 +38,13 @@ DEFAULT_SPECIAL_RULES_HYDRAULIKA: list[SpecialRule] = [
         priority=11,
         description="Hydraulika: ogolna zaslepka biala -> aktualny zestaw M10 bialy + podkladka.",
     ),
+    SpecialRule(
+        rule_type="exclude",
+        pattern=r"^\s*zaslepka\b.*\bczerw\w*\s*$",
+        normalize=True,
+        priority=12,
+        description="Hydraulika: czerwona zaslepka nie ma jeszcze zweryfikowanego kodu - nie zgaduj fuzzy.",
+    ),
 ]
 
 

@@ -24,7 +24,7 @@ async def test_jedno_zapytanie_obsluguje_wiele_pozycji(monkeypatch):
     ])
     monkeypatch.setattr(
         "app.modules.ocr.verify.quantity_verification_chain",
-        lambda: [OCRChainStep("Model pierwszy", provider, "model-a", "klucz")],
+        lambda dzial="elektryka": [OCRChainStep("Model pierwszy", provider, "model-a", "klucz")],
     )
 
     results = await verify_ambiguous_quantities(
@@ -52,7 +52,7 @@ async def test_czesciowy_sukces_pierwszego_modelu_konczy_kontrole(monkeypatch):
     ])
     monkeypatch.setattr(
         "app.modules.ocr.verify.quantity_verification_chain",
-        lambda: [
+        lambda dzial="elektryka": [
             OCRChainStep("Model pierwszy", first, "model-a", "klucz-a"),
             OCRChainStep("Model drugi", second, "model-b", "klucz-b"),
         ],
@@ -75,7 +75,7 @@ async def test_nastepny_model_jest_fallbackiem_gdy_pierwszy_nie_znajdzie_nic(mon
     ])
     monkeypatch.setattr(
         "app.modules.ocr.verify.quantity_verification_chain",
-        lambda: [
+        lambda dzial="elektryka": [
             OCRChainStep("Model pierwszy", first, "model-a", "klucz-a"),
             OCRChainStep("Model drugi", second, "model-b", "klucz-b"),
         ],
@@ -96,7 +96,7 @@ async def test_same_nulle_sa_odrzucone_i_log_konczy_sie_bez_wyniku(monkeypatch):
     events: list[dict[str, object]] = []
     monkeypatch.setattr(
         "app.modules.ocr.verify.quantity_verification_chain",
-        lambda: [OCRChainStep("Model pierwszy", provider, "model-a", "klucz")],
+        lambda dzial="elektryka": [OCRChainStep("Model pierwszy", provider, "model-a", "klucz")],
     )
     result = await verify_ambiguous_quantities(
         [(b"dokument", "image/jpeg")], ["Pozycja A"], "hydraulika",
@@ -158,7 +158,9 @@ async def test_task_nie_ucina_kontroli_po_pierwszych_osmiu_pozycjach(monkeypatch
         cooldown_store=object(), dzial="hydraulika",
     )
 
-    assert len(batch.await_args.args[1]) == 10
+    assert len(batch.await_args_list[0].args[1]) == 10
+    assert len(batch.await_args_list[1].args[1]) == 10
+    assert batch.await_args_list[2].args[1] == ["Pozycja 0"]
     assert [item["ilosc_finalna"] for item in items] == list(range(1, 11))
 
 
@@ -173,7 +175,11 @@ async def test_task_uzupelnia_jedna_brakujaca_kolumne_i_nie_nadpisuje_odczytanej
         {"rozpoznana_nazwa": "Pozycja C", "ilosc_wydana": None, "ilosc_zuzyta": 4,
          "ilosc_finalna": 4},
     ]
-    batch = AsyncMock(return_value=[VerifyResult(1, 99), VerifyResult(9, 3)])
+    batch = AsyncMock(return_value=[
+        VerifyResult(1, 1),
+        VerifyResult(9, 3),
+        VerifyResult(7, 88),
+    ])
     monkeypatch.setattr("app.modules.documents.tasks.verify_ambiguous_quantities", batch)
 
     await _verify_ambiguous_items(
@@ -182,17 +188,18 @@ async def test_task_uzupelnia_jedna_brakujaca_kolumne_i_nie_nadpisuje_odczytanej
         quantity_marks={
             "Pozycja A": (True, True),
             "Pozycja B": (True, True),
-            # Wydana jest pusta i nie ma w niej znaku - tej pozycji nie kontrolujemy.
             "Pozycja C": (False, True),
         },
     )
 
-    assert batch.await_args.args[1] == ["Pozycja A", "Pozycja B"]
+    assert batch.await_count == 3
+    assert batch.await_args_list[0].args[1] == ["Pozycja A", "Pozycja B", "Pozycja C"]
     assert items[0]["ilosc_wydana"] == 1
-    assert items[0]["ilosc_zuzyta"] == 1  # nie 99 z kontrolnego modelu
+    assert items[0]["ilosc_zuzyta"] == 1
     assert items[1]["ilosc_wydana"] == 2  # nie 9 z kontrolnego modelu
     assert items[1]["ilosc_zuzyta"] == 3
-    assert items[2]["ilosc_wydana"] is None
+    assert items[2]["ilosc_wydana"] == 7
+    assert items[2]["ilosc_zuzyta"] == 4  # nie 88 z kontrolnego modelu
 
 
 async def test_obie_puste_ilosci_eskaluja_nawet_bez_quantity_marks(monkeypatch):
@@ -211,5 +218,41 @@ async def test_obie_puste_ilosci_eskaluja_nawet_bez_quantity_marks(monkeypatch):
         cooldown_store=object(), dzial="hydraulika",
     )
 
-    batch.assert_awaited_once()
-    assert batch.await_args.args[1] == ["Pozycja A"]
+    assert batch.await_count == 3
+    assert batch.await_args_list[0].args[1] == ["Pozycja A"]
+    assert batch.await_args_list[1].args[1] == ["Pozycja A"]
+    assert batch.await_args_list[2].args[1] == ["Pozycja A"]
+
+
+async def test_hydraulika_konsensus_uzupelnia_tylko_zgodne_wartosci():
+    from app.modules.documents.ocr_processing import _verify_ambiguous_items
+
+    items = [
+        {"rozpoznana_nazwa": "Pewna jedynka", "ilosc_wydana": None, "ilosc_zuzyta": None,
+         "ilosc_finalna": None, "needs_review": False, "form_note": ""},
+        {"rozpoznana_nazwa": "Kreska mylona z jedynka", "ilosc_wydana": None, "ilosc_zuzyta": None,
+         "ilosc_finalna": None, "needs_review": False, "form_note": ""},
+    ]
+    calls = 0
+
+    async def fake(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return [VerifyResult(1, 1), VerifyResult(2, 1)]
+        return [VerifyResult(1, 1), VerifyResult(2, None)]
+
+    await _verify_ambiguous_items(
+        [(b"pdf", "application/pdf")], items, "doc-1", lambda event: None,
+        cooldown_store=object(), dzial="hydraulika", _verify_func=fake,
+    )
+
+    assert calls == 3
+    assert items[0]["ilosc_wydana"] == 1
+    assert items[0]["ilosc_zuzyta"] == 1
+    assert items[0]["ilosc_finalna"] == 1
+    assert items[1]["ilosc_wydana"] == 2
+    assert items[1]["ilosc_zuzyta"] is None
+    assert items[1]["ilosc_finalna"] == 2
+    assert items[1]["needs_review"] is True
+    assert "nie zgodziły" in items[1]["form_note"]

@@ -95,9 +95,12 @@ def _build_prompt(targets: list[tuple[str, str]], cropped: bool) -> str:
 Sprawdz WYŁĄCZNIE te pozycje:
 {target_lines}
 
-Dla kazdego ID odczytaj OSOBNO kolumny "Ilosc wydana" i "Ilosc zuzyta". Ptaszek/haczyk/V/✓
-nie jest liczba, ale cyfra i ptaszek czesto stoja razem. Jesli obok ptaszka widac odrebna cyfre
-(takze 1), zwroc te cyfre. Nie przenos wartosci z sasiedniego wiersza.
+Dla kazdego ID odczytaj OSOBNO kolumny "Ilosc wydana" i "Ilosc zuzyta".
+KONWENCJA FORMULARZA HYDRAULIKI DAMPOL: jedna krotka NIEBIESKA ukosna kreska podobna do "/"
+w komorce ilosci JEST cyfra 1. W "Ilosc wydana" obok niej czesto stoi osobny CZARNY ptaszek/V/✓
+potwierdzajacy wydanie: niebieska ukosna kreska + czarny V oznacza 1. W "Ilosc zuzyta" sama
+niebieska ukosna kreska oznacza 1. NIEBIESKA POZIOMA kreska "-", biegnaca lewo-prawo (kat bliski 0 stopni), oznacza BRAK wartosci i daje null. Cyfra 1 jest UKOSNA i rosnie z lewego-dolu do prawej-gory (zwykle okolo 30-60 stopni). Nigdy nie zamieniaj poziomej kreski "-" na 1.
+Sam czarny ptaszek/V/✓ bez niebieskiej cyfry nie jest liczba. Nie przenos wartosci z sasiedniego wiersza.
 
 Zwroc WYLACZNIE JSON, zachowujac ID:
 {{"pozycje":[{{"id":"1","ilosc_wydana":2,"ilosc_zuzyta":null}}]}}
@@ -146,7 +149,7 @@ async def verify_ambiguous_quantities(
     verification_files, cropped = files, False
     unresolved = dict(targets)
     found: dict[str, VerifyResult] = {}
-    steps = quantity_verification_chain()
+    steps = quantity_verification_chain(dzial)
 
     for step_index, step in enumerate(steps):
         if not unresolved:

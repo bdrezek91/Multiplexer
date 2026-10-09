@@ -17,6 +17,7 @@ from app.modules.ocr.parsing import parse_float_loose
 from app.modules.ocr.pipeline_elektryka import recognize_document
 from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
 from app.modules.products import Catalog
+from app.modules.products.catalog import plain_norm
 
 from . import repository
 from .ocr_processing import _download_and_prepare
@@ -76,20 +77,45 @@ async def _check_full_document_consistency(
         logger.warning("Pelna kontrola spojnosci dokumentu nieudana - pomijam", exc_info=True)
         return False
 
-    confirm_by_label: dict[str, tuple[Optional[float], Optional[float]]] = {}
+    # Drugi model jest tylko safety-netem. Brak pozycji w drugim odczycie NIE jest dowodem,
+    # ze glowny OCR sie pomylil. Porownujemy ilosci dopiero dla tej samej znormalizowanej etykiety.
+    # Lista zamiast dict zachowuje duplikaty (np. dwa identycznie nazwane wiersze).
+    confirm_rows: list[dict[str, object]] = []
     for it in confirm.pozycje:
         wydana = parse_float_loose(it.ilosc_wydana) if it.ilosc_wydana is not None else None
         zuzyta = parse_float_loose(it.ilosc_zuzyta) if it.ilosc_zuzyta is not None else None
-        confirm_by_label[it.rozpoznana_nazwa] = (wydana, zuzyta)
-
-    main_labels = {item["rozpoznana_nazwa"] for item in items}
+        label = it.rozpoznana_nazwa
+        confirm_rows.append({
+            "label": label,
+            "norm": plain_norm(label),
+            "qty": (wydana, zuzyta),
+            "used": False,
+        })
 
     for item in items:
         label = item["rozpoznana_nazwa"]
-        confirm_qty = confirm_by_label.get(label)
+        norm = plain_norm(label)
+        matched = next(
+            (
+                row for row in confirm_rows
+                if not row["used"] and row["norm"] == norm
+            ),
+            None,
+        )
+        if matched is None:
+            # Samo pominiecie wiersza przez drugi model jest zbyt slabym sygnalem do alarmu.
+            continue
+
+        matched["used"] = True
+        confirm_qty = matched["qty"]
         main_qty = (item["ilosc_wydana"], item["ilosc_zuzyta"])
         if confirm_qty == main_qty:
-            continue  # zgodnosc obu niezaleznych, pelnych odczytow - bez zmian
+            continue
+
+        # Drugi odczyt znalazl ten sam wiersz, ale sam nie odczytal zadnej ilosci. To nadal
+        # nie jest wystarczajacy dowod, by podwazac glowny wynik.
+        if confirm_qty == (None, None):
+            continue
 
         item["needs_review"] = True
         item["ilosc_z_dodatkowej_kontroli"] = True
@@ -102,17 +128,20 @@ async def _check_full_document_consistency(
                 session, document_id=document_id, dzial=dzial, rozpoznana_nazwa=label,
                 kind="full_reread_mismatch",
                 main_ilosc_wydana=main_qty[0], main_ilosc_zuzyta=main_qty[1],
-                second_ilosc_wydana=confirm_qty[0] if confirm_qty else None,
-                second_ilosc_zuzyta=confirm_qty[1] if confirm_qty else None,
+                second_ilosc_wydana=confirm_qty[0],
+                second_ilosc_zuzyta=confirm_qty[1],
             )
         except Exception:
             logger.warning("Nie udalo sie zapisac logu full-reread-mismatch", exc_info=True)
 
-    # Etykiety znalezione TYLKO w drugim, kontrolnym odczycie (mozliwe "ofiary" przesuniecia) -
-    # NIE dodajemy ich automatycznie (druga kontrola sama bywa niepewna), tylko widoczny trop
-    # w "Przebiegu AI".
-    for label, (wydana, zuzyta) in confirm_by_label.items():
-        if label in main_labels or (wydana is None and zuzyta is None):
+    # Pozycje znalezione TYLKO w drugim odczycie pozostaja tropem diagnostycznym w Przebiegu AI,
+    # ale nie sa automatycznie dodawane i nie psuja flag zadnego wiersza glownego.
+    for row in confirm_rows:
+        if row["used"]:
+            continue
+        label = str(row["label"])
+        wydana, zuzyta = row["qty"]
+        if wydana is None and zuzyta is None:
             continue
         if event_callback is not None:
             try:

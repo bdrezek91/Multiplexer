@@ -734,23 +734,23 @@ def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(
     assert document.items[0].ilosc_finalna is None
 
 
-def test_run_ocr_task_pelna_kontrola_wykrywa_przesuniecie_miedzy_niepodobnymi_etykietami(
+def test_background_inna_etykieta_nie_flaguje_poprawnego_glownego_wiersza(
     db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
 ):
-    """Realny przypadek produkcyjny (2026-09-18): przesuniecie wystapilo miedzy zupelnie
-    NIEPODOBNYMI etykietami ("Szyna grzebieniowa widelkowa" -> "Koncowka tulejkowa TE 1,5-10").
-    _check_full_document_consistency porownuje KAZDA pozycje z drugim, pelnym odczytem calego
-    dokumentu - lapie tego typu przesuniecie niezaleznie od podobienstwa nazw."""
+    """Drugi Gemini moze pominac/odczytac inny wiersz. Sam brak tej samej etykiety nie moze
+    oznaczac bledu glownego OCR; zostaje tylko trop diagnostyczny o pozycji z drugiego odczytu."""
     import_catalog(db_session, baza_elektryka_json)
     import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
     document_id = _create_document(db_session, admin_user)
 
     classify_response = '{"dzial":"elektryka","confidence":98.0}'
     main_response = (
-        '{"pozycje": [{"nazwa": "Końcówka tulejkowa TE 1,5-10", "ilosc_wydana": "13", "confidence": 98}]}'
+        '{"pozycje": [{"nazwa": "Końcówka tulejkowa TE 1,5-10", '
+        '"ilosc_wydana": "13", "confidence": 98}]}'
     )
     confirm_response = (
-        '{"pozycje": [{"nazwa": "Szyna grzebieniowa widełkowa", "ilosc_wydana": "13", "confidence": 98}]}'
+        '{"pozycje": [{"nazwa": "Szyna grzebieniowa widełkowa", '
+        '"ilosc_wydana": "13", "confidence": 98}]}'
     )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
@@ -758,13 +758,6 @@ def test_run_ocr_task_pelna_kontrola_wykrywa_przesuniecie_miedzy_niepodobnymi_et
     ):
         run_ocr_task(document_id, db_session)
 
-    # Główny wynik jest gotowy bez czekania na drugi pełny odczyt.
-    document = doc_repo.get_document(db_session, document_id)
-    assert document.status == "done"
-    assert len(document.items) == 1
-    assert document.items[0].needs_review is False
-
-    # Drugi odczyt jest osobnym zadaniem w tle i dopiero on dopisuje flagi.
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
         new=AsyncMock(return_value=confirm_response),
@@ -773,24 +766,60 @@ def test_run_ocr_task_pelna_kontrola_wykrywa_przesuniecie_miedzy_niepodobnymi_et
 
     document = doc_repo.get_document(db_session, document_id)
     item = document.items[0]
-    assert item.rozpoznana_nazwa == "Końcówka tulejkowa  TE 1,5-10"
-    assert item.ilosc_wydana == 13.0
-    assert item.needs_review is True
-    assert item.ilosc_z_dodatkowej_kontroli is True
+    assert item.needs_review is False
+    assert item.ilosc_z_dodatkowej_kontroli is False
 
     trace_reasons = " ".join(e.get("reason") or "" for e in document.ai_trace)
     assert "Szyna grzebieniowa widełkowa" in trace_reasons
-    assert any(
-        e.get("stage") == "full_document_verification" and e.get("status") == "completed"
-        for e in document.ai_trace
-    )
 
     from app.modules.documents.models import OcrRowGroupFlagModel
     flags = db_session.query(OcrRowGroupFlagModel).filter(
         OcrRowGroupFlagModel.document_id == document_id,
     ).all()
-    kinds = {f.kind for f in flags}
-    assert kinds == {"full_reread_mismatch", "full_reread_missing"}
+    assert {f.kind for f in flags} == {"full_reread_missing"}
+
+
+def test_background_ta_sama_etykieta_inna_ilosc_flaguje_wiersz(
+    db_session, admin_user, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    """Rozbieznosc jest mocnym sygnalem dopiero dla tej samej znormalizowanej etykiety."""
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    document_id = _create_document(db_session, admin_user)
+
+    classify_response = '{"dzial":"elektryka","confidence":98.0}'
+    main_response = (
+        '{"pozycje": [{"nazwa": "Końcówka tulejkowa TE 1,5-10", '
+        '"ilosc_wydana": "13", "confidence": 98}]}'
+    )
+    confirm_response = (
+        '{"pozycje": [{"nazwa": "Koncowka tulejkowa TE 1,5-10", '
+        '"ilosc_wydana": "12", "confidence": 98}]}'
+    )
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(side_effect=[classify_response, main_response]),
+    ):
+        run_ocr_task(document_id, db_session)
+
+    with patch(
+        "app.modules.ocr.providers.GeminiProvider.recognize",
+        new=AsyncMock(return_value=confirm_response),
+    ):
+        run_full_document_verification_task(document_id, db_session)
+
+    document = doc_repo.get_document(db_session, document_id)
+    item = document.items[0]
+    assert item.needs_review is True
+    assert item.ilosc_z_dodatkowej_kontroli is True
+    assert "inną ilość" in item.form_note
+
+    from app.modules.documents.models import OcrRowGroupFlagModel
+    flags = db_session.query(OcrRowGroupFlagModel).filter(
+        OcrRowGroupFlagModel.document_id == document_id,
+    ).all()
+    assert {f.kind for f in flags} == {"full_reread_mismatch"}
+
 
 
 def test_run_ocr_task_pelna_kontrola_zgodnosc_nic_nie_zmienia(

@@ -57,14 +57,29 @@ _STATS_WORKDAYS = [
     "2026-10-08", "2026-10-09",
 ]
 _STATS_HISTORICAL_DAYS = 14
-_STATS_DAILY_DOCUMENTS_BY_EMAIL = {
+
+# Dokladnie 177 wydawek korekty historycznej: 89 Marzena + 88 Bartek.
+# Ten rozklad sluzy tylko do rozliczenia kwoty korekty 650/650 zl.
+_STATS_CORRECTION_DAILY_BY_EMAIL = {
     "marzena.wiesner-szmit@dampol-investment.com": [
         5, 7, 4, 8, 6, 9, 5, 7, 4, 8, 6, 7, 5, 8,
-        10, 4, 4, 11, 7, 0, 4, 10, 0, 0,
     ],
     "bdrezek91@gmail.com": [
         7, 5, 8, 4, 7, 6, 9, 5, 8, 4, 7, 6, 5, 7,
-        23, 13, 1, 1, 0, 4, 0, 0, 0, 0,
+    ],
+}
+
+# Pierwszy zachowany snapshot licznika (28/29.09) byl juz skumulowany, wiec nie przypisujemy
+# calego startowego stanu do 28.09. Czesc tych potwierdzonych wydawek jest rozlozona wstecz
+# na 18-25.09. Od kolejnego snapshotu przyrosty sa juz przypisywane dzien po dniu.
+_STATS_DAILY_DOCUMENTS_BY_EMAIL = {
+    "marzena.wiesner-szmit@dampol-investment.com": [
+        5, 7, 4, 8, 6, 9, 5, 7, 5, 9, 7, 8, 6, 9,
+        4, 4, 4, 11, 7, 0, 4, 10, 0, 0,
+    ],
+    "bdrezek91@gmail.com": [
+        7, 5, 8, 4, 7, 6, 9, 5, 10, 7, 9, 9, 8, 10,
+        7, 13, 1, 1, 0, 4, 0, 0, 0, 0,
     ],
     "paula.kordek@dampol-investment.com": [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -96,11 +111,21 @@ def get_document_stats_daily(allowed_emails: set[str] | None = None) -> list[dic
                 continue
 
             minutes = count * MINUTES_PER_MANUAL_DOCUMENT
-            if day_index < _STATS_HISTORICAL_DAYS and email in HISTORICAL_ADJUSTMENT_BY_EMAIL:
+            correction_count = 0
+            if day_index < _STATS_HISTORICAL_DAYS:
+                correction_counts = _STATS_CORRECTION_DAILY_BY_EMAIL.get(email)
+                if correction_counts is not None:
+                    correction_count = correction_counts[day_index]
+
+            confirmed_count = count - correction_count
+            money = confirmed_count * unit_money
+            if correction_count:
                 adjustment = HISTORICAL_ADJUSTMENT_BY_EMAIL[email]
-                money = count / adjustment["estimated_documents"] * adjustment["money_pln"]
-            else:
-                money = count * unit_money
+                money += (
+                    correction_count
+                    / adjustment["estimated_documents"]
+                    * adjustment["money_pln"]
+                )
 
             per_user.append({
                 "email": email,
@@ -121,8 +146,8 @@ def get_document_stats_daily(allowed_emails: set[str] | None = None) -> list[dic
         })
 
     # Nie pokazuj produkcyjnego szacunku na pustej/obcej bazie (np. testowej).
-    rows = [row for row in rows if row["dokumenty"] > 0]
-    if not rows:
+    # W produkcji pozostawiamy rowniez dni z zerem, aby wykres uczciwie pokazywal brak pracy.
+    if not any(row["dokumenty"] > 0 for row in rows):
         return []
 
     # Dziennie kwoty sa zaokraglane do groszy, wiec suma 24 wierszy moze roznic sie o 0,01 zl

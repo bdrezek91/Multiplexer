@@ -274,6 +274,29 @@ def test_run_ocr_task_drugi_raz_nie_przelicza_i_nie_dubluje_licznika(
     assert len(second.items) == 1
 
 
+def test_resolve_product_id_respektuje_dzial_przy_tym_samym_kodzie(
+    db_session, baza_elektryka_json, baza_hydraulika_json,
+):
+    """Ten sam kod w dwoch katalogach musi wskazac rekord z dzialu dokumentu."""
+    from app.modules.documents.ocr_processing import _resolve_product_id
+    from app.modules.products.models import ProductModel
+
+    import_catalog(db_session, baza_elektryka_json, dzial="elektryka")
+    import_catalog(db_session, baza_hydraulika_json, dzial="hydraulika")
+
+    kod = "GRZEJNIK 1000W"
+    elektryka = db_session.query(ProductModel).filter(
+        ProductModel.kod == kod, ProductModel.dzial == "elektryka",
+    ).one()
+    hydraulika = db_session.query(ProductModel).filter(
+        ProductModel.kod == kod, ProductModel.dzial == "hydraulika",
+    ).one()
+
+    assert elektryka.id != hydraulika.id
+    assert _resolve_product_id(db_session, kod, "elektryka") == elektryka.id
+    assert _resolve_product_id(db_session, kod, "hydraulika") == hydraulika.id
+
+
 def test_run_ocr_task_uzywa_openai_jako_ostatniego_fallbacku_lancucha(
     db_session, admin_user, mocked_storage, gemini_key_configured, openai_key_configured, baza_elektryka_json,
 ):

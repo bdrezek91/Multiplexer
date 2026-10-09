@@ -37,10 +37,14 @@ _MAX_ATTEMPTS = 3
 _RETRY_DELAYS_S = (5, 15)
 
 
-def _resolve_product_id(session: Session, kod):
+def _resolve_product_id(session: Session, kod, dzial: str):
     if not kod:
         return None
-    row = session.query(ProductModel.id).filter(ProductModel.kod == kod).first()
+    row = (
+        session.query(ProductModel.id)
+        .filter(ProductModel.kod == kod, ProductModel.dzial == dzial)
+        .first()
+    )
     return row[0] if row else None
 
 
@@ -125,7 +129,9 @@ def _classify_and_recognize(
 
 
 def _row_dict_from_ocritem(
-    it, ilosc_wydana_raw, ilosc_zuzyta_raw, session: Session, *, ilosc_z_dodatkowej_kontroli: bool = False,
+    it, ilosc_wydana_raw, ilosc_zuzyta_raw, session: Session, *,
+    dzial: str,
+    ilosc_z_dodatkowej_kontroli: bool = False,
 ) -> dict:
     """Wspolna konwersja OCRItem/OCRItemHydraulika (ksztalt identyczny w obu pipeline'ach) na
     plaski dict przechowywany w `items` - uzywana dla glownego odczytu."""
@@ -146,7 +152,7 @@ def _row_dict_from_ocritem(
         "form_note": it.form_note,
         "uwagi": it.uwagi,
         "confidence": it.confidence,
-        "matched_product_id": _resolve_product_id(session, it.match.kod),
+        "matched_product_id": _resolve_product_id(session, it.match.kod, dzial),
         "match_kod": it.match.kod,
         "match_nazwa": it.match.nazwa,
         "match_jm": it.match.jm_override,
@@ -356,7 +362,7 @@ def _append_auto_zasilacz_led(items: list[dict], dzial: str, session: Session) -
         ),
         "uwagi": "",
         "confidence": None,
-        "matched_product_id": _resolve_product_id(session, _ZASILACZ_LED_KOD),
+        "matched_product_id": _resolve_product_id(session, _ZASILACZ_LED_KOD, "elektryka"),
         "match_kod": _ZASILACZ_LED_KOD,
         "match_nazwa": "Zasilacz LED 75W",
         "match_jm": "SZT",
@@ -397,7 +403,7 @@ def _auto_component_item(
         "form_note": f"Dodano automatycznie - {opis}",
         "uwagi": "",
         "confidence": None,
-        "matched_product_id": product.id if product is not None else None,
+        "matched_product_id": product.id if product is not None else _resolve_product_id(session, kod, "elektryka"),
         "match_kod": kod,
         "match_nazwa": nazwa,
         "match_jm": jm,

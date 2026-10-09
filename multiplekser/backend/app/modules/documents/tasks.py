@@ -109,7 +109,9 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
 
         stage_started = time.perf_counter()
         items = [
-            _row_dict_from_ocritem(it, it.ilosc_wydana, it.ilosc_zuzyta, session)
+            _row_dict_from_ocritem(
+                it, it.ilosc_wydana, it.ilosc_zuzyta, session, dzial=dzial,
+            )
             for it in result.pozycje
         ]
         timings["timing_item_materialization"] = _elapsed_ms(stage_started)
@@ -144,7 +146,7 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                 special_rules=rules_for_jev,
                 magazyn=document.magazyn,
                 dzial=dzial,
-                resolve_product_id=lambda kod: _resolve_product_id(session, kod),
+                resolve_product_id=lambda kod: _resolve_product_id(session, kod, dzial),
             ))
         except Exception:
             logger.warning("Jev active - blad, zostawiam wyniki matchera", exc_info=True)

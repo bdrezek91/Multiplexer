@@ -175,12 +175,15 @@ def test_ogolna_zaslepka_czarna_biala_mapuje_na_m10_bez_psucia_starych_fi():
         }
     local_catalog = Catalog.from_json_dict(data, dzial="hydraulika")
 
-    assert match_against_catalog_hydraulika("Zaślepka czarna", local_catalog).kod == (
-        "ZAŚLEPKA M10 CZARNA + PODKŁADKA"
-    )
-    assert match_against_catalog_hydraulika("Zaslepka M10 biala", local_catalog).kod == (
-        "ZAŚLEPKA M10 BIAŁA + PODKŁADKA"
-    )
+    black = match_against_catalog_hydraulika("Zaślepka czarna", local_catalog)
+    assert black.kod == "ZAŚLEPKA M10 CZARNA + PODKŁADKA"
+    assert black.quality == "ok"
+    assert black.ratio == 1.0
+
+    white = match_against_catalog_hydraulika("Zaslepka M10 biala", local_catalog)
+    assert white.kod == "ZAŚLEPKA M10 BIAŁA + PODKŁADKA"
+    assert white.quality == "ok"
+    assert white.ratio == 1.0
     # Jawny stary wymiar nie moze wpasc w ogolny override M10.
     assert match_against_catalog_hydraulika("Zaślepka fi 13 biała", local_catalog).kod == (
         "ZAŚLEPKA FI 13 BIAŁA"

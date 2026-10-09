@@ -183,6 +183,13 @@ async def verify_ambiguous_quantities(
             found[item_id] = result
             unresolved.pop(item_id, None)
 
+        # Pierwszy model, ktory zwrocil choc jedna wiarygodna ilosc, konczy dodatkowa
+        # kontrole. Wczesniej po CZESCIOWYM sukcesie odpalalismy kolejne modele dla
+        # pozostalych pozycji, co na realnych wydawkach dokladalo 10-20 s, a w ostatnich
+        # 40 dokumentach ani razu nie przynioslo kolejnego poprawnego wyniku. Fallbacki
+        # nadal dzialaja, gdy model nie zwroci zadnej ilosci albo zawiedzie na API.
+        break
+
     _publish_no_result(list(unresolved.items()), event_callback)
     return [found.get(item_id, VerifyResult(None, None)) for item_id, _ in targets]
 

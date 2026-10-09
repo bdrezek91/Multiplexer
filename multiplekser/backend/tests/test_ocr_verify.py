@@ -40,7 +40,7 @@ async def test_jedno_zapytanie_obsluguje_wiele_pozycji(monkeypatch):
     assert "Pozycja B" in provider.calls[0]["prompt"]
 
 
-async def test_null_przechodzi_do_nastepnego_modelu_tylko_dla_nierozpoznanej_pozycji(monkeypatch):
+async def test_czesciowy_sukces_pierwszego_modelu_konczy_kontrole(monkeypatch):
     first = _FakeProvider([
         '{"pozycje":['
         '{"id":"1","ilosc_wydana":2,"ilosc_zuzyta":null},'
@@ -61,11 +61,32 @@ async def test_null_przechodzi_do_nastepnego_modelu_tylko_dla_nierozpoznanej_poz
         [(b"dokument", "image/jpeg")], ["Pozycja A", "Pozycja B"], "hydraulika",
     )
 
-    assert [result.ilosc_wydana for result in results] == [2, 1]
+    assert [result.ilosc_wydana for result in results] == [2, None]
+    assert len(first.calls) == 1
+    assert len(second.calls) == 0
+
+
+async def test_nastepny_model_jest_fallbackiem_gdy_pierwszy_nie_znajdzie_nic(monkeypatch):
+    first = _FakeProvider([
+        '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null}]}'
+    ])
+    second = _FakeProvider([
+        '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
+    ])
+    monkeypatch.setattr(
+        "app.modules.ocr.verify.quantity_verification_chain",
+        lambda: [
+            OCRChainStep("Model pierwszy", first, "model-a", "klucz-a"),
+            OCRChainStep("Model drugi", second, "model-b", "klucz-b"),
+        ],
+    )
+    results = await verify_ambiguous_quantities(
+        [(b"dokument", "image/jpeg")], ["Pozycja A"], "hydraulika",
+    )
+
+    assert [result.ilosc_wydana for result in results] == [1]
     assert len(first.calls) == 1
     assert len(second.calls) == 1
-    assert "Pozycja A" not in second.calls[0]["prompt"]
-    assert "Pozycja B" in second.calls[0]["prompt"]
 
 
 async def test_same_nulle_sa_odrzucone_i_log_konczy_sie_bez_wyniku(monkeypatch):

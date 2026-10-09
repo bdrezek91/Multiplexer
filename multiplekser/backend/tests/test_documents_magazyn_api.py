@@ -91,10 +91,10 @@ def test_zmiana_magazynu_dziala_dla_hydrauliki(
     document = doc_repo.create_document(
         db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
     )
-    # Trzeci odczyt to pelna kontrola spojnosci dokumentu (_check_full_document_consistency).
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 3),
     ):
         run_ocr_task(str(document.id), db_session)
 

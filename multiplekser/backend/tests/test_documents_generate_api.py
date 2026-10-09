@@ -264,12 +264,12 @@ def test_generate_hydraulika_dziala_wlasnym_generatorem(
     document = doc_repo.create_document(
         db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
     )
-    # Dodatkowy odczyt to pelna kontrola spojnosci dokumentu (_check_full_document_consistency).
     classify_response = '{"dzial":"hydraulika","confidence":95.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 3),
     ):
         run_ocr_task(str(document.id), db_session)
 
@@ -290,7 +290,6 @@ def test_generate_hydraulika_zachowuje_kolejnosc_z_dokumentu_zrodlowego(
     document = doc_repo.create_document(
         db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
     )
-    # Dodatkowy odczyt to pelna kontrola spojnosci dokumentu (_check_full_document_consistency).
     classify_response = '{"dzial":"hydraulika","confidence":95.0}'
     ocr_response = (
         '{"pozycje": ['
@@ -298,9 +297,15 @@ def test_generate_hydraulika_zachowuje_kolejnosc_z_dokumentu_zrodlowego(
         '{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}'
         ']}'
     )
+    verify_response = (
+        '{"pozycje":['
+        '{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null},'
+        '{"id":"2","ilosc_wydana":1,"ilosc_zuzyta":null}'
+        ']}'
+    )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 3),
     ):
         run_ocr_task(str(document.id), db_session)
 
@@ -323,9 +328,10 @@ def test_generate_hydraulika_uzywa_recznie_poprawionego_kodu(
     )
     classify_response = '{"dzial":"hydraulika","confidence":95.0}'
     ocr_response = '{"pozycje": [{"nazwa": "cos niejasnego xyz", "ilosc_wydana": "2", "confidence": 40}]}'
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":2,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response, verify_response]),
     ):
         run_ocr_task(str(document.id), db_session)
     item_id = doc_repo.get_document(db_session, str(document.id)).items[0].id
@@ -423,12 +429,12 @@ def test_add_item_hydraulika_dziala_na_katalogu_wlasciwego_dzialu(
     document = doc_repo.create_document(
         db_session, user_id=admin_user.id, file_key=key, mime="image/jpeg", original_filename="skan.jpg",
     )
-    # Dodatkowy odczyt to pelna kontrola spojnosci dokumentu (_check_full_document_consistency).
     classify_response = '{"dzial":"hydraulika","confidence":95.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 97}]}'
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 3),
     ):
         run_ocr_task(str(document.id), db_session)
 

@@ -746,11 +746,14 @@ def test_run_ocr_task_pelna_kontrola_zgodnosc_nic_nie_zmienia(
     document_id = _create_document(db_session, admin_user)
 
     classify_response = '{"dzial":"hydraulika","confidence":95.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Zawór kątowy 1/2x3/4", "ilosc_wydana": "1", "confidence": 98}]}'
-    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
+    # Kompletne, nieproblematyczne ilosci - glowna sciezka nie uruchamia dodatkowego konsensusu.
+    ocr_response = (
+        '{"pozycje": [{"nazwa": "Zawór kątowy 1/2x3/4", '
+        '"ilosc_wydana": "2", "ilosc_zuzyta": "2", "confidence": 98}]}'
+    )
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 3),
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
     ):
         run_ocr_task(document_id, db_session)
 

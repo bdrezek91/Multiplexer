@@ -226,7 +226,7 @@ def test_run_ocr_task_sukces_zapisuje_pozycje(
     document = doc_repo.get_document(db_session, document_id)
     assert document.status == "done"
     assert document.numer_projektu == "35/06/2026"
-    assert document.used_provider == "Gemini 3 Flash Preview (klucz darmowy)"
+    assert document.used_provider == "Gemini 3.5 Flash Lite (klucz darmowy)"
     assert document.rejected_count == 0
     assert len(document.items) == 1
 
@@ -335,7 +335,10 @@ def test_run_ocr_task_klasyfikuje_hydraulike_i_uzywa_jej_katalogu(
 
     classify_response = '{"dzial":"hydraulika","confidence":91.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Zawór kątowy 1/2x3/4", "ilosc_wydana": "2", "confidence": 97}]}'
-    with _mock_recognize_sequence(classify_response, ocr_response):
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":2,"ilosc_zuzyta":null}]}'
+    with _mock_recognize_sequence(
+        classify_response, ocr_response, verify_response, verify_response,
+    ):
         run_ocr_task(document_id, db_session)
 
     document = doc_repo.get_document(db_session, document_id)
@@ -402,7 +405,12 @@ def test_run_ocr_task_ponawia_po_przejsciowym_bledzie_i_konczy_sukcesem(
     # wszystkie 4 darmowe kroki musza zawiesc w pierwszej probie klasyfikacji. Dopiero druga
     # proba (attempt 1) dochodzi do sukcesu. Kolejne wywolanie to pelna kontrola spojnosci
     # dokumentu (_check_full_document_consistency) - potwierdza ten sam wynik co glowny odczyt.
-    responses = [OCRProviderError("timeout")] * 4 + [classify_response, ocr_response, ocr_response]
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
+    responses = (
+        [OCRProviderError("timeout")] * 4
+        + [classify_response, ocr_response]
+        + [verify_response] * 3
+    )
     with patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(side_effect=responses)), \
          patch("app.modules.documents.tasks.time.sleep") as fake_sleep:
         run_ocr_task(document_id, db_session)
@@ -444,12 +452,10 @@ def test_run_ocr_task_druga_proba_uzupelnia_pomijeta_ilosc(
         '{"pozycje": [{"nazwa": "Bojler 80 L", "ma_oznaczenie": true, "confidence": 90}]}'
     )  # brak ilosci, ale widoczne oznaczenie kieruje pozycje do dodatkowej kontroli
     verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
-    # Czwarty odczyt to pelna kontrola spojnosci dokumentu (_check_full_document_consistency) -
-    # potwierdza ten sam wynik co po dodatkowej kontroli ilosci.
-    confirm_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": "1", "confidence": 90}]}'
+    # Hydraulika akceptuje jedynke dopiero przy zgodzie 3/3 dodatkowych odczytow.
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, verify_response, confirm_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 3),
     ):
         run_ocr_task(document_id, db_session)
 
@@ -471,19 +477,18 @@ def test_run_ocr_task_ilosc_z_glownego_modelu_nie_ma_flagi_dodatkowej_kontroli(
     document_id = _create_document(db_session, admin_user)
 
     classify_response = '{"dzial":"hydraulika","confidence":93.0}'
-    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": 1, "confidence": 99}]}'
-    # Trzeci odczyt to pelna kontrola spojnosci dokumentu (_check_full_document_consistency) -
-    # potwierdza ten sam wynik co glowny odczyt, wiec NIE ustawia flagi dodatkowej kontroli
-    # (tylko rozbieznosc by ja ustawila).
+    # Obie kolumny sa kompletne i wartosc nie jest problematyczna "1", wiec dodatkowa kontrola
+    # ilosci nie powinna zostac uruchomiona.
+    ocr_response = '{"pozycje": [{"nazwa": "Bojler 80 L", "ilosc_wydana": 2, "ilosc_zuzyta": 2, "confidence": 99}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response]),
     ):
         run_ocr_task(document_id, db_session)
 
     document = doc_repo.get_document(db_session, document_id)
     assert document.status == "done"
-    assert document.items[0].ilosc_wydana == 1.0
+    assert document.items[0].ilosc_wydana == 2.0
     assert document.items[0].ilosc_z_dodatkowej_kontroli is False
 
 
@@ -652,12 +657,16 @@ def test_run_ocr_task_druga_proba_bez_wyniku_zostawia_ilosc_pusta(
     ocr_response = (
         '{"pozycje": [{"nazwa": "Bojler 80 L", "ma_oznaczenie": true, "confidence": 90}]}'
     )
-    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":null,"ilosc_zuzyta":null}]}'
-    with patch(
-        "app.modules.ocr.providers.GeminiProvider.recognize",
-        # Cztery modele darmowe dostaja ten sam semantyczny brak wyniku; dopiero wtedy kontrola
-        # konczy sie statusem "Bez wyniku" i pozostawia pole puste.
-        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 4),
+    from app.modules.ocr.verify import VerifyResult
+    with (
+        patch(
+            "app.modules.ocr.providers.GeminiProvider.recognize",
+            new=AsyncMock(side_effect=[classify_response, ocr_response]),
+        ),
+        patch(
+            "app.modules.documents.tasks.verify_ambiguous_quantities",
+            new=AsyncMock(return_value=[VerifyResult(None, None)]),
+        ),
     ):
         run_ocr_task(document_id, db_session)
 
@@ -738,9 +747,10 @@ def test_run_ocr_task_pelna_kontrola_zgodnosc_nic_nie_zmienia(
 
     classify_response = '{"dzial":"hydraulika","confidence":95.0}'
     ocr_response = '{"pozycje": [{"nazwa": "Zawór kątowy 1/2x3/4", "ilosc_wydana": "1", "confidence": 98}]}'
+    verify_response = '{"pozycje":[{"id":"1","ilosc_wydana":1,"ilosc_zuzyta":null}]}'
     with patch(
         "app.modules.ocr.providers.GeminiProvider.recognize",
-        new=AsyncMock(side_effect=[classify_response, ocr_response]),
+        new=AsyncMock(side_effect=[classify_response, ocr_response] + [verify_response] * 3),
     ):
         run_ocr_task(document_id, db_session)
 

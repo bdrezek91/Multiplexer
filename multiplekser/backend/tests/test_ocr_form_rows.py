@@ -2,9 +2,9 @@
 from app.modules.ocr.form_rows_elektryka import FORM_ROWS, reconcile_form_row, snap_to_form_row
 
 
-def test_form_rows_ma_153_pozycje():
+def test_form_rows_ma_154_pozycje():
     """Dokladna liczba wierszy szablonu wyciagnieta programowo z index.html (Etap 0 analiza)."""
-    assert len(FORM_ROWS) == 153
+    assert len(FORM_ROWS) == 154
 
 
 def test_snap_dokladne_dopasowanie_jest_exact():

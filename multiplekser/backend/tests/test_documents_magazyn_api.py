@@ -1,5 +1,6 @@
 """Testy Kroku Hydraulika-6: PATCH /documents/{id}/magazyn - zmiana magazynu po zakonczonym
 OCR, z ponownym dopasowaniem wszystkich pozycji (R5: podstawienie kodu zalezy od magazynu)."""
+from contextlib import contextmanager
 from io import BytesIO
 from unittest.mock import AsyncMock, patch
 
@@ -8,6 +9,7 @@ from PIL import Image
 from app.modules.documents import repository as doc_repo
 from app.modules.documents.storage import get_storage
 from app.modules.documents.tasks import run_ocr_task
+from app.modules.ocr.verify import VerifyResult
 from app.modules.matcher.special_rules import DEFAULT_SPECIAL_RULES
 from scripts.import_catalog import import_catalog
 from scripts.import_special_rules import import_special_rules
@@ -19,8 +21,16 @@ def _fake_jpeg_bytes() -> bytes:
     return buf.getvalue()
 
 
+@contextmanager
 def _mock_recognize(response_text: str):
-    return patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(return_value=response_text))
+    async def _verify(_files, target_names, *_args, **_kwargs):
+        return [VerifyResult(1.0, None) for _ in target_names]
+
+    with (
+        patch("app.modules.ocr.providers.GeminiProvider.recognize", new=AsyncMock(return_value=response_text)) as recognize,
+        patch("app.modules.documents.tasks.verify_ambiguous_quantities", new=AsyncMock(side_effect=_verify)),
+    ):
+        yield recognize
 
 
 def _create_done_document(db_session, admin_user, ai_response: str, magazyn=None) -> str:

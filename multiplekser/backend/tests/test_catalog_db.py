@@ -15,7 +15,8 @@ _HYDRAULIKA_FIXTURE = Path(__file__).parent / "fixtures" / "baza_hydraulika.json
 def test_import_tworzy_oczekiwana_liczbe_produktow(db_session, baza_elektryka_json):
     stats = import_catalog(db_session, baza_elektryka_json)
 
-    assert stats["utworzone"] == 379 + 292
+    expected = len(baza_elektryka_json["generyczne"]) + len(baza_elektryka_json["archiwalne"])
+    assert stats["utworzone"] == expected
     assert stats["zaktualizowane"] == 0
 
 
@@ -23,8 +24,9 @@ def test_import_jest_idempotentny(db_session, baza_elektryka_json):
     import_catalog(db_session, baza_elektryka_json)
     stats = import_catalog(db_session, baza_elektryka_json)
 
+    expected = len(baza_elektryka_json["generyczne"]) + len(baza_elektryka_json["archiwalne"])
     assert stats["utworzone"] == 0
-    assert stats["zaktualizowane"] == 379 + 292
+    assert stats["zaktualizowane"] == expected
 
 
 def test_catalog_from_db_zawiera_tylko_generyczne(db_session, baza_elektryka_json):
@@ -32,7 +34,7 @@ def test_catalog_from_db_zawiera_tylko_generyczne(db_session, baza_elektryka_jso
 
     catalog = Catalog.from_db(db_session)
 
-    assert len(catalog.products) == 379
+    assert len(catalog.products) == len(baza_elektryka_json["generyczne"])
     assert all(p.status == "generyczny" for p in catalog.products)
 
 
@@ -82,7 +84,7 @@ def test_dzial_izolacja_elektryka_i_hydraulika_nie_mieszaja_sie(db_session, baza
     elektryka_catalog = Catalog.from_db(db_session, dzial="elektryka")
     hydraulika_catalog = Catalog.from_db(db_session, dzial="hydraulika")
 
-    assert len(elektryka_catalog.products) == 379
+    assert len(elektryka_catalog.products) == len(baza_elektryka_json["generyczne"])
     assert len(hydraulika_catalog.products) == 250
     assert all(p.dzial == "elektryka" for p in elektryka_catalog.products)
     assert all(p.dzial == "hydraulika" for p in hydraulika_catalog.products)
@@ -112,5 +114,5 @@ def test_product_dzial_domyslny_to_elektryka(db_session, baza_elektryka_json):
 
     catalog = Catalog.from_db(db_session)
 
-    assert len(catalog.products) == 379
+    assert len(catalog.products) == len(baza_elektryka_json["generyczne"])
     assert all(p.dzial == "elektryka" for p in catalog.products)

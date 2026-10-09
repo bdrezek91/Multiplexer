@@ -11,6 +11,7 @@ Sekrety sa pobierane wylacznie ze zmiennych srodowiskowych.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -19,6 +20,7 @@ import httpx
 
 
 TYPESAFE_SYSTEMONE_URL = "https://api.typesafe.ai/v1/systemone"
+JEV_REQUEST_TIMEOUT_SECONDS = 6.0
 
 
 class JevError(RuntimeError):
@@ -87,12 +89,17 @@ async def ask_choice(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                TYPESAFE_SYSTEMONE_URL,
-                headers=headers,
-                json=payload,
-            )
+        async with asyncio.timeout(JEV_REQUEST_TIMEOUT_SECONDS):
+            async with httpx.AsyncClient(timeout=JEV_REQUEST_TIMEOUT_SECONDS) as client:
+                response = await client.post(
+                    TYPESAFE_SYSTEMONE_URL,
+                    headers=headers,
+                    json=payload,
+                )
+    except TimeoutError as exc:
+        raise JevError(
+            f"Timeout Jev po {JEV_REQUEST_TIMEOUT_SECONDS:g} s - zostawiam wynik matchera."
+        ) from exc
     except httpx.HTTPError as exc:
         raise JevError(f"Blad polaczenia z TypeSafe: {exc}") from exc
 

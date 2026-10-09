@@ -77,17 +77,21 @@ async def evaluate_document(document, catalog, chunk_size: int = 6):
             dzial=document.dzial or "elektryka",
             magazyn=document.magazyn,
             limit=5,
-            include_current_match=False,
+            include_current_match=True,
         )
         if not candidates:
             continue
 
         features = _query_features(name, document.dzial or "elektryka")
+        matcher_product = catalog.find_by_kod(item.match_kod) if item.match_kod else None
         decisions.append({
             "row_id": row_id,
             "sequence": item.sequence,
             "ocr_text": name,
             "matcher_kod": item.match_kod,
+            "matcher_nazwa": matcher_product.nazwa if matcher_product else item.match_nazwa,
+            "matcher_quality": item.match_quality,
+            "matcher_score": item.match_score,
             "query_features": features,
             "soft_rules": _soft_matcher_rules(features),
             "candidates": candidates,
@@ -112,6 +116,16 @@ async def evaluate_document(document, catalog, chunk_size: int = 6):
             decision_rows.append({
                 "row_id": row["row_id"],
                 "ocr_text": row["ocr_text"],
+                "matcher_decision": {
+                    "kod": row["matcher_kod"],
+                    "nazwa": row["matcher_nazwa"],
+                    "quality": row["matcher_quality"],
+                    "score": row["matcher_score"],
+                    "role": (
+                        "DOMYSLNA decyzja biznesowa DAMPOL. Papierowa nazwa moze byc stara, "
+                        "a matcher moze swiadomie mapowac ja na aktualny zamiennik/material."
+                    ),
+                },
                 "query_features": row["query_features"],
                 "soft_rules": row["soft_rules"],
                 "candidates": [
@@ -131,9 +145,16 @@ async def evaluate_document(document, catalog, chunk_size: int = 6):
                 "type": "choice",
                 "instructions": (
                     f"Wybierz produkt tylko dla {row['row_id']}. "
+                    "Najwazniejsza zasada: matcher_decision jest DOMYSLNA decyzja DAMPOL i ma "
+                    "pierwszenstwo przed literalnym podobienstwem starej nazwy z papierowej wydawki. "
+                    "Stare nazwy na wydawkach moga celowo mapowac na aktualne zamienniki/materialy "
+                    "(np. nowe bezhalogenowe korytka/elementy 90 stopni). "
+                    "Jesli matcher_decision ma kod i nie ma twardego, jednoznacznego konfliktu "
+                    "biznesowego/technicznego, wybierz ten kod. Alternatywe wybieraj tylko przy "
+                    "mocnym dowodzie, ze matcher jest faktycznie bledny. Gdy matcher nie ma kodu "
+                    "albo jego wynik jest slaby, wtedy sam wybierz najlepszego kandydata lub OTHER. "
                     "W state masz cala wydawke jako context_rows oraz szczegoly tej pozycji "
-                    "w decision_rows. Uzyj cech, aliasow i diagnostyki. "
-                    "Jesli nic nie pasuje, wybierz OTHER."
+                    "w decision_rows."
                 ),
                 "criteria": criteria,
             }
@@ -151,8 +172,10 @@ async def evaluate_document(document, catalog, chunk_size: int = 6):
                 "decision_rows": decision_rows,
                 "rules": [
                     "Kazdy wiersz jest osobna pozycja tej samej wydawki.",
+                    "Matcher zawiera wiedze biznesowa DAMPOL i jego decyzja jest domyslnie nadrzedna.",
+                    "Papierowe wydawki moga miec stare nazwy produktow, ktore celowo mapujemy na aktualne zamienniki.",
                     "Kontekst innych wierszy pomaga rozumiec skroty, ale nie wolno przenosic produktu miedzy wierszami.",
-                    "Brak jawnego 3P oznacza 1P.",
+                    "Brak jawnego 3P oznacza 1P, chyba ze twarda regula magazynowa wskazuje konkretny wariant kodu.",
                 ],
             },
             "questions": questions,

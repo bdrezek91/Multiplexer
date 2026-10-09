@@ -168,26 +168,33 @@ async def apply_jev_active(
         rejected_by_poles = False
 
         if not locked and result.jev_kod:
-            candidate = catalog.find_by_kod(result.jev_kod)
-            if candidate is not None:
-                candidate = apply_warehouse_variant(catalog, candidate, magazyn)
+            # Matcher jest glowna decyzja biznesowa DAMPOL. Papierowa wydawka moze miec
+            # stare nazwy produktu, ktore matcher swiadomie mapuje na aktualny material/kod
+            # (np. nowe warianty bezhalogenowe lub elementy 90 stopni). Dlatego Jev NIE
+            # nadpisuje dobrego/warn matchera tylko dlatego, ze literalna nazwa wyglada inaczej.
+            # Jev przejmuje decyzje dopiero, gdy matcher jest slaby albo nie ma pewnego kodu.
+            if not _is_weak_match(current_match) and current_match.kod:
+                pass
+            else:
+                candidate = catalog.find_by_kod(result.jev_kod)
+                if candidate is not None:
+                    candidate = apply_warehouse_variant(catalog, candidate, magazyn)
 
-                # Twarda konwencja DAMPOL: brak xP na wydawce = 1P.
-                # Jev nie moze sam dopowiedziec 3P. Nawet jesli TypeSafe wybierze taki kod,
-                # zostawiamy bezpieczny wynik matchera.
-                if not _candidate_respects_poles(
-                    str(item.get("rozpoznana_nazwa") or ""),
-                    candidate,
-                ):
-                    rejected_by_poles = True
-                else:
-                    item["match_kod"] = candidate.kod
-                    item["match_nazwa"] = candidate.nazwa
-                    item["match_jm"] = candidate.jm
-                    item["matched_product_id"] = resolve_product_id(candidate.kod)
-                    item["match_quality"] = QUALITY_OK
-                    item["match_score"] = float(result.confidence)
-                    applied = candidate.kod != current_match.kod
+                    # Twarda konwencja DAMPOL: brak xP na wydawce = 1P.
+                    # Jev nie moze sam dopowiedziec 3P.
+                    if not _candidate_respects_poles(
+                        str(item.get("rozpoznana_nazwa") or ""),
+                        candidate,
+                    ):
+                        rejected_by_poles = True
+                    else:
+                        item["match_kod"] = candidate.kod
+                        item["match_nazwa"] = candidate.nazwa
+                        item["match_jm"] = candidate.jm
+                        item["matched_product_id"] = resolve_product_id(candidate.kod)
+                        item["match_quality"] = QUALITY_OK
+                        item["match_score"] = float(result.confidence)
+                        applied = candidate.kod != current_match.kod
 
         # Jev OTHER + slaby matcher = nie eksportujemy przypadkowego kodu.
         # Dla dobrego/warn matchera nadal obowiazuje fail-open i zostawiamy stary wynik.

@@ -46,13 +46,42 @@ def _result(match, jev_kod):
 
 
 @pytest.mark.asyncio
-async def test_active_moze_zmienic_niechronione_dopasowanie(monkeypatch, catalog):
+async def test_active_nie_nadpisuje_dobrego_matchera(monkeypatch, catalog):
     monkeypatch.setenv("JEV_ENABLED", "true")
     monkeypatch.setenv("JEV_MODE", "active")
     query = "Różnicówka niemiecka 1 fazowa 40A"
     match = match_against_catalog(query, catalog)
     target = next(p for p in catalog.products if p.kod != match.kod)
     items = [_item(query, match)]
+
+    async def fake(**kwargs):
+        return _result(match, target.kod)
+
+    monkeypatch.setattr(active, "evaluate_shadow", fake)
+    rows = await active.apply_jev_active(
+        items=items,
+        catalog=catalog,
+        special_rules=DEFAULT_SPECIAL_RULES,
+        magazyn=None,
+        dzial="elektryka",
+        resolve_product_id=lambda kod: "pid",
+    )
+
+    assert items[0]["match_kod"] == match.kod
+    assert items[0]["matched_product_id"] is None
+    assert rows[0]["applied"] is False
+
+
+@pytest.mark.asyncio
+async def test_active_moze_uratowac_slaby_matcher(monkeypatch, catalog):
+    monkeypatch.setenv("JEV_ENABLED", "true")
+    monkeypatch.setenv("JEV_MODE", "active")
+    query = "Różnicówka niemiecka 1 fazowa 40A"
+    match = match_against_catalog(query, catalog)
+    target = next(p for p in catalog.products if p.kod != match.kod)
+    items = [_item(query, match)]
+    items[0]["match_quality"] = "bad"
+    items[0]["match_score"] = 0.10
 
     async def fake(**kwargs):
         return _result(match, target.kod)

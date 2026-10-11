@@ -412,11 +412,12 @@ async def _read_with_prompt(
             raise HTTPException(400, "Łączny rozmiar obrazów jest zbyt duży.")
         prepared.append((data, ctype))
 
+    # Fail closed: use only Flash-Lite models with the FREE key. Never
+    # fall back to a paid key, even after 429/503 or exhausted quota.
     free_key = os.getenv("GEMINI_API_KEY_FREE", "").strip()
-    paid_key = os.getenv("GEMINI_API_KEY_PAID", "").strip()
     attempts = [
-        ("gemini-3.6-flash", paid_key),
-        ("gemini-3.5-flash", free_key),
+        ("gemini-3.5-flash-lite", free_key),
+        ("gemini-3.1-flash-lite", free_key),
     ]
     provider = GeminiProvider()
     errors = []

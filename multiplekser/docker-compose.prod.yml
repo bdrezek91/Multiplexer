@@ -189,7 +189,7 @@ services:
       disable: true
     environment:
       GEMINI_API_KEY_FREE: ${GEMINI_API_KEY_FREE:-}
-      GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
+      GEMINI_API_KEY_PAID: ""  # technical-vision: FREE-only, no paid fallback
       OCR_TIMEOUT_SECONDS: ${OCR_TIMEOUT_SECONDS:-90}
     networks:
       - default

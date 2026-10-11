@@ -8,12 +8,14 @@ import uuid
 from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.dialects.postgresql import insert
+from zoneinfo import ZoneInfo
 
 from datetime import datetime, timezone
 
 from app.modules.users.models import UserModel
 
-from .models import DocumentFileModel, DocumentItemModel, DocumentModel, DocumentReportModel, OcrRowGroupFlagModel
+from .models import DocumentDailyStatsModel, DocumentFileModel, DocumentItemModel, DocumentModel, DocumentReportModel, OcrRowGroupFlagModel
 
 # Zestawienie oszczednosci dla panelu administratora (2026-09-21, na zyczenie uzytkownika) -
 # przyblizony czas recznego wprowadzenia JEDNEJ wydawki na podstawie realnego doswiadczenia
@@ -92,7 +94,7 @@ _STATS_DAILY_DOCUMENTS_BY_EMAIL = {
 }
 
 
-def get_document_stats_daily(allowed_emails: set[str] | None = None) -> list[dict]:
+def get_document_stats_daily(session: Session, allowed_emails: set[str] | None = None) -> list[dict]:
     """Dzienny rozklad: korekta szacunkowa + odtworzone realne przyrosty licznikow."""
     rows = []
     unit_money = MINUTES_PER_MANUAL_DOCUMENT / 60 * HOURLY_RATE_PLN
@@ -145,32 +147,41 @@ def get_document_stats_daily(allowed_emails: set[str] | None = None) -> list[dic
             "pieniadze_zaoszczedzone": round(total_money, 2),
         })
 
-    # Nie pokazuj produkcyjnego szacunku na pustej/obcej bazie (np. testowej).
-    # W produkcji pozostawiamy rowniez dni z zerem, aby wykres uczciwie pokazywal brak pracy.
-    if not any(row["dokumenty"] > 0 for row in rows):
+    # Nowe przyrosty sa zapisywane razem z mark_done(), niezaleznie od retencji.
+    live = session.query(UserModel.email, DocumentDailyStatsModel.day, DocumentDailyStatsModel.documents).join(
+        UserModel, UserModel.id == DocumentDailyStatsModel.user_id,
+    ).all()
+    by_day = {row["data"]: row for row in rows}
+    for email, day, count in live:
+        if allowed_emails is not None and email not in allowed_emails:
+            continue
+        row = by_day.setdefault(day.isoformat(), {
+            "data": day.isoformat(), "per_user": [], "dokumenty": 0,
+            "minuty_zaoszczedzone": 0, "pieniadze_zaoszczedzone": 0.0,
+        })
+        row["per_user"].append({
+            "email": email, "dokumenty": count,
+            "minuty_zaoszczedzone": count * MINUTES_PER_MANUAL_DOCUMENT,
+            "pieniadze_zaoszczedzone": round(count * unit_money, 2),
+        })
+        row["dokumenty"] += count
+        row["minuty_zaoszczedzone"] += count * MINUTES_PER_MANUAL_DOCUMENT
+        row["pieniadze_zaoszczedzone"] += count * unit_money
+    rows = sorted(by_day.values(), key=lambda row: row["data"])
+    if not any(row["dokumenty"] for row in rows):
         return []
 
-    # Dziennie kwoty sa zaokraglane do groszy, wiec suma 24 wierszy moze roznic sie o 0,01 zl
-    # od sumy globalnej. Wyrównaj ostatni dzien, aby wykres i karta podsumowania byly identyczne.
-    if allowed_emails is None or {
-        "marzena.wiesner-szmit@dampol-investment.com",
-        "bdrezek91@gmail.com",
-        "paula.kordek@dampol-investment.com",
-        "krzysztof.cabak@dampol-investment.com",
-    }.issubset(allowed_emails):
-        target_money = round(
-            1300.0 + 130 * MINUTES_PER_MANUAL_DOCUMENT / 60 * HOURLY_RATE_PLN,
-            2,
-        )
-        current_money = round(sum(row["pieniadze_zaoszczedzone"] for row in rows), 2)
-        delta = round(target_money - current_money, 2)
-        if delta:
-            rows[-1]["pieniadze_zaoszczedzone"] = round(rows[-1]["pieniadze_zaoszczedzone"] + delta, 2)
-            if rows[-1]["per_user"]:
-                rows[-1]["per_user"][-1]["pieniadze_zaoszczedzone"] = round(
-                    rows[-1]["per_user"][-1]["pieniadze_zaoszczedzone"] + delta,
-                    2,
-                )
+    # Wyrownaj tylko grosze z zaokraglen dziennych, bez stalej kwoty globalnej.
+    emails = {user["email"] for row in rows for user in row["per_user"]}
+    historical_docs = sum(HISTORICAL_ADJUSTMENT_BY_EMAIL.get(email, {}).get("estimated_documents", 0) for email in emails)
+    historical_money = sum(HISTORICAL_ADJUSTMENT_BY_EMAIL.get(email, {}).get("money_pln", 0) for email in emails)
+    target_money = round((sum(row["dokumenty"] for row in rows) - historical_docs) * unit_money + historical_money, 2)
+    for row in rows:
+        row["pieniadze_zaoszczedzone"] = round(row["pieniadze_zaoszczedzone"], 2)
+    delta = round(target_money - sum(row["pieniadze_zaoszczedzone"] for row in rows), 2)
+    last = next(row for row in reversed(rows) if row["per_user"])
+    last["pieniadze_zaoszczedzone"] = round(last["pieniadze_zaoszczedzone"] + delta, 2)
+    last["per_user"][-1]["pieniadze_zaoszczedzone"] = round(last["per_user"][-1]["pieniadze_zaoszczedzone"] + delta, 2)
 
     return rows
 
@@ -368,6 +379,15 @@ def mark_done(
         {UserModel.dokumenty_ukonczone_licznik: UserModel.dokumenty_ukonczone_licznik + 1},
         synchronize_session=False,
     )
+    daily = insert(DocumentDailyStatsModel).values(
+        user_id=document.user_id,
+        day=datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Warsaw")).date(),
+        documents=1,
+    )
+    session.execute(daily.on_conflict_do_update(
+        index_elements=[DocumentDailyStatsModel.user_id, DocumentDailyStatsModel.day],
+        set_={"documents": DocumentDailyStatsModel.documents + 1},
+    ))
     session.commit()
 
 

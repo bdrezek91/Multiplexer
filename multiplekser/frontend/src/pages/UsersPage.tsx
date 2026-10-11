@@ -213,6 +213,8 @@ function DocumentStatsPanel() {
   const { data: stats, isLoading, error } = useQuery({
     queryKey: ['documentStats'],
     queryFn: getDocumentStats,
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
   })
 
   if (isLoading) return null

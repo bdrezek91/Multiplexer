@@ -92,3 +92,51 @@ def test_stats_bez_zadnych_dokumentow_zwraca_puste_zestawienie(client, admin_hea
     assert body["razem_dokumenty"] == 0
     assert body["razem_minuty_zaoszczedzone"] == 0
     assert body["razem_pieniadze_zaoszczedzone"] == 0
+
+
+def test_stats_refresh_after_completion_and_survive_retention(
+    client, db_session, admin_user, admin_headers, mocked_storage, gemini_key_configured, baza_elektryka_json,
+):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    import pytest
+
+    import_catalog(db_session, baza_elektryka_json)
+    import_special_rules(db_session, DEFAULT_SPECIAL_RULES)
+    before = client.get("/documents/stats/summary", headers=admin_headers).json()
+    document_id = _create_document(db_session, admin_user)
+    # Duplicate Celery delivery must not increment either counter again.
+    run_ocr_task(document_id, db_session)
+    response = client.get("/documents/stats/summary", headers=admin_headers)
+    body = response.json()
+    assert response.headers["cache-control"] == "no-store"
+    assert body["razem_dokumenty"] == before["razem_dokumenty"] + 1
+    assert body["razem_pieniadze_zaoszczedzone"] == 7.33
+    day = datetime.now(ZoneInfo("Europe/Warsaw")).date().isoformat()
+    assert next(row for row in body["daily"] if row["data"] == day)["dokumenty"] == 1
+    assert sum(row["dokumenty"] for row in body["daily"]) == 1
+    assert sum(row["pieniadze_zaoszczedzone"] for row in body["daily"]) == pytest.approx(7.33)
+    # Same deletion used by retention: daily totals must outlive the document.
+    db_session.delete(doc_repo.get_document(db_session, document_id))
+    db_session.commit()
+    assert client.get("/documents/stats/summary", headers=admin_headers).json() == body
+
+
+def test_daily_history_plus_new_completions_matches_summary(client, db_session, admin_user, admin_headers):
+    from datetime import date
+    import pytest
+    from app.modules.documents.models import DocumentDailyStatsModel
+    from app.modules.users.repository import create_user
+
+    for email, counts in doc_repo._STATS_DAILY_DOCUMENTS_BY_EMAIL.items():
+        user = create_user(db_session, email=email, password="test-password-123", rola="magazynier")
+        historical = doc_repo.HISTORICAL_ADJUSTMENT_BY_EMAIL.get(email, {}).get("estimated_documents", 0)
+        user.dokumenty_ukonczone_licznik = sum(counts) - historical + 1
+        db_session.add(DocumentDailyStatsModel(user_id=user.id, day=date(2026, 10, 12), documents=1))
+    db_session.commit()
+    body = client.get("/documents/stats/summary", headers=admin_headers).json()
+    assert body["razem_dokumenty"] == 311
+    assert sum(row["dokumenty"] for row in body["daily"]) == 311
+    assert body["daily"][-1]["data"] == "2026-10-12"
+    assert body["daily"][-1]["dokumenty"] == 4
+    assert sum(row["pieniadze_zaoszczedzone"] for row in body["daily"]) == pytest.approx(body["razem_pieniadze_zaoszczedzone"])

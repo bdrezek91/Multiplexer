@@ -630,6 +630,7 @@ def list_document_reports(
 # string i nigdy nie dotarlaby tutaj) - ten sam wzorzec co /reports/list powyzej.
 @router.get("/stats/summary", response_model=DocumentStatsOut)
 def get_document_stats(
+    response: Response,
     session: Session = Depends(get_db),
     user: UserModel = Depends(require_admin),
 ):
@@ -637,6 +638,7 @@ def get_document_stats(
     na zyczenie uzytkownika), zestawiony z szacowanym zaoszczedzonym czasem/pieniedzmi wzgledem
     recznego wprowadzania wydawki - zalozenia (8 min/wydawke, 55 zl brutto/h kosztu pracodawcy)
     patrz repository.MINUTES_PER_MANUAL_DOCUMENT/HOURLY_RATE_PLN."""
+    response.headers["Cache-Control"] = "no-store"
     per_user = repository.get_document_stats_per_user(session)
     razem_dokumenty = sum(row["dokumenty"] for row in per_user)
     razem_potwierdzone = sum(row["dokumenty_potwierdzone"] for row in per_user)
@@ -651,7 +653,7 @@ def get_document_stats(
     )
     return DocumentStatsOut(
         per_user=[UserDocumentStatsOut(**row) for row in per_user],
-        daily=repository.get_document_stats_daily({row["email"] for row in per_user}),
+        daily=repository.get_document_stats_daily(session, {row["email"] for row in per_user}),
         razem_dokumenty=razem_dokumenty,
         razem_dokumenty_potwierdzone=razem_potwierdzone,
         razem_dokumenty_historyczne_szacowane=razem_historyczne,

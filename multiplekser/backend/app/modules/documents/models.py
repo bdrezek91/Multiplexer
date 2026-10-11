@@ -9,9 +9,9 @@ ktore inaczej zostalyby po cichu odrzucone przy zapisie), `match_kod`/`match_naz
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Uuid, func
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -208,3 +208,12 @@ class OcrRowGroupFlagModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     document: Mapped["DocumentModel"] = relationship(back_populates="row_group_flags")
+
+
+class DocumentDailyStatsModel(Base):
+    """Trwale przyrosty od 2026-10-09; bez FK do dokumentu usuwanego przez retencje."""
+    __tablename__ = "document_daily_stats"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("app_user.id", ondelete="CASCADE"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    documents: Mapped[int] = mapped_column(Integer, nullable=False)

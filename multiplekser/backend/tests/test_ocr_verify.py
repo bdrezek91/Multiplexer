@@ -228,9 +228,9 @@ async def test_hydraulika_brak_wyniku_kontroli_zachowuje_jedynke_glownego_ocr():
     from app.modules.documents.ocr_processing import _verify_ambiguous_items
 
     items = [{
-        "rozpoznana_nazwa": "Kompakt WC",
+        "rozpoznana_nazwa": "Rura fi 40 50 cm",
         "ilosc_wydana": 1,
-        "ilosc_zuzyta": 1,
+        "ilosc_zuzyta": None,
         "ilosc_finalna": 1,
         "needs_review": False,
         "form_note": "",
@@ -249,10 +249,40 @@ async def test_hydraulika_brak_wyniku_kontroli_zachowuje_jedynke_glownego_ocr():
 
     assert calls == 2
     assert items[0]["ilosc_wydana"] == 1
-    assert items[0]["ilosc_zuzyta"] == 1
+    assert items[0]["ilosc_zuzyta"] is None
     assert items[0]["ilosc_finalna"] == 1
     assert items[0]["needs_review"] is True
     assert "zachowano ilość z głównego OCR" in items[0]["form_note"]
+
+
+async def test_hydraulika_kompletny_wiersz_2_na_1_nie_jest_ponownie_weryfikowany():
+    from app.modules.documents.ocr_processing import _verify_ambiguous_items
+
+    items = [{
+        "rozpoznana_nazwa": "Trójnik kanalizacyjny fi 40 90 st",
+        "ilosc_wydana": 2,
+        "ilosc_zuzyta": 1,
+        "ilosc_finalna": 1,
+        "needs_review": False,
+        "form_note": "",
+    }]
+    calls = 0
+
+    async def should_not_run(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return [VerifyResult(None, None)]
+
+    await _verify_ambiguous_items(
+        [(b"pdf", "application/pdf")], items, "doc-1", lambda event: None,
+        cooldown_store=object(), dzial="hydraulika", _verify_func=should_not_run,
+    )
+
+    assert calls == 0
+    assert items[0]["ilosc_wydana"] == 2
+    assert items[0]["ilosc_zuzyta"] == 1
+    assert items[0]["ilosc_finalna"] == 1
+    assert items[0]["needs_review"] is False
 
 
 async def test_hydraulika_konsensus_uzupelnia_tylko_zgodne_wartosci():

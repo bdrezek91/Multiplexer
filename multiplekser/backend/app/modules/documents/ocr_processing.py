@@ -197,11 +197,14 @@ async def _verify_ambiguous_items(
             # pozioma kreska "-" oznaczajaca brak. Dlatego weryfikujemy:
             # - kazdy wiersz z co najmniej jedna brakujaca kolumna (np. 3 / 1,5),
             # - kazda odczytana jedynke, zeby skreslenie nie zostalo uznane za 1.
+            # Dodatkowa kontrola ma RATOWAC brakujace komorki, a nie nadpisywac poprawny
+            # odczyt glownego OCR. Realny dokument 132/12 pokazal, ze ponowna weryfikacja
+            # kompletnego wiersza 2/1 potrafila nieslusznie usunac poprawna jedynke.
+            # Nadal sprawdzamy 1/None, None/1, 2/None itd. - czyli przypadki, dla ktorych
+            # mechanizm powstal - ale kompletne 1/1, 2/1 itd. zostawiamy bez zmian.
             hyd_needs_check = (
                 item["ilosc_wydana"] is None
                 or item["ilosc_zuzyta"] is None
-                or item["ilosc_wydana"] == 1
-                or item["ilosc_zuzyta"] == 1
             )
             if hyd_needs_check:
                 targets.append(index)

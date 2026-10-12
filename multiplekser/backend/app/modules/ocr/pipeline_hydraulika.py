@@ -31,7 +31,7 @@ from app.modules.matcher import MatchResult, match_against_catalog_hydraulika
 from app.modules.products import Catalog
 from app.modules.parser.shared import strip_diacritics
 
-from .chain import AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, run_ocr_chain
+from .chain import (AllProvidersFailedError, OCRChainEventCallback, OCRChainStep, hydraulika_ocr_chain, run_ocr_chain)
 from .cooldown import OCRCooldownStore
 from .form_rows_hydraulika import snap_to_known_item_hydraulika
 from .parsing import extract_json, is_actionable_item, is_valid_ocr_response, validate_item
@@ -210,7 +210,8 @@ async def recognize_document_hydraulika(
         context = dict(log_context or {})
         ai_stage = str(context.pop("ai_stage_override", "full_ocr_hydraulika"))
         chain_result = await run_ocr_chain(
-            files, AI_OCR_PROMPT_HYDRAULIKA, chain=chain,
+            files, AI_OCR_PROMPT_HYDRAULIKA,
+            chain=chain if chain is not None else hydraulika_ocr_chain(),
             response_validator=is_valid_ocr_response,
             log_context={**context, "ai_stage": ai_stage},
             event_callback=event_callback,

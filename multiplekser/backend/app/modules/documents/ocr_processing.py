@@ -226,6 +226,7 @@ async def _verify_ambiguous_items(
     # wyłącznie wtedy, gdy OBA odczyty zwracają tę samą dodatnią wartość. Rozbieżność -> null
     # i ręczna weryfikacja zamiast ryzyka wpisania poziomej kreski "-" jako cyfry 1.
     disagreements: set[int] = set()
+    incomplete_confirmation: set[int] = set()
     if dzial == "hydraulika":
         confirmation = await verify_func(
             files,
@@ -276,12 +277,20 @@ async def _verify_ambiguous_items(
                 result = results[pos]
                 wydana = result.ilosc_wydana
                 zuzyta = result.ilosc_zuzyta
-                if wydana == 1 and third.ilosc_wydana != 1:
-                    wydana = None
-                    disagreements.add(pos)
-                if zuzyta == 1 and third.ilosc_zuzyta != 1:
-                    zuzyta = None
-                    disagreements.add(pos)
+                if wydana == 1:
+                    if third.ilosc_wydana is None:
+                        # Brak trzeciego glosu to brak danych, nie zaprzeczenie. Zachowujemy
+                        # zgodne 1 z dwoch pierwszych odczytow, ale oznaczamy wiersz do kontroli.
+                        incomplete_confirmation.add(pos)
+                    elif third.ilosc_wydana != 1:
+                        wydana = None
+                        disagreements.add(pos)
+                if zuzyta == 1:
+                    if third.ilosc_zuzyta is None:
+                        incomplete_confirmation.add(pos)
+                    elif third.ilosc_zuzyta != 1:
+                        zuzyta = None
+                        disagreements.add(pos)
                 results[pos] = VerifyResult(wydana, zuzyta)
 
     for pos, (idx, result) in enumerate(zip(targets, results)):
@@ -299,12 +308,18 @@ async def _verify_ambiguous_items(
                     item[field] = verified
                     changed = True
                 elif original == 1:
-                    # Jedynka z glownego OCR musi byc potwierdzona przez konsensus. Jesli dwie
-                    # kontrole nie potwierdzily 1, usuwamy ja zamiast ryzykowac skreslenie/"-".
-                    if verified != 1:
+                    # Brak wyniku dodatkowej kontroli NIE jest dowodem, ze glowny OCR sie myli.
+                    # Usuwamy 1 tylko przy realnej sprzecznosci (rozne glosy albo zgodny inny
+                    # numer). Gdy verifier nic nie odczytal / wszystkie modele byly niedostepne,
+                    # zachowujemy 1 z glownego OCR i jedynie oznaczamy wiersz do sprawdzenia.
+                    if verified == 1:
+                        pass
+                    elif pos in disagreements or verified is not None:
                         item[field] = None
                         changed = True
                         disagreements.add(pos)
+                    else:
+                        incomplete_confirmation.add(pos)
         else:
             if item["ilosc_wydana"] is None and result.ilosc_wydana is not None:
                 item["ilosc_wydana"] = result.ilosc_wydana
@@ -316,6 +331,12 @@ async def _verify_ambiguous_items(
         if pos in disagreements:
             item["needs_review"] = True
             note = "Kontrole AI nie zgodziły się co do ilości - sprawdź na oryginale."
+            current = str(item.get("form_note") or "").strip()
+            if note not in current:
+                item["form_note"] = f"{current} | {note}" if current else note
+        elif pos in incomplete_confirmation:
+            item["needs_review"] = True
+            note = "Dodatkowa kontrola AI nie zwróciła pełnego wyniku - zachowano ilość z głównego OCR."
             current = str(item.get("form_note") or "").strip()
             if note not in current:
                 item["form_note"] = f"{current} | {note}" if current else note

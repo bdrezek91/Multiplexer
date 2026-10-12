@@ -224,6 +224,37 @@ async def test_obie_puste_ilosci_eskaluja_nawet_bez_quantity_marks(monkeypatch):
     assert batch.await_args_list[2].args[1] == ["Pozycja A"]
 
 
+async def test_hydraulika_brak_wyniku_kontroli_zachowuje_jedynke_glownego_ocr():
+    from app.modules.documents.ocr_processing import _verify_ambiguous_items
+
+    items = [{
+        "rozpoznana_nazwa": "Kompakt WC",
+        "ilosc_wydana": 1,
+        "ilosc_zuzyta": 1,
+        "ilosc_finalna": 1,
+        "needs_review": False,
+        "form_note": "",
+    }]
+    calls = 0
+
+    async def no_result(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return [VerifyResult(None, None)]
+
+    await _verify_ambiguous_items(
+        [(b"pdf", "application/pdf")], items, "doc-1", lambda event: None,
+        cooldown_store=object(), dzial="hydraulika", _verify_func=no_result,
+    )
+
+    assert calls == 2
+    assert items[0]["ilosc_wydana"] == 1
+    assert items[0]["ilosc_zuzyta"] == 1
+    assert items[0]["ilosc_finalna"] == 1
+    assert items[0]["needs_review"] is True
+    assert "zachowano ilość z głównego OCR" in items[0]["form_note"]
+
+
 async def test_hydraulika_konsensus_uzupelnia_tylko_zgodne_wartosci():
     from app.modules.documents.ocr_processing import _verify_ambiguous_items
 

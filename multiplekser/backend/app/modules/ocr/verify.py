@@ -18,7 +18,7 @@ teraz zawsze na pelnym obrazie - mniej precyzyjne "zoomowanie" przy bardzo zages
 kartkach, ale zero ryzyka zlego dopasowania wiersza.
 
 Lancuch (`quantity_verification_chain()`, patrz chain.py) jest na zyczenie uzytkownika (2026-08-07)
-WYLACZNIE darmowy - pozycja, ktorej nie odczyta zaden z czterech darmowych modeli Gemini, zostaje
+WYLACZNIE darmowy - pozycja, ktorej nie odczyta zaden z pieciu darmowych modeli Gemini, zostaje
 "Bez wyniku" (patrz `_publish_no_result`) i wymaga recznej weryfikacji na oryginale, bez placonego
 fallbacku (inaczej niz `default_ocr_chain()` uzywany do pelnego odczytu calego dokumentu).
 """

@@ -8,6 +8,7 @@ from app.modules.ocr.chain import (
     OCRChainStep,
     classify_ocr_chain,
     default_ocr_chain,
+    hydraulika_ocr_chain,
     quantity_verification_chain,
     run_ocr_chain,
 )
@@ -54,36 +55,45 @@ class _FakeCooldown:
         self.resets.append(step_label)
 
 
-async def test_default_chain_ma_gemini_x4_darmowy_gemini_platny_openai_platny():
-    """Cztery modele Gemini na kluczu darmowym, potem platny Gemini i OpenAI jako ostatni fallback."""
+async def test_default_chain_ma_gemini_x5_darmowy_gemini_platny_openai_platny():
+    """Piec darmowych prob Gemini, potem platny Gemini i OpenAI jako ostatni fallback Elektryki."""
     chain = default_ocr_chain()
-    assert len(chain) == 6
+    assert len(chain) == 7
     gemini_steps = [s for s in chain if isinstance(s.provider, GeminiProvider)]
     openai_steps = [s for s in chain if isinstance(s.provider, OpenAIProvider)]
-    assert len(gemini_steps) == 5
+    assert len(gemini_steps) == 6
     assert len(openai_steps) == 1
-    assert openai_steps[0] is chain[-1]  # OpenAI zawsze na koncu - ostatni fallback
+    assert openai_steps[0] is chain[-1]
 
     assert [s.model for s in gemini_steps] == [
         "gemini-3.5-flash-lite",
         "gemini-3.5-flash",
         "gemini-3-flash-preview",
         "gemini-3.1-flash-lite",
-        "gemini-3.6-flash",
+        "gemini-3.6-flash",  # darmowy
+        "gemini-3.6-flash",  # platny
     ]
 
     free_steps = [s for s in chain if "darmowy" in s.label]
     paid_steps = [s for s in chain if "platny" in s.label]
-    assert len(free_steps) == 4
-    assert len(paid_steps) == 2  # Gemini platny + OpenAI platny
+    assert len(free_steps) == 5
+    assert len(paid_steps) == 2
 
 
-async def test_quantity_verification_chain_ma_tylko_cztery_darmowe_modele_gemini():
+async def test_hydraulika_chain_nie_uzywa_openai_i_ma_3_6_free():
+    chain = hydraulika_ocr_chain()
+    assert len(chain) == 6
+    assert all(isinstance(s.provider, GeminiProvider) for s in chain)
+    assert not any(isinstance(s.provider, OpenAIProvider) for s in chain)
+    assert any(s.model == "gemini-3.6-flash" and "darmowy" in s.label for s in chain)
+
+
+async def test_quantity_verification_chain_ma_tylko_piec_darmowych_modeli_gemini():
     """Na zyczenie uzytkownika (2026-08-07) dodatkowa kontrola ilosci (verify.py) nie siega po
     platne modele - to sprawdzenie kilku niejasnych komorek, nie caly dokument, wiec placony
     fallback nie jest tu proporcjonalny do korzysci."""
     chain = quantity_verification_chain()
-    assert len(chain) == 4
+    assert len(chain) == 5
     assert all(isinstance(s.provider, GeminiProvider) for s in chain)
     assert all("darmowy" in s.label for s in chain)
     assert [s.model for s in chain] == [
@@ -91,6 +101,7 @@ async def test_quantity_verification_chain_ma_tylko_cztery_darmowe_modele_gemini
         "gemini-3.1-flash-lite",
         "gemini-3.5-flash",
         "gemini-3.5-flash-lite",
+        "gemini-3.6-flash",
     ]
 
 

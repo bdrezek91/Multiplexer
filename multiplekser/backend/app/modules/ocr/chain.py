@@ -1,9 +1,10 @@
 """Lancuch dostawcow z automatycznym fallbackiem - port AI_CHAIN + petli prob w runAI() z monolitu.
 
 Dwa warianty lancucha, obydwa budowane na biezaco z `settings` (patrz kazda funkcja):
-- `default_ocr_chain()` - pelny odczyt pozycji z dokumentu (pipeline_elektryka/hydraulika,
-  verify.py). Kolejnosc prob (2026-08-04): cztery modele Gemini na kluczu darmowym (3.6 Flash,
-  3.5 Flash, 3.5 Flash Lite i 3.1 Flash Lite) -> Gemini 3.6 Flash na kluczu platnym -> OpenAI na
+- `default_ocr_chain()` - pelny odczyt pozycji z dokumentu Elektryki. Kolejnosc prob obejmuje
+  piec darmowych modeli Gemini (w tym 3.6 Flash), potem Gemini 3.6 Flash na kluczu platnym i
+  OpenAI jako ostatni fallback Elektryki. Hydraulika ma osobny `hydraulika_ocr_chain()` i nie
+  publikuje automatycznie wyniku OpenAI po awarii Gemini.
   kluczu platnym (ostatni krok, uzywany WYLACZNIE gdy wszystkie kroki Gemini zawioda - nie przy
   kazdym dokumencie). Tu liczy sie przede wszystkim jakosc, wiec zaczynamy od najmocniejszego
   modelu.
@@ -14,7 +15,7 @@ Dwa warianty lancucha, obydwa budowane na biezaco z `settings` (patrz kazda funk
   wierszy (ocr/verify.py), wspolna dla Elektryki i Hydrauliki. Na zyczenie uzytkownika (2026-08-07)
   BEZ platnych krokow (Gemini platny, OpenAI) - to dorazne sprawdzenie kilku komorek, nie caly
   dokument, wiec koszt platnego fallbacku nie jest tu proporcjonalny do korzysci. Pozycja, ktorej
-  nie odczyta zaden z czterech darmowych modeli, zostaje "Bez wyniku" - user i tak musi ja
+  nie odczyta zaden z pieciu darmowych modeli, zostaje "Bez wyniku" - user i tak musi ja
   zweryfikowac na oryginale, tak jak kazda inna niejasna pozycje spoza tej sciezki.
 
 Osobny mechanizm cross-checku OpenAI (rownolegly drugi odczyt przy KAZDYM dokumencie, patrz git
@@ -73,11 +74,35 @@ def default_ocr_chain() -> list[OCRChainStep]:
         OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 18),
         OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 14),
         OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 16),
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 16),
         OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key, 18),
         OCRChainStep(
             f"OpenAI {settings.openai_model} (klucz platny)",
             OpenAIProvider(), settings.openai_model, settings.openai_api_key, 25,
         ),
+    ]
+
+
+def hydraulika_ocr_chain() -> list[OCRChainStep]:
+    """Pelny OCR Hydrauliki - tylko Gemini.
+
+    GPT-4o nie jest bezpiecznym fallbackiem dla gestych formularzy Hydrauliki: na realnym
+    dokumencie 132/12 przesuwal ilosci miedzy sasiednimi wierszami/kolumnami. Gdy wszystkie
+    Gemini sa chwilowo niedostepne, lepiej zakonczyc probe bledem i pozwolic orkiestratorowi
+    ponowic dokument niz opublikowac pozornie poprawna, ale zla wydawke. 3.6 Flash free jest
+    dodatkowym darmowym fallbackiem - w tym samym incydencie poprawnie obsluzyl klasyfikacje,
+    gdy pozostale darmowe modele timeoutowaly.
+    """
+    gemini = GeminiProvider()
+    free_key = settings.gemini_api_key_free
+    paid_key = settings.gemini_api_key_paid
+    return [
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 18),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 18),
+        OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 14),
+        OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 16),
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 16),
+        OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key, 18),
     ]
 
 
@@ -120,12 +145,14 @@ def quantity_verification_chain(dzial: str = "elektryka") -> list[OCRChainStep]:
             OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 12),
             OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 14),
             OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 16),
+            OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 16),
         ]
     return [
         OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 12),
         OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 14),
         OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 16),
         OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 16),
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 16),
     ]
 
 
@@ -138,6 +165,7 @@ def background_verification_chain() -> list[OCRChainStep]:
         OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 16),
         OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 18),
         OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 18),
+        OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 16),
     ]
 
 

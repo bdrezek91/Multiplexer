@@ -66,9 +66,9 @@ async def test_default_chain_ma_gemini_x4_darmowy_gemini_platny_openai_platny():
 
     assert [s.model for s in gemini_steps] == [
         "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
         "gemini-3-flash-preview",
         "gemini-3.1-flash-lite",
-        "gemini-3.5-flash",
         "gemini-3.6-flash",
     ]
 
@@ -340,18 +340,23 @@ async def test_timeout_kroku_przechodzi_do_nastepnego_i_ustawia_cooldown():
     assert "blokada modelu na 2 min" in str(rejected["reason"])
 
 
-async def test_domyslny_chain_zaczyna_od_najszybszego_modelu_z_benchmarku():
+async def test_domyslny_chain_zaczyna_od_najszybszego_modelu_i_szybko_fallbackuje_do_3_5_flash():
     chain = default_ocr_chain()
-    first = chain[0]
-    assert first.model == "gemini-3.5-flash-lite"
-    assert first.timeout_seconds == 18
+    assert chain[0].model == "gemini-3.5-flash-lite"
+    assert chain[0].timeout_seconds == 18
+    assert chain[1].model == "gemini-3.5-flash"
+    assert chain[1].timeout_seconds == 18
+    assert chain[2].model == "gemini-3-flash-preview"
+    assert chain[3].model == "gemini-3.1-flash-lite"
 
 
-async def test_classification_chain_zaczyna_od_3_5_flash_lite():
+async def test_classification_chain_ma_krotki_timeout_i_fallback_do_3_5_flash():
     chain = classify_ocr_chain()
     assert chain[0].model == "gemini-3.5-flash-lite"
-    assert chain[0].timeout_seconds == 8
-    assert chain[1].model == "gemini-3.1-flash-lite"
+    assert chain[0].timeout_seconds == 5
+    assert chain[1].model == "gemini-3.5-flash"
+    assert chain[1].timeout_seconds == 8
+    assert chain[2].model == "gemini-3.1-flash-lite"
 
 
 async def test_background_zaczyna_od_3_flash_preview():

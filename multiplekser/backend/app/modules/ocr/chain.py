@@ -64,15 +64,15 @@ def default_ocr_chain() -> list[OCRChainStep]:
     gemini = GeminiProvider()
     free_key = settings.gemini_api_key_free
     paid_key = settings.gemini_api_key_paid
-    # Kolejnosc oparta na benchmarku prawdziwych wydawek (2026-10-09).
-    # Na 3 tych samych dokumentach 3.5 Flash Lite byl ~39% szybszy od 3 Flash Preview
-    # (11.08 s vs 18.20 s lacznie), zachowal 66/66 zgodnych kodow i odczytal 64/65 ilosci.
-    # Dlatego zostaje pierwszym krokiem pelnego OCR; 3 Flash Preview jest pierwszym fallbackiem.
+    # Kolejnosc oparta na benchmarkach prawdziwych wydawek. 3.5 Flash Lite pozostaje numerem 1
+    # dla jakosci/czasu. Gdy jednak timeoutuje, przechodzimy od razu do 3.5 Flash: na dokumencie
+    # 50/04/2026 odpowiedzial w 5.7 s, podczas gdy posredni 3 Flash Preview zmarnowal 14 s na
+    # timeout. Preview i 3.1 Lite zostaja jako dalsze darmowe fallbacki.
     return [
         OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 18),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 18),
         OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 14),
         OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 16),
-        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 18),
         OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key, 18),
         OCRChainStep(
             f"OpenAI {settings.openai_model} (klucz platny)",
@@ -84,17 +84,18 @@ def default_ocr_chain() -> list[OCRChainStep]:
 def classify_ocr_chain() -> list[OCRChainStep]:
     """Lancuch dla samej klasyfikacji dzialu.
 
-    Po pomiarze na realnych wydawkach 3.5 Flash Lite jest pierwszy: 3.1 Flash Lite potrafil
-    zuzyc cale 8 s timeoutu bez wyniku, podczas gdy 3.5 Flash Lite klasyfikowal ten sam dokument
-    w ok. 1-2 s. Fallback pozostaje bez zmian.
+    3.5 Flash Lite pozostaje pierwszy. W ostatnich 80 dokumentach udane klasyfikacje mialy
+    mediane 1.47 s, p90 1.84 s i maksimum 3.12 s, dlatego timeout 5 s daje bezpieczny zapas.
+    Po timeoutcie od razu probujemy 3.5 Flash, ktory na realnym przypadku odpowiedzial w 1.2 s;
+    3.1 Flash Lite zostaje dalszym fallbackiem zamiast opozniac typowa sciezke awaryjna.
     """
     gemini = GeminiProvider()
     free_key = settings.gemini_api_key_free
     paid_key = settings.gemini_api_key_paid
     return [
-        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 8),
+        OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 5),
+        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 8),
         OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 8),
-        OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 10),
         OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 10),
         OCRChainStep("Gemini 3.6 Flash (klucz platny)", gemini, "gemini-3.6-flash", paid_key, 10),
         OCRChainStep(

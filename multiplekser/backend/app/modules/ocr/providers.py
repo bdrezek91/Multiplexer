@@ -147,6 +147,68 @@ class GroqProvider(OCRProvider):
         return str(message.get("content") or "")
 
 
+class CloudflareProvider(OCRProvider):
+    """Cloudflare Workers AI (Gemma 4 Vision), tylko dla testow shadow.
+
+    Native REST /ai/run; obraz przez image_url data URI i prompt OCR jako tekst.
+    Wylaczamy reasoning, aby nie zuzywac limitu i czasu na thinking.
+    """
+
+    async def recognize(
+        self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
+        thinking_level: str = "low",
+    ) -> str:
+        if not files:
+            raise OCRProviderError("Cloudflare: brak obrazow")
+        if not settings.cloudflare_account_id:
+            raise OCRProviderError("Cloudflare: brak Account ID")
+        parts: list[dict] = [{"type": "text", "text": prompt}]
+        for file_bytes, mime in files:
+            if not mime.startswith("image/"):
+                raise OCRProviderError(f"Cloudflare: oczekiwano obrazu, dostano {mime}")
+            encoded = base64.b64encode(file_bytes).decode("ascii")
+            parts.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{encoded}"},
+            })
+        url = (
+            f"https://api.cloudflare.com/client/v4/accounts/{settings.cloudflare_account_id}"
+            f"/ai/run/{model}"
+        )
+        body = {
+            "messages": [{"role": "user", "content": parts}],
+            "temperature": 0,
+            "max_completion_tokens": 4000,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
+        try:
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(
+                    url,
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json=body,
+                )
+        except httpx.TimeoutException as exc:
+            raise OCRProviderError("Cloudflare: timeout 120 s") from exc
+        except httpx.HTTPError as exc:
+            raise OCRProviderError(f"Cloudflare: blad HTTP {type(exc).__name__}") from exc
+        if resp.status_code >= 400:
+            raise OCRProviderError(
+                f"Cloudflare API {resp.status_code}: {resp.text[:300]}",
+                status_code=resp.status_code,
+            )
+        payload = resp.json()
+        if payload.get("success") is False:
+            raise OCRProviderError(f"Cloudflare API: {str(payload.get('errors') or '')[:300]}")
+        result = payload.get("result") or {}
+        choices = result.get("choices") or []
+        message = choices[0].get("message") or {} if choices else {}
+        content = message.get("content") or result.get("response") or ""
+        if not isinstance(content, str) or not content.strip():
+            raise OCRProviderError("Cloudflare: brak tekstowej odpowiedzi OCR")
+        return content
+
+
 class OpenAIProvider(OCRProvider):
     """Ostatni krok w default_ocr_chain() (patrz chain.py) - uzywany WYLACZNIE gdy wszystkie
     kroki Gemini zawioda. Responses API (nie starsze Chat Completions) - obsluguje natywnie

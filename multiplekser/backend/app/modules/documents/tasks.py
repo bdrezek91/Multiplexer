@@ -38,6 +38,7 @@ from .ocr_processing import (
 )
 from .retention import prune_documents
 from .groq_shadow import run_groq_shadow_task
+from .cloudflare_shadow import run_cloudflare_shadow_task
 from .task_telemetry import (
     _background_queue_wait_ms,
     _elapsed_ms,
@@ -294,3 +295,16 @@ def process_groq_shadow(
 
 def dispatch_groq_shadow_task(document_id: str) -> None:
     process_groq_shadow.delay(document_id)
+
+
+@celery_app.task(name="documents.cloudflare_shadow", queue="background")
+def process_cloudflare_shadow(document_id: str) -> None:
+    session = SessionLocal()
+    try:
+        run_cloudflare_shadow_task(document_id, session)
+    finally:
+        session.close()
+
+
+def dispatch_cloudflare_shadow_task(document_id: str) -> None:
+    process_cloudflare_shadow.delay(document_id)

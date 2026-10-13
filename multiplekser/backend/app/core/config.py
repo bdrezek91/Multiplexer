@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     groq_model: str = "qwen/qwen3.8-27b"
     groq_shadow_enabled: bool = True
 
+    # Cloudflare Workers AI Gemma Vision - niezalezny shadow OCR (nie dotyka produkcji).
+    cloudflare_api_token: str | None = None
+    cloudflare_account_id: str | None = None
+    cloudflare_model: str = "@cf/google/gemma-4-26b-a4b-it"
+    cloudflare_shadow_enabled: bool = False
+
     # Skalowanie zdjec (nie-PDF) przed wyslaniem do AI - mniejszy upload = szybsza odpowiedz.
     # Podniesione z 1800/85 (port 1:1 z monolitu) - realny przypadek z produkcji (patrz
     # docs/RAPORT_OCR_NIEZAWODNOSC_1.md): drobne odreczne znaki (np. cyfra "1" tuz obok ptaszka

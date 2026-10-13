@@ -11,6 +11,9 @@ import re
 import unicodedata
 from typing import Any
 
+import cv2
+import numpy as np
+
 
 @dataclass(frozen=True)
 class ElectricCalibration:
@@ -122,3 +125,66 @@ def electric_rows(lines: list[dict[str,Any]],calibration: ElectricCalibration,*,
         if i not in assigned:
             notices.append(f'unassigned_{row[1]}_number_y{round(row[0])}')
     return results,notices
+
+
+@dataclass(frozen=True)
+class ElectricInkReview:
+    """Presence evidence only; cannot create or modify a quantity."""
+    page: int
+    name: str
+    issued_dark_pixels: int
+    used_dark_pixels: int
+
+
+def detect_electric_dark_ink(
+    image_jpg: bytes,
+    lines: list[dict[str, Any]],
+    calibration: ElectricCalibration,
+    *,
+    page: int,
+    has_header: bool,
+    min_dark_pixels: int = 25,
+) -> list[ElectricInkReview]:
+    """Find material rows needing secondary OCR even when digit OCR missed them.
+
+    Conservative: dark pixels are NOT interpreted as handwritten amounts. Grid
+    intersections and bleed-through can create false positives, so these rows
+    are review candidates ONLY, never automatic additions to TXT/JEV.
+    """
+    if page < 1 or min_dark_pixels < 1:
+        raise ValueError('invalid electrical ink detector parameters')
+    im = cv2.imdecode(np.frombuffer(image_jpg, dtype=np.uint8), cv2.IMREAD_GRAYSCALE)
+    if im is None:
+        raise ValueError('Invalid image')
+    min_y = calibration.header_y + 27 if has_header else 110
+    result: list[ElectricInkReview] = []
+    for line in lines:
+        try:
+            x, y = center(line)
+        except (TypeError, ValueError, IndexError):
+            continue
+        name = str(line.get('text') or '').strip()
+        if x > calibration.issued_x - 110 or y < min_y or len(name) < 4:
+            continue
+        if normalized(name) in {'inne:', 'nazwa'}:
+            continue
+        cy = round(y)
+        def pixels(xcenter: float) -> int:
+            left = max(0, round(xcenter) - 62)
+            right = min(im.shape[1], round(xcenter) + 62)
+            yy0 = max(0, cy - 11)
+            yy1 = min(im.shape[0], cy + 12)
+            return int(np.count_nonzero(im[yy0:yy1, left:right] < 120))
+        issue = pixels(calibration.issued_x)
+        used = pixels(calibration.used_x)
+        if max(issue, used) >= min_dark_pixels:
+            result.append(ElectricInkReview(page, name, issue, used))
+    return result
+
+
+def electric_unrecognized_ink(
+    dark_ink: list[ElectricInkReview], numeric_candidates: list[ElectricCandidate],
+) -> list[ElectricInkReview]:
+    """Escalate only: flag ink with no numeric OCR candidate; never invent qty."""
+    identified = {(item.page, normalized(item.name)) for item in numeric_candidates}
+    return [item for item in dark_ink if (item.page, normalized(item.name)) not in identified]

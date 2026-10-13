@@ -68,3 +68,24 @@ def test_blue_ink_is_counted_in_correct_material_row_and_column():
     assert result[0].consumed_blue_pixels<20
     assert result[1].consumed_blue_pixels>=20
     assert result[1].issued_blue_pixels<20
+
+
+def test_dark_electric_ink_rescues_unreadable_digit_as_review_only():
+    from app.modules.documents.auto_v4_electric import (
+        detect_electric_dark_ink, electric_unrecognized_ink,
+    )
+    im=np.full((340,520,3),255,dtype=np.uint8)
+    # Black handwritten mark unrecognized by text OCR (no numeric token).
+    cv2.putText(im,'3',(200,171),cv2.FONT_HERSHEY_SIMPLEX,.7,(15,15,15),2)
+    _,blob=cv2.imencode('.jpg',im)
+    lines=[token('Ilość Wydana',200,100),token('Ilość zużyta',360,100),
+           token('Wago zamykane potrójne',70,160)]
+    c=calibrate_electric(lines)
+    numeric,unused=electric_rows(lines,c,page=1,has_header=True)
+    assert numeric==[] and unused==[]
+    marked=detect_electric_dark_ink(blob.tobytes(),lines,c,page=1,has_header=True)
+    assert len(marked)==1 and marked[0].name=='Wago zamykane potrójne'
+    assert marked[0].issued_dark_pixels>25
+    review=electric_unrecognized_ink(marked,numeric)
+    assert review==marked
+    assert not hasattr(review[0], 'issued')  # ink is NOT a guessed quantity

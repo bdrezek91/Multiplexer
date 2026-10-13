@@ -42,3 +42,11 @@ The integrity guard is independent of V4 and is suitable as a production fix whe
 - Explicit zero unexpected quantity changes, zero silent omissions, clear review flags for differences.
 - Reproducible p50/p95 elapsed from document acceptance to finished item list and JEV.
 - No unbounded GPU dependency: if PC is offline, fall back safely to the existing V3 chain. Private tunnels must not become public OCR endpoints.
+
+## Follow-up: electrical rescue and targeted handwritten recheck
+
+- Once the exact duplicate PDF is counted only once, the electrical reference contains **21 distinct entries**, not 42. Numeric RapidOCR candidates match **20/21** source rows and all 20 candidate quantity pairs match the stored reference. One dark handwritten `Wago zamykane potrójne` mark has no numeric OCR token.
+- A separate low-threshold electrical **dark-ink presence** detector (not the hydraulic blue-ink filter) finds **21/21** reference labels at 25 dark pixels, along with **11 extra candidates**. These extras must trigger review, not automatically add materials or amounts.
+- `electric_unrecognized_ink` compares dark-ink evidence with parsed numeric rows and produces review-only candidates: it does not assign product codes or fill quantities. Shadow-only, with a synthetic regression test ensuring an OCR-missed dark digit is escalated.
+- A targeted Qwen3-VL recheck of the **five previously mismatching quantity pairs** (crops enlarged, 5 rows in 1 request) took **2.78 seconds**. Two pairs changed to agree with the stored baseline (`Mufa GZ`, `Uchwyt do rur fi 32`); three remain uncertain (`Kolanko kanalizacyjne fi 32 90 st`, `Kolanko ścienne GW`, `Syfon prysznicowy`). The result is not GOLD and the recheck is not wired to production.
+- These are preliminary results on two kinds of real forms, not a reliable p95 speed or population-level accuracy claim. Existing AUTO V3 + JEV remains the only production material decision path.

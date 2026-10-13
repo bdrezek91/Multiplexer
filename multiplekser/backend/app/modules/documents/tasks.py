@@ -105,10 +105,13 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
         # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
+        auto_mode = document.source_type == "auto_v3"
         claude_test = document.source_type in {
             "claude_jev_test_elektryka", "claude_jev_test_hydraulika"
         }
-        if claude_test:
+        claude_ocr = auto_mode or claude_test
+        auto_used_gemini = False
+        if claude_ocr:
             # Claude only reads images. Business logic + all catalog decisions
             # continue through the existing matcher and JEV ACTIVE below.
             from .claude_bridge import run_claude_host_bridge
@@ -116,37 +119,122 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
             from app.modules.ocr.pipeline_hydraulika import _build_item_hydraulika
             from app.modules.matcher.core_hydraulika import DEFAULT_SPECIAL_RULES_HYDRAULIKA
 
-            dzial = document.source_type.removeprefix("claude_jev_test_")
-            raw_rows, ocr_seconds = run_claude_host_bridge(
-                document_id, files, dzial,
-            )
-            catalog = Catalog.from_db(session, dzial=dzial)
-            if dzial == "hydraulika":
-                positions = [_build_item_hydraulika(row, catalog, document.magazyn)
-                             for row in raw_rows]
-            else:
-                special_rules = rules_from_db(session)
-                positions = [_build_item(row, catalog, special_rules, document.magazyn)
-                             for row in raw_rows]
-            for position in positions:
-                if position.ilosc_wydana is None and position.ilosc_zuzyta is None:
-                    position.needs_review = True
-                    position.form_note = (position.form_note or "") + " Claude: nie udało się odczytać obu ilości."
-            result = SimpleNamespace(
-                numer_projektu=None, pracownik=None, numer_plomby=None,
-                used_provider="Claude Sonnet + JEV (test)",
-                rejected_count=0, pozycje=positions,
-            )
-            classify_result = SimpleNamespace(confidence=1.0)
-            timings["timing_claude_ocr"] = int(ocr_seconds * 1000)
-            save_ai_event({
-                "status": "completed", "stage": "claude_test_ocr",
-                "provider": "Claude", "model": "sonnet",
-                "label": "Claude + JEV (test)", "reason": f"Odczytano {len(positions)} pozycji na {len(files)} stronach.",
-                "step": None, "total_steps": None, "duration_ms": int(ocr_seconds * 1000),
-                "attempt": 1, "target": None,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
+            dzial = "auto" if auto_mode else document.source_type.removeprefix("claude_jev_test_")
+            try:
+                raw_rows, ocr_seconds = run_claude_host_bridge(
+                    document_id, files, dzial,
+                )
+            except Exception as claude_error:
+                # AUTO can use free Gemini only when Claude Pro reports exhausted
+                # quota. The legacy Gemini chain may reach paid OpenAI/Gemini,
+                # so NEVER use that chain here.
+                if not auto_mode or "limit" not in str(claude_error).casefold():
+                    raise
+                if not settings.gemini_api_key_free:
+                    raise
+                from .auto_v3 import recognize_with_free_gemini
+                classify_result, dzial, result = recognize_with_free_gemini(
+                    files, session, document.magazyn
+                )
+                auto_used_gemini = True
+                save_ai_event({
+                    "status": "completed", "stage": "auto_fallback",
+                    "provider": "Gemini", "model": "darmowy",
+                    "label": "AUTO: limit Claude, darmowy Gemini",
+                    "reason": "Wykorzystano tylko darmową ścieżkę Gemini; wynik wymaga weryfikacji.",
+                    "step": None, "total_steps": None, "duration_ms": None,
+                    "attempt": 1, "target": None,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+            if not auto_used_gemini and auto_mode:
+                from .auto_v3 import classify_auto_dzial
+                dzial, confidence, classification_method = classify_auto_dzial(raw_rows)
+                classify_result = SimpleNamespace(confidence=confidence)
+                save_ai_event({
+                    "status": "completed", "stage": "auto_classification",
+                    "provider": "AUTO", "model": "header-and-materials",
+                    "label": "AUTO: rozpoznanie działu",
+                    "reason": f"{dzial}: {classification_method} ({confidence:.0f}%).",
+                    "step": None, "total_steps": None, "duration_ms": 0,
+                    "attempt": 1, "target": None,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+            if not auto_used_gemini:
+                catalog = Catalog.from_db(session, dzial=dzial)
+                if dzial == "hydraulika":
+                    positions = [_build_item_hydraulika(row, catalog, document.magazyn)
+                                 for row in raw_rows]
+                else:
+                    special_rules = rules_from_db(session)
+                    positions = [_build_item(row, catalog, special_rules, document.magazyn)
+                                 for row in raw_rows]
+
+                # Selective verification: only at most three suspicious rows
+                # across at most two pages. Re-read with Opus High. Different
+                # answers are NOT silently substituted: review is mandatory.
+                risky=[]
+                for row, position in zip(raw_rows,positions):
+                    uncertain = (row.get("_uncertain") or
+                                 (position.ilosc_wydana is None and position.ilosc_zuzyta is None))
+                    if uncertain or (auto_mode and position.match.quality == "bad"):
+                        position.needs_review = True
+                        position.form_note = (position.form_note or "") + " AUTO: niepewny odczyt — wymaga kontroli."
+                        risky.append((row,position))
+                if auto_mode and risky:
+                    verify={}
+                    for row, position in risky:
+                        page=int(row.get("page_number") or 1)
+                        if page not in verify and len(verify)>=2:
+                            continue
+                        if len(verify.setdefault(page, []))<3 and sum(map(len,verify.values()))<3:
+                            verify[page].append(str(row["nazwa"]))
+                    if verify:
+                        started_verify=time.perf_counter()
+                        try:
+                            checked, _ = run_claude_host_bridge(
+                                document_id, files, dzial, timeout_seconds=145,
+                                verify_names=verify,
+                            )
+                            from .auto_v3 import reconcile_verify_rows
+                            confirmed, conflicts = reconcile_verify_rows(risky, checked)
+                            save_ai_event({
+                                "status": "completed", "stage": "auto_verify_opus",
+                                "provider": "Claude", "model": "opus-high",
+                                "label": "AUTO: druga kontrola trudnych pozycji",
+                                "reason": f"Zgodnych odczytów: {confirmed}; różnic: {conflicts}. "
+                                          "Niezgodności pozostają do ręcznej weryfikacji.",
+                                "step": None, "total_steps": None,
+                                "duration_ms": _elapsed_ms(started_verify), "attempt": 1,
+                                "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
+                            })
+                        except Exception:
+                            logger.warning("AUTO: kontrola Opus niedostępna, zostawiam ręczną weryfikację", exc_info=True)
+                            save_ai_event({
+                                "status": "rejected", "stage": "auto_verify_opus",
+                                "provider": "Claude", "model": "opus-high",
+                                "label": "AUTO: druga kontrola niedostępna",
+                                "reason": "Pozycje nadal wymagają ręcznej kontroli.",
+                                "step": None, "total_steps": None,
+                                "duration_ms": _elapsed_ms(started_verify), "attempt": 1,
+                                "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
+                            })
+                result = SimpleNamespace(
+                    numer_projektu=None, pracownik=None, numer_plomby=None,
+                    used_provider="Multiplekser AUTO (Claude Sonnet → JEV)" if auto_mode else "Claude Sonnet + JEV (test)",
+                    rejected_count=0, pozycje=positions,
+                )
+                if not auto_mode:
+                    classify_result = SimpleNamespace(confidence=1.0)
+                timings["timing_claude_ocr"] = int(ocr_seconds * 1000)
+                save_ai_event({
+                    "status": "completed", "stage": "auto_ocr" if auto_mode else "claude_test_ocr",
+                    "provider": "Claude", "model": "sonnet",
+                    "label": "Multiplekser AUTO" if auto_mode else "Claude + JEV (test)",
+                    "reason": f"Odczytano {len(positions)} pozycji na {len(files)} stronach.",
+                    "step": None, "total_steps": None, "duration_ms": int(ocr_seconds * 1000),
+                    "attempt": 1, "target": None,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
         else:
             classify_result, dzial, result, core_timings = _classify_and_recognize(
                 files, session, document, save_ai_event, cooldown_store,
@@ -160,10 +248,14 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
             )
             for it in result.pozycje
         ]
+        if auto_used_gemini:
+            for item in items:
+                item["needs_review"]=True
+                item["form_note"]=(item.get("form_note") or "") + " AUTO: awaryjny darmowy Gemini — sprawdź przed eksportem."
         timings["timing_item_materialization"] = _elapsed_ms(stage_started)
 
         stage_started = time.perf_counter()
-        if not claude_test:
+        if not claude_ocr:
             asyncio.run(_verify_ambiguous_items(
                 files, items, document_id, save_ai_event, cooldown_store, dzial,
             ))
@@ -184,7 +276,7 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         # blad/OTHER zostawia stary matcher. Wszystkie pozycje ida do Jev rownolegle.
         active_jev_rows = []
         qty_before_jev = [(item.get("ilosc_wydana"), item.get("ilosc_zuzyta"))
-                          for item in items] if claude_test else []
+                          for item in items] if claude_ocr else []
         stage_started = time.perf_counter()
         try:
             from app.modules.decision.active import apply_jev_active
@@ -209,7 +301,7 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         finally:
             timings["timing_jev_active"] = _elapsed_ms(stage_started)
 
-        if claude_test:
+        if claude_ocr:
             # Never advertise OCR->JEV as fully confirmed if TypeSafe did not
             # answer for some rows. Preserve original OCR quantities without
             # making up a match/code when an external service is unavailable.
@@ -249,7 +341,7 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         timings["timing_to_done"] = _elapsed_ms(task_started)
 
         timing_events = [_timing_event(stage, duration) for stage, duration in timings.items()]
-        if not claude_test:
+        if not claude_ocr:
             timing_events.append({
             "status": "queued", "stage": "full_document_verification",
             "provider": None, "model": None, "label": None,
@@ -282,7 +374,7 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         # JEV_ENABLED=false (domyslnie, patrz docker-compose.prod.yml).
         try:
             from app.modules.decision.tasks import dispatch_jev_shadow_task
-            if not claude_test:
+            if not claude_ocr:
                 dispatch_jev_shadow_task(document_id)
         except Exception:
             logger.warning("Jev shadow - nie udalo sie zlecic zadania, pomijam", exc_info=True)
@@ -312,6 +404,7 @@ def process_ocr_document(document_id: str) -> None:
             return
         completed = repository.get_document(session, document_id)
         if (completed is not None and completed.status == "done"
+                and completed.source_type != "auto_v3"
                 and not completed.source_type.startswith("claude_jev_test_")):
             try:
                 dispatch_full_document_verification_task(document_id)

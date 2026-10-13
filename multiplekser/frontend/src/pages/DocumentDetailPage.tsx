@@ -1007,9 +1007,9 @@ export function DocumentDetailPage() {
               </Stack>
             </Stack>
 
-            {document.source_type.startsWith('claude_jev_test_') && (
+            {(document.source_type.startsWith('claude_jev_test_') || document.source_type === 'auto_v3') && (
               <Alert severity="warning" sx={{ mt: 2 }}>
-                <strong>Claude + JEV — dokument testowy.</strong> Claude odczytał nazwy i ilości,
+                <strong>Multiplekser AUTO / Claude + JEV — dokument do kontroli.</strong> Claude odczytał nazwy i ilości,
                 a matcher/JEV dobrał kody. Zweryfikuj każdą ilość i kod na oryginalnym
                 skanie przed pobraniem TXT lub importem do Optimy.
               </Alert>

@@ -48,7 +48,8 @@ export function DocumentsPage() {
   // dopiero po recznym kliknieciu "Wyslij i rozpoznaj", nigdy automatycznie po zdjeciu.
   const [files, setFiles] = useState<File[]>([])
   const [magazyn, setMagazyn] = useState('')
-  const [ocrEngine, setOcrEngine] = useState<'standard' | 'claude_jev_test'>('standard')
+  const [ocrEngine, setOcrEngine] = useState<'auto_v3' | 'standard' | 'claude_jev_test'>('auto_v3')
+  const [showDiagnostics, setShowDiagnostics] = useState(false)
   const [claudeDzial, setClaudeDzial] = useState<'elektryka' | 'hydraulika'>('elektryka')
   const [error, setError] = useState<string | null>(null)
   const [compressionWarning, setCompressionWarning] = useState<string | null>(null)
@@ -236,38 +237,52 @@ export function DocumentsPage() {
             </ToggleButtonGroup>
             <FormHelperText>Magazyn (opcjonalnie) - kliknij ponownie, żeby odznaczyć</FormHelperText>
           </Box>
-          <Box>
-            <ToggleButtonGroup
-              exclusive
-              value={ocrEngine}
-              onChange={(_, next: 'standard' | 'claude_jev_test' | null) => {
-                if (next) setOcrEngine(next)
-              }}
-              size="small"
-              aria-label="Silnik rozpoznawania wydawki"
-            >
-              <ToggleButton value="standard">Standardowy OCR (Gemini)</ToggleButton>
-              {isAdmin && (
-                <ToggleButton value="claude_jev_test">Claude + JEV (Pro · test limitów)</ToggleButton>
-              )}
-            </ToggleButtonGroup>
-            <FormHelperText>Wybierz silnik do nowo przesłanej wydawki.</FormHelperText>
+          <Box sx={{ minWidth: 240 }}>
+            <Typography variant="body2" fontWeight={700}>
+              {ocrEngine === 'auto_v3' ? 'Multiplekser AUTO' :
+                ocrEngine === 'standard' ? 'Diagnostyka: Gemini' : 'Diagnostyka: Claude + JEV'}
+            </Typography>
+            <FormHelperText>
+              {ocrEngine === 'auto_v3'
+                ? 'Claude czyta skan, JEV wybiera materiały, a trudne pozycje są kontrolowane automatycznie.'
+                : 'Ręcznie wybrany silnik diagnostyczny.'}
+            </FormHelperText>
+            {isAdmin && (
+              <Button size="small" onClick={() => setShowDiagnostics((prev) => !prev)}>
+                {showDiagnostics ? 'Ukryj diagnostykę modeli' : 'Diagnostyka modeli'}
+              </Button>
+            )}
           </Box>
-          {ocrEngine === 'claude_jev_test' && (
-            <Box>
+          {isAdmin && showDiagnostics && (
+            <Box sx={{ width: '100%' }}>
               <ToggleButtonGroup
                 exclusive
-                value={claudeDzial}
-                onChange={(_, next: 'elektryka' | 'hydraulika' | null) => {
-                  if (next) setClaudeDzial(next)
+                value={ocrEngine}
+                onChange={(_, next: 'auto_v3' | 'standard' | 'claude_jev_test' | null) => {
+                  if (next) setOcrEngine(next)
                 }}
                 size="small"
-                aria-label="Dział wydawki dla Claude"
+                aria-label="Diagnostyczny wybór silnika OCR"
               >
-                <ToggleButton value="elektryka">Elektryka</ToggleButton>
-                <ToggleButton value="hydraulika">Hydraulika</ToggleButton>
+                <ToggleButton value="auto_v3">AUTO (zalecane)</ToggleButton>
+                <ToggleButton value="standard">Gemini</ToggleButton>
+                <ToggleButton value="claude_jev_test">Claude + JEV (ręcznie)</ToggleButton>
               </ToggleButtonGroup>
-              <FormHelperText>Claude odczytuje obraz; matcher i JEV wybierają kody Optimy.</FormHelperText>
+              {ocrEngine === 'claude_jev_test' && (
+                <Box sx={{ mt: 1 }}>
+                  <ToggleButtonGroup
+                    exclusive value={claudeDzial}
+                    onChange={(_, next: 'elektryka' | 'hydraulika' | null) => {
+                      if (next) setClaudeDzial(next)
+                    }}
+                    size="small" aria-label="Dział wydawki dla Claude"
+                  >
+                    <ToggleButton value="elektryka">Elektryka</ToggleButton>
+                    <ToggleButton value="hydraulika">Hydraulika</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+              )}
+              <FormHelperText>Diagnostyka administratora: tylko na potrzeby porównań silników.</FormHelperText>
             </Box>
           )}
           <Button
@@ -279,16 +294,15 @@ export function DocumentsPage() {
               ? 'Przygotowywanie plików...'
               : uploadMutation.isPending
                 ? 'Wysyłanie...'
-                : 'Zatwierdź i wyślij do rozpoznania'}
+                : 'Rozpoznaj wydawkę'}
           </Button>
         </Stack>
 
-        {ocrEngine === 'claude_jev_test' && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            Tryb testowy: Claude Pro odczytuje tekst i ilości, JEV dobiera materiały.
-            Weryfikuj ilości na skanie przed pobraniem TXT. Czas może zależeć od limitu Claude.
-          </Alert>
-        )}
+        <Alert severity="info" sx={{ mt: 2 }}>
+          {ocrEngine === 'auto_v3'
+            ? 'AUTO: nieczytelne ilości i konflikty modeli będą oznaczone do sprawdzenia. Zweryfikuj wydawkę przed importem do Optimy.'
+            : 'Tryb diagnostyczny: sprawdź ilości oraz kody z oryginalnym skanem przed importem do Optimy.'}
+        </Alert>
         {files.length > 0 && (
           <Box sx={{ mt: 2 }}>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -337,8 +351,8 @@ export function DocumentsPage() {
               <TableRow key={doc.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/documents/${doc.id}`)}>
                 <TableCell>
                   {doc.original_filename}
-                  {doc.source_type.startsWith('claude_jev_test_') && (
-                    <Chip size="small" label="Claude + JEV · test" color="info" sx={{ ml: 1 }} />
+                  {(doc.source_type.startsWith('claude_jev_test_') || doc.source_type === 'auto_v3') && (
+                    <Chip size="small" label={doc.source_type === 'auto_v3' ? 'AUTO V3' : 'Claude + JEV · test'} color="info" sx={{ ml: 1 }} />
                   )}
                 </TableCell>
                 <TableCell>{doc.numer_projektu ?? '-'}</TableCell>

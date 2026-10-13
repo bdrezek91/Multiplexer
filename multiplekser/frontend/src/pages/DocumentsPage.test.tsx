@@ -71,11 +71,25 @@ describe('DocumentsPage - robienie kilku zdjec aparatem przed zatwierdzeniem', (
     expect(screen.getByText('strona3.jpg')).toBeInTheDocument()
     expect(documentsApi.uploadDocument).not.toHaveBeenCalled()
 
-    await user.click(screen.getByRole('button', { name: /zatwierdź i wyślij/i }))
+    await user.click(screen.getByRole('button', { name: /rozpoznaj wydawkę/i }))
 
     await waitFor(() => expect(documentsApi.uploadDocument).toHaveBeenCalledTimes(1))
     const [sentFiles] = vi.mocked(documentsApi.uploadDocument).mock.calls[0]
     expect(sentFiles.map((f) => f.name)).toEqual(['strona1.jpg', 'strona2.jpg', 'strona3.jpg'])
+  })
+
+  it('domyślnie wysyła AUTO bez wyboru modelu ani działu', async () => {
+    const user = userEvent.setup()
+    vi.mocked(documentsApi.uploadDocument).mockResolvedValue({ id: 'auto3', status: 'queued' })
+    renderPage()
+    const [cameraInput] = document.querySelectorAll('input[type="file"]')
+    await user.upload(cameraInput as HTMLInputElement, fakeFile('wydawka.jpg'))
+    expect(screen.getByText('Multiplekser AUTO')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Gemini' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /rozpoznaj wydawkę/i }))
+    await waitFor(() => expect(documentsApi.uploadDocument).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][2]).toBe('auto_v3')
+    expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][3]).toBeUndefined()
   })
 
   it('pozwala wybrac Claude + JEV z dzialem hydraulicznym przy uploadzie', async () => {
@@ -84,9 +98,10 @@ describe('DocumentsPage - robienie kilku zdjec aparatem przed zatwierdzeniem', (
     renderPage()
     const [cameraInput] = document.querySelectorAll('input[type="file"]')
     await user.upload(cameraInput as HTMLInputElement, fakeFile('hydraulika.jpg'))
-    await user.click(screen.getByRole('button', { name: /claude \+ jev \(pro/i }))
+    await user.click(screen.getByRole('button', { name: 'Diagnostyka modeli' }))
+    await user.click(screen.getByRole('button', { name: /claude \+ jev \(ręcznie\)/i }))
     await user.click(screen.getByRole('button', { name: 'Hydraulika' }))
-    await user.click(screen.getByRole('button', { name: /zatwierdź i wyślij/i }))
+    await user.click(screen.getByRole('button', { name: /rozpoznaj wydawkę/i }))
     await waitFor(() => expect(documentsApi.uploadDocument).toHaveBeenCalledTimes(1))
     expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][2]).toBe('claude_jev_test')
     expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][3]).toBe('hydraulika')
@@ -105,7 +120,7 @@ describe('DocumentsPage - robienie kilku zdjec aparatem przed zatwierdzeniem', (
     expect(screen.queryByText('zla-strona.jpg')).not.toBeInTheDocument()
     expect(screen.getByText('dobra-strona.jpg')).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /zatwierdź i wyślij/i }))
+    await user.click(screen.getByRole('button', { name: /rozpoznaj wydawkę/i }))
 
     await waitFor(() => expect(documentsApi.uploadDocument).toHaveBeenCalledTimes(1))
     const [sentFiles] = vi.mocked(documentsApi.uploadDocument).mock.calls[0]
@@ -135,7 +150,7 @@ describe('DocumentsPage - robienie kilku zdjec aparatem przed zatwierdzeniem', (
     resolvers.get(second.name)?.(second)
 
     await waitFor(() => expect(screen.getByText(second.name)).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: /zatwierdź i wyślij/i }))
+    await user.click(screen.getByRole('button', { name: /rozpoznaj wydawkę/i }))
     await waitFor(() => expect(documentsApi.uploadDocument).toHaveBeenCalledTimes(1))
     const [sentFiles] = vi.mocked(documentsApi.uploadDocument).mock.calls[0]
     expect(sentFiles.map((file) => file.name)).toEqual([first.name, second.name])

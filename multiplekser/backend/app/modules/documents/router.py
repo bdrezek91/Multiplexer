@@ -157,14 +157,18 @@ async def create_document(
     dokumenty."""
     check_magazyn_access(user, magazyn)
 
-    if ocr_engine not in {"standard", "claude_jev_test"}:
+    if ocr_engine not in {"standard", "claude_jev_test", "auto_v3"}:
         raise HTTPException(status_code=422, detail="Nieznany silnik OCR")
     if ocr_engine == "claude_jev_test":
         if user.rola != "admin":
             raise HTTPException(status_code=403, detail="Tryb Claude + JEV jest na razie dostępny tylko administratorowi")
         if claude_dzial not in {"elektryka", "hydraulika"}:
             raise HTTPException(status_code=422, detail="Wybierz dział Elektryka lub Hydraulika")
-    source_type = f"claude_jev_test_{claude_dzial}" if ocr_engine == "claude_jev_test" else "ai_scan"
+    source_type = (
+        "auto_v3" if ocr_engine == "auto_v3"
+        else f"claude_jev_test_{claude_dzial}" if ocr_engine == "claude_jev_test"
+        else "ai_scan"
+    )
 
     if not plik:
         raise HTTPException(status_code=400, detail="Brak pliku")
@@ -202,7 +206,7 @@ async def create_document(
             ],
         )
 
-        if ocr_engine == "claude_jev_test":
+        if ocr_engine in {"claude_jev_test", "auto_v3"}:
             dispatch_claude_ocr_task(str(document.id))
         else:
             dispatch_ocr_task(str(document.id))

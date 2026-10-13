@@ -65,6 +65,8 @@ def validate_ocr(result: dict, page_count: int) -> list[dict]:
                 "nazwa":name.strip(),"ilosc_wydana":w,
                 "ilosc_zuzyta":z,"uwagi":"",
                 "page_number":page["index"],
+                "_dzial_hint":page.get("dzial_hint"),
+                "_uncertain":bool(item.get("uncertain")),
             })
     if not all_rows:
         raise ClaudeBridgeError("Claude nie odczytał żadnej pozycji")
@@ -72,9 +74,10 @@ def validate_ocr(result: dict, page_count: int) -> list[dict]:
 
 
 def run_claude_host_bridge(document_id: str, files: list[tuple[bytes,str]], dzial: str,
-                           *, timeout_seconds: float=TIMEOUT_SECONDS) -> tuple[list[dict],float]:
+                           *, timeout_seconds: float=TIMEOUT_SECONDS,
+                           verify_names: dict[int,list[str]] | None=None) -> tuple[list[dict],float]:
     """Wait for the owner-authenticated host daemon; no Gemini fallback in test mode."""
-    if dzial not in {"hydraulika","elektryka"}:
+    if dzial not in {"auto","hydraulika","elektryka"}:
         raise ClaudeBridgeError("Nieznany dział Claude")
     if not files or len(files)>MAX_PAGES:
         raise ClaudeBridgeError(f"Tryb testowy Claude obsługuje 1–{MAX_PAGES} stron")
@@ -90,6 +93,14 @@ def run_claude_host_bridge(document_id: str, files: list[tuple[bytes,str]], dzia
                 raise ClaudeBridgeError("Claude wymaga stron JPG do 8 MB")
             (job/f"page{i}.jpg").write_bytes(image)
         request={"job_id":job_id,"document_id":document_id,"dzial":dzial,"pages":len(files)}
+        if verify_names is not None:
+            if not verify_names or len(verify_names)>2 or any(
+                not 1<=page<=len(files) or not 1<=len(names)<=3
+                for page,names in verify_names.items()
+            ):
+                raise ClaudeBridgeError("Niedozwolona liczba fragmentów do kontroli")
+            request["mode"]="verify"
+            request["verify_names"]={str(i):names for i,names in verify_names.items()}
         staging=job/"request.tmp"
         staging.write_text(json.dumps(request))
         staging.rename(job/"request.json")

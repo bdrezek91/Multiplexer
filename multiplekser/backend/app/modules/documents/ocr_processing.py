@@ -5,6 +5,7 @@ Wydzielona z tasks.py bez zmiany zachowania, aby tasks.py pozostal tylko orkiest
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 import time
@@ -492,6 +493,33 @@ def _download_and_prepare(get_storage, file_key: str, mime: str) -> list[tuple[b
     wielostronicowych dokumentach) - stad lista, nie pojedynczy plik. Zwykly obraz zostaje
     pojedynczym elementem listy, tylko przeskalowanym (patrz ocr/image.py, dlaczego)."""
     raw = get_storage().download(file_key)
+    return _prepare_source_bytes(raw, mime)
+
+
+def _prepare_distinct_sources(get_storage, sources: list[tuple[str, str]]) -> tuple[list[tuple[bytes, str]], int]:
+    """Prepare each unique uploaded file once. Same PDF uploaded twice is NOT four pages.
+
+    Compare actual file content, not filenames or storage keys. Preserve original
+    source order and real distinct pages. No row/item deduplication (repeated
+    materials across genuine pages must remain visible to the matcher).
+    """
+    storage = get_storage()
+    fingerprints: set[bytes] = set()
+    result: list[tuple[bytes, str]] = []
+    skipped = 0
+    for file_key, mime in sources:
+        raw = storage.download(file_key)
+        digest = hashlib.sha256(raw).digest()
+        if digest in fingerprints:
+            skipped += 1
+            continue
+        fingerprints.add(digest)
+        result.extend(_prepare_source_bytes(raw, mime))
+    return result, skipped
+
+
+def _prepare_source_bytes(raw: bytes, mime: str) -> list[tuple[bytes, str]]:
+    """Shared image preparation for single and de-duplicated multipart uploads."""
     if mime == _PDF_MIME:
         pages = pdf_to_page_images(raw)
         # Pomija prawie puste strony (2026-09-17, patrz ocr/image.py: is_blank_page) - typowo

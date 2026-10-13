@@ -32,6 +32,7 @@ from .ocr_processing import (
     _append_auto_zasilacz_led,
     _classify_and_recognize,
     _download_and_prepare,
+    _prepare_distinct_sources,
     _podwoj_ilosc_gniazda_podwojnego_podtynkowego,
     _resolve_product_id,
     _row_dict_from_ocritem,
@@ -97,9 +98,25 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         # document.file_key/mime (wsteczna zgodnosc), kolejne to document.extra_files w kolejnosci
         # `sequence`. Wszystkie razem trafiaja do Gemini w jednym zapytaniu.
         stage_started = time.perf_counter()
-        files = list(_download_and_prepare(get_storage, document.file_key, document.mime))
-        for extra in document.extra_files:
-            files += _download_and_prepare(get_storage, extra.file_key, extra.mime)
+        if document.extra_files:
+            # Same multi-page PDF added as both file 1 and file 2 must not be
+            # sent twice to OCR (would double every item and exported quantity).
+            source_files = [(document.file_key, document.mime)] + [
+                (extra.file_key, extra.mime) for extra in document.extra_files
+            ]
+            files, duplicated_uploads = _prepare_distinct_sources(get_storage, source_files)
+            if duplicated_uploads:
+                save_ai_event({
+                    "status": "skipped", "stage": "duplicate_upload",
+                    "provider": None, "model": None,
+                    "label": "Pominięto identyczny załącznik",
+                    "reason": f"Pominięto {duplicated_uploads} identycznych plików przed OCR.",
+                    "step": None, "total_steps": None,
+                    "duration_ms": 0, "attempt": 1, "target": None,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+        else:
+            files = list(_download_and_prepare(get_storage, document.file_key, document.mime))
         timings["timing_file_prepare"] = _elapsed_ms(stage_started)
 
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg

@@ -191,13 +191,15 @@ def select_verify_targets(
     return {page: names for page, names in chosen.items() if names}
 
 
-def recognize_gemini_primary(files, session, magazyn, *, model="gemini-3.5-flash-lite"):
-    """Primary OCR for AUTO: Gemini free, using the proven full form pipelines.
+def recognize_gemini_primary(
+    files, session, magazyn, *, model=None, event_callback=None, cooldown_store=None,
+):
+    """Gemini AUTO: a bounded sequential chain of FREE models.
 
-    Unlike the legacy model chain there are no paid Gemini/OpenAI steps,
-    retries, secondary full-document OCR or per-row consensus loops.
-    Returns compatible (classification, dzial, result, durations).
-    Any unavailable/invalid output is handled by Claude fallback in tasks.py.
+    Start with the fastest free Gemini. Try other free models only on timeout,
+    API 429/503, bad schema or low-confidence department classification.
+    Shared Redis cooldown avoids retrying a blocked model on the next document.
+    Claude remains the final fallback in tasks.py; JEV still chooses codes.
     """
     import asyncio
     import time
@@ -212,19 +214,28 @@ def recognize_gemini_primary(files, session, magazyn, *, model="gemini-3.5-flash
     from app.modules.matcher import rules_from_db
     from app.modules.products import Catalog
 
+    started_total = time.perf_counter()
     key = settings.gemini_api_key_free
     if not key:
         raise RuntimeError("Gemini: darmowy klucz nie jest skonfigurowany")
-    if model not in {"gemini-3.5-flash-lite","gemini-3.5-flash"}:
+    if model is not None and model not in {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"}:
         raise ValueError("Niedozwolony model Gemini AUTO")
     provider = GeminiProvider()
-    # Exactly ONE attempt per stage. When API is down, fail over promptly.
-    classify_chain = [OCRChainStep("Gemini AUTO (darmowy)", provider, model, key, 5)]
-    full_chain = [OCRChainStep("Gemini AUTO (darmowy)", provider, model, key, 18)]
+    candidates = [
+        ('gemini-3.5-flash-lite', 5, 14),
+        ('gemini-3.1-flash-lite', 4, 9),
+        ('gemini-3.6-flash', 5, 11),
+    ]
+    if model is not None:
+        candidates = [row for row in candidates if row[0] == model]
+    # Use the free model chain and avoid unnecessary duplicate requests.
+    classify_chain = [OCRChainStep(f'AUTO Gemini {name} darmowy', provider, name, key, timeout) for name, timeout, _ in candidates]
+    full_chain = [OCRChainStep(f'AUTO Gemini {name} darmowy', provider, name, key, timeout) for name, _, timeout in candidates]
     start=time.perf_counter()
     classification=asyncio.run(classify_document(
         [(classification_header_preview(files[0][0]), "image/jpeg")],
-        chain=classify_chain,
+        chain=classify_chain, event_callback=event_callback,
+        cooldown_store=cooldown_store, min_confidence=65,
     ))
     classify_seconds=round(time.perf_counter()-start,3)
     if classification.fallback or classification.confidence<65:
@@ -232,16 +243,22 @@ def recognize_gemini_primary(files, session, magazyn, *, model="gemini-3.5-flash
             "Gemini nie rozpoznał jednoznacznie działu — przełączam na Claude"
         )
     dzial=classification.dzial
+    full_chain.sort(key=lambda step: step.label != classification.used_provider)
+    remaining = 26 - (time.perf_counter() - started_total)
+    if remaining <= 0:
+        raise TimeoutError('Budżet Gemini AUTO wyczerpany')
     start=time.perf_counter()
     catalog=Catalog.from_db(session,dzial=dzial)
     if dzial=="hydraulika":
-        result=asyncio.run(recognize_document_hydraulika(
+        result=asyncio.run(asyncio.wait_for(recognize_document_hydraulika(
             files,catalog,magazyn=magazyn,chain=full_chain,
-        ))
+            event_callback=event_callback, cooldown_store=cooldown_store,
+        ),timeout=remaining))
     else:
-        result=asyncio.run(recognize_document(
+        result=asyncio.run(asyncio.wait_for(recognize_document(
             files,catalog,rules_from_db(session),magazyn=magazyn,chain=full_chain,
-        ))
+            event_callback=event_callback, cooldown_store=cooldown_store,
+        ),timeout=remaining))
     ocr_seconds=round(time.perf_counter()-start,3)
     if not result.pozycje:
         raise ValueError("Gemini nie rozpoznał żadnej pozycji — przełączam na Claude")

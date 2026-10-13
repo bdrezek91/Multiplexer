@@ -13,8 +13,8 @@ from app.modules.products import Catalog
 
 
 @pytest.mark.parametrize("department",["hydraulika","elektryka"])
-def test_primary_gemini_only_one_free_model_and_preserves_header(department):
-    classified=SimpleNamespace(dzial=department,confidence=94.0,fallback=False)
+def test_primary_gemini_three_free_models_and_preserves_header(department):
+    classified=SimpleNamespace(dzial=department,confidence=94.0,fallback=False,used_provider="AUTO Gemini gemini-3.1-flash-lite darmowy")
     rows=[SimpleNamespace(rozpoznana_nazwa="Test")]
     expected=SimpleNamespace(
         pozycje=rows,numer_projektu="126/07",
@@ -45,10 +45,11 @@ def test_primary_gemini_only_one_free_model_and_preserves_header(department):
     pipeline=hyd if department=="hydraulika" else elec
     ocr_chain=pipeline.await_args.kwargs["chain"]
     for chain in (cls_chain,ocr_chain):
-        assert len(chain)==1
-        assert chain[0].api_key=="KEY-FREE"
-        assert chain[0].api_key!="KEY-PAID"
-        assert chain[0].model=="gemini-3.5-flash-lite"
+        assert len(chain)==3
+        assert all(step.api_key=="KEY-FREE" for step in chain)
+        assert all(step.api_key!="KEY-PAID" for step in chain)
+        assert {step.model for step in chain} == {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"}
+    assert ocr_chain[0].model == "gemini-3.1-flash-lite"
     if department=="hydraulika":
         elec.assert_not_awaited()
         rules.assert_not_called()
@@ -87,4 +88,46 @@ def test_gemini_timeout_is_not_retried_on_paid_key():
         with pytest.raises(AllProvidersFailedError):
             recognize_gemini_primary([(b"PAGE","image/jpeg")],object(),"Zabrze")
         assert cls.await_count==1
-        assert cls.await_args.kwargs["chain"][0].api_key=="KEY-FREE"
+        assert len(cls.await_args.kwargs["chain"]) == 3
+        assert all(x.api_key=="KEY-FREE" for x in cls.await_args.kwargs["chain"])
+
+
+@pytest.mark.parametrize("first_failure",["429","low_confidence"])
+def test_gemini_chain_tries_second_free_model_without_using_claude(first_failure):
+    import asyncio
+    from app.modules.ocr.chain import OCRChainStep
+    from app.modules.ocr.classify import classify_document
+    from app.modules.ocr.providers import GeminiProvider, OCRProviderError
+
+    calls=[]
+    events=[]
+    async def fake_recognize(self, *, files, model, api_key, prompt, thinking_level):
+        calls.append((model,api_key))
+        if model=="gemini-3.5-flash-lite":
+            if first_failure=="429":
+                raise OCRProviderError("quota exceeded",status_code=429)
+            return '{"dzial":"hydraulika","confidence":25}'
+        return '{"dzial":"hydraulika","confidence":94}'
+    provider=GeminiProvider()
+    chain=[
+        OCRChainStep("AUTO Gemini gemini-3.5-flash-lite darmowy",provider,
+                     "gemini-3.5-flash-lite","FREE",1),
+        OCRChainStep("AUTO Gemini gemini-3.1-flash-lite darmowy",provider,
+                     "gemini-3.1-flash-lite","FREE",1),
+    ]
+    class DummyCooldown:
+        def remaining_seconds(self,step_label):return 0
+        def record_rate_limit(self,step_label):return 10
+        def reset(self,step_label):pass
+    with patch.object(GeminiProvider,"recognize",fake_recognize):
+        result=asyncio.run(classify_document(
+            [(b"header","image/jpeg")],chain=chain,min_confidence=65,
+            cooldown_store=DummyCooldown(),event_callback=events.append,
+        ))
+    assert result.dzial=="hydraulika"
+    assert result.confidence==94
+    assert "3.1-flash-lite" in result.used_provider
+    assert calls==[("gemini-3.5-flash-lite","FREE"),("gemini-3.1-flash-lite","FREE")]
+    assert [e["status"] for e in events if e["status"] in {"rejected","selected"}]==[
+        "rejected","selected",
+    ]

@@ -64,15 +64,27 @@ async def classify_document(
     log_context: Optional[Mapping[str, object]] = None,
     event_callback: Optional[OCRChainEventCallback] = None,
     cooldown_store: Optional[OCRCooldownStore] = None,
+    min_confidence: float = 0,
 ) -> ClassifyResult:
     # thinking_level="low" (2026-08-04, na zyczenie uzytkownika - przetwarzanie calego dokumentu
     # trwalo 2-3 minuty). Jest to tez jawne zabezpieczenie ustawienia dla pierwszego z dwoch
     # sekwencyjnych zapytan; pozostale etapy korzystaja z takiej samej wartosci domyslnej.
+    def _validator(raw: str) -> bool:
+        if not _is_valid_classification_response(raw):
+            return False
+        if min_confidence <= 0:
+            return True
+        parsed = extract_json(raw)
+        try:
+            return float(parsed.get("confidence") or 0) >= min_confidence
+        except (TypeError, ValueError, AttributeError):
+            return False
+
     try:
         chain_result = await run_ocr_chain(
             files, CLASSIFY_PROMPT, chain=chain if chain is not None else classify_ocr_chain(),
             thinking_level="low",
-            response_validator=_is_valid_classification_response,
+            response_validator=_validator,
             log_context={**dict(log_context or {}), "ai_stage": "classification"},
             event_callback=event_callback,
             cooldown_store=cooldown_store,

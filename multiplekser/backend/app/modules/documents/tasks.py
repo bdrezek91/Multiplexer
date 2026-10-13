@@ -119,13 +119,14 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
             started_gemini = time.perf_counter()
             try:
                 classify_result, dzial, result, gemini_timings = recognize_gemini_primary(
-                    files, session, document.magazyn
+                    files, session, document.magazyn,
+                    event_callback=save_ai_event, cooldown_store=cooldown_store,
                 )
                 timings.update(gemini_timings)
                 gemini_primary_ok = True
                 save_ai_event({
                     "status":"completed", "stage":"auto_gemini_primary",
-                    "provider":"Gemini", "model":"gemini-3.5-flash-lite",
+                    "provider":"Gemini", "model":result.used_provider,
                     "label":"AUTO: główny OCR Gemini",
                     "reason":f"Gemini odczytał {len(result.pozycje)} pozycji ({dzial}). Claude nie został użyty.",
                     "step":None, "total_steps":None,

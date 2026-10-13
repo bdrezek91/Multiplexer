@@ -278,10 +278,16 @@ def dispatch_full_document_verification_task(document_id: str) -> None:
 
 
 @celery_app.task(name="documents.groq_shadow")
-def process_groq_shadow(document_id: str) -> None:
+def process_groq_shadow(
+    document_id: str, page_index: int = 0,
+    accumulated: list[dict] | None = None, duration_ms_total: int = 0,
+) -> None:
     session = SessionLocal()
     try:
-        run_groq_shadow_task(document_id, session)
+        run_groq_shadow_task(
+            document_id, session, page_index=page_index,
+            accumulated=accumulated, duration_ms_total=duration_ms_total,
+        )
     finally:
         session.close()
 

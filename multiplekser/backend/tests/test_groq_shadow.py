@@ -1,6 +1,15 @@
+import inspect
 from types import SimpleNamespace
 
 from app.modules.documents.groq_shadow import _compare_shadow
+from app.modules.documents.tasks import process_groq_shadow
+
+
+def test_groq_task_obsluguje_nastepne_strony():
+    params = inspect.signature(process_groq_shadow.run).parameters
+    assert "page_index" in params
+    assert "accumulated" in params
+    assert "duration_ms_total" in params
 
 
 def _shadow(name, wyd=None, zuz=None):

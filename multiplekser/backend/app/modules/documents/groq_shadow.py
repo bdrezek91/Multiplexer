@@ -9,7 +9,9 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
+from redis import Redis
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -26,7 +28,6 @@ from .background_verification import _background_review_item
 from .ocr_processing import _download_and_prepare
 
 logger = logging.getLogger(__name__)
-
 
 def _qty_pair(obj) -> tuple[float | None, float | None]:
     return (
@@ -107,7 +108,10 @@ def _summary_reason(metrics: dict[str, object], shadow_count: int, main_count: i
     return " | ".join(parts)[:1800]
 
 
-def run_groq_shadow_task(document_id: str, session: Session) -> None:
+def run_groq_shadow_task(
+    document_id: str, session: Session, *, page_index: int = 0,
+    accumulated: list[dict] | None = None, duration_ms_total: int = 0,
+) -> None:
     if not settings.groq_shadow_enabled or not settings.groq_api_key:
         return
 
@@ -119,6 +123,24 @@ def run_groq_shadow_task(document_id: str, session: Session) -> None:
     ):
         return
 
+    # Jedna strona z pelnym promptem to ~6k tokenow; limit konta to 7k ITPM.
+    # Rezerwacja Redis obejmuje wszystkie dokumenty. Zajety slot odracza zadanie
+    # w Celery zamiast blokowac worker-background na 70+ sekund.
+    from .tasks import process_groq_shadow
+    throttle = Redis.from_url(settings.redis_url)
+    try:
+        reserved = throttle.set("multiplekser:groq:itpm_slot", "1", nx=True, ex=75)
+        retry_after = max(3, throttle.ttl("multiplekser:groq:itpm_slot") + 2) if not reserved else 0
+    finally:
+        throttle.close()
+    if retry_after:
+        process_groq_shadow.apply_async(
+            kwargs={"document_id": document_id, "page_index": page_index,
+                    "accumulated": accumulated, "duration_ms_total": duration_ms_total},
+            countdown=retry_after, queue="background",
+        )
+        return
+
     from .storage import get_storage
 
     started = time.perf_counter()
@@ -127,34 +149,21 @@ def run_groq_shadow_task(document_id: str, session: Session) -> None:
         for extra in document.extra_files:
             files += _download_and_prepare(get_storage, extra.file_key, extra.mime)
 
-        if len(files) > 3:
-            repository.append_ai_trace_event(session, document, {
-                "status": "skipped",
-                "stage": "groq_shadow",
-                "provider": "Groq",
-                "model": settings.groq_model,
-                "label": "Groq Qwen 3.8 27B shadow",
-                "reason": f"Shadow pominiety: Qwen vision obsluguje maks. 3 obrazy, dokument ma {len(files)}.",
-                "step": None,
-                "total_steps": None,
-                "duration_ms": None,
-                "attempt": None,
-                "target": None,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            return
+        if not files or not (0 <= page_index < len(files)):
+            raise ValueError(f"Nieprawidlowy indeks strony {page_index} / {len(files)}")
+        one_page = [files[page_index]]
 
         chain = [OCRChainStep(
             "Groq Qwen 3.8 27B shadow",
             GroqProvider(),
             settings.groq_model,
             settings.groq_api_key,
-            20,
+            45,
         )]
         catalog = Catalog.from_db(session, dzial=document.dzial)
         if document.dzial == "hydraulika":
             result = asyncio.run(recognize_document_hydraulika(
-                files,
+                one_page,
                 catalog,
                 magazyn=document.magazyn,
                 chain=chain,
@@ -164,7 +173,7 @@ def run_groq_shadow_task(document_id: str, session: Session) -> None:
             ))
         else:
             result = asyncio.run(recognize_document(
-                files,
+                one_page,
                 catalog,
                 rules_from_db(session),
                 magazyn=document.magazyn,
@@ -174,21 +183,40 @@ def run_groq_shadow_task(document_id: str, session: Session) -> None:
                 cooldown_store=None,
             ))
 
+        current_rows = [
+            {"rozpoznana_nazwa": item.rozpoznana_nazwa,
+             "ilosc_wydana": float(item.ilosc_wydana) if item.ilosc_wydana is not None else None,
+             "ilosc_zuzyta": float(item.ilosc_zuzyta) if item.ilosc_zuzyta is not None else None}
+            for item in result.pozycje
+        ]
+        all_rows = list(accumulated or []) + current_rows
+        total_duration = duration_ms_total + round((time.perf_counter() - started) * 1000)
+        if page_index + 1 < len(files):
+            process_groq_shadow.apply_async(
+                kwargs={"document_id": document_id, "page_index": page_index + 1,
+                        "accumulated": all_rows, "duration_ms_total": total_duration},
+                countdown=3, queue="background",
+            )
+            logger.info("Groq shadow strona %s/%s: %s pozycji, nastepna odroczona",
+                        page_index + 1, len(files), len(current_rows))
+            return
+        combined_items = [SimpleNamespace(**row) for row in all_rows]
+
         main_items = []
         for row in document.items:
             review = _background_review_item(row)
             if review is not None:
                 main_items.append(review)
 
-        metrics = _compare_shadow(main_items, result.pozycje)
-        duration_ms = round((time.perf_counter() - started) * 1000)
+        metrics = _compare_shadow(main_items, combined_items)
+        duration_ms = total_duration
         repository.append_ai_trace_event(session, document, {
             "status": "completed",
             "stage": "groq_shadow",
             "provider": "Groq",
             "model": settings.groq_model,
             "label": "Groq Qwen 3.8 27B shadow",
-            "reason": _summary_reason(metrics, len(result.pozycje), len(main_items)),
+            "reason": f"Qwen OCR {len(files)} stron; " + _summary_reason(metrics, len(combined_items), len(main_items)),
             "step": None,
             "total_steps": None,
             "duration_ms": duration_ms,

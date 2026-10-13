@@ -5,11 +5,19 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DocumentsPage } from './DocumentsPage'
 import * as documentsApi from '../api/documents'
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({
+    user: { id: 'u1', email: 'admin@test.local', rola: 'admin', active: true, magazyny_dostepne: [] },
+    loading: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+  }),
+}))
 import * as compression from '../utils/compressImage'
 
 vi.mock('../api/documents', async () => {
   const actual = await vi.importActual<typeof import('../api/documents')>('../api/documents')
-  return { ...actual, listDocuments: vi.fn(), uploadDocument: vi.fn() }
+  return { ...actual, listDocuments: vi.fn(), uploadDocument: vi.fn(), getClaudeUsage: vi.fn() }
 })
 
 vi.mock('../utils/compressImage', () => ({
@@ -34,6 +42,13 @@ function fakeFile(name: string) {
 describe('DocumentsPage - robienie kilku zdjec aparatem przed zatwierdzeniem', () => {
   beforeEach(() => {
     vi.mocked(documentsApi.listDocuments).mockResolvedValue([])
+    vi.mocked(documentsApi.getClaudeUsage).mockResolvedValue({
+      daemon_online: true, plan: 'Claude Pro', model: 'Sonnet', effort: 'Low',
+      documents_done: 3, documents_error: 0, documents_waiting: 0,
+      total_jobs: 0, jobs_24h: 0, pages_24h: 0, jobs_7d: 0, pages_7d: 0,
+      avg_seconds: null, last_status: null, last_error_kind: null,
+      last_error_at: null, subscription_remaining: null,
+    })
     vi.mocked(documentsApi.uploadDocument).mockReset()
     vi.mocked(compression.compressImageForUpload).mockReset()
     vi.mocked(compression.compressImageForUpload).mockImplementation(async (file) => file)
@@ -69,7 +84,7 @@ describe('DocumentsPage - robienie kilku zdjec aparatem przed zatwierdzeniem', (
     renderPage()
     const [cameraInput] = document.querySelectorAll('input[type="file"]')
     await user.upload(cameraInput as HTMLInputElement, fakeFile('hydraulika.jpg'))
-    await user.click(screen.getByRole('button', { name: /claude \+ jev \(test\)/i }))
+    await user.click(screen.getByRole('button', { name: /claude \+ jev \(pro/i }))
     await user.click(screen.getByRole('button', { name: 'Hydraulika' }))
     await user.click(screen.getByRole('button', { name: /zatwierdź i wyślij/i }))
     await waitFor(() => expect(documentsApi.uploadDocument).toHaveBeenCalledTimes(1))

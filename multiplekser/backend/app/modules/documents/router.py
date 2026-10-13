@@ -7,8 +7,11 @@ i (po zakonczeniu) wynik. Wlasciciel dokumentu lub admin - inni dostaja 403 (pat
 """
 from __future__ import annotations
 
+import json
 import logging
+import time
 import uuid
+from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
@@ -60,7 +63,7 @@ from .schemas import (
     UserDocumentStatsOut,
 )
 from .storage import get_storage
-from .tasks import dispatch_ocr_task
+from .tasks import dispatch_claude_ocr_task, dispatch_ocr_task
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 logger = logging.getLogger(__name__)
@@ -199,7 +202,10 @@ async def create_document(
             ],
         )
 
-        dispatch_ocr_task(str(document.id))
+        if ocr_engine == "claude_jev_test":
+            dispatch_claude_ocr_task(str(document.id))
+        else:
+            dispatch_ocr_task(str(document.id))
     except Exception:
         session.rollback()
         if document is not None:
@@ -228,6 +234,54 @@ def list_documents(
     owner_filter = None if user.rola == "admin" else user.id
     documents = repository.list_documents(session, user_id=owner_filter)
     return [_to_schema(d) for d in documents]
+
+
+@router.get("/claude-usage")
+def get_claude_usage(
+    session: Session = Depends(get_db),
+    _admin: UserModel = Depends(require_admin),
+):
+    """Only admin sees subscription OCR throughput; never keys or account credentials.
+
+    The CLI does NOT provide remaining 5-hour/week quota %, so we do not invent it.
+    """
+    base = Path("/claude-bridge")
+    data: dict = {}
+    try:
+        data = json.loads((base / "usage.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        pass
+    try:
+        hb = json.loads((base / "heartbeat.json").read_text(encoding="utf-8"))
+        daemon_online = 0 <= time.time() - float(hb.get("epoch", 0)) < 35
+    except (OSError, ValueError, TypeError):
+        daemon_online = False
+
+    query = session.query(DocumentModel).filter(
+        DocumentModel.source_type.like("claude_jev_test_%")
+    )
+    total_done = query.filter(DocumentModel.status == "done").count()
+    total_failed = query.filter(DocumentModel.status == "error").count()
+    total_waiting = query.filter(DocumentModel.status.in_(["queued", "processing"])).count()
+    return {
+        "daemon_online": daemon_online,
+        "plan": "Claude Pro",
+        "model": "Sonnet",
+        "effort": "Low",
+        "documents_done": total_done,
+        "documents_error": total_failed,
+        "documents_waiting": total_waiting,
+        "total_jobs": int(data.get("total_jobs") or 0),
+        "jobs_24h": int(data.get("jobs_24h") or 0),
+        "pages_24h": int(data.get("pages_24h") or 0),
+        "jobs_7d": int(data.get("jobs_7d") or 0),
+        "pages_7d": int(data.get("pages_7d") or 0),
+        "avg_seconds": data.get("avg_seconds"),
+        "last_status": data.get("last_status"),
+        "last_error_kind": data.get("last_error_kind"),
+        "last_error_at": data.get("last_error_at"),
+        "subscription_remaining": None,
+    }
 
 
 @router.get("/{document_id}", response_model=DocumentOut)

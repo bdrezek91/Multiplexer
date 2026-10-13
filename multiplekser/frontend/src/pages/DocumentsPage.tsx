@@ -22,7 +22,8 @@ import PhotoCameraIcon from '@mui/icons-material/PhotoCamera'
 import CloseIcon from '@mui/icons-material/Close'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { listDocuments, uploadDocument } from '../api/documents'
+import { getClaudeUsage, listDocuments, uploadDocument } from '../api/documents'
+import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
 import { DzialChip } from '../components/DzialChip'
 import { StatusChip } from '../components/StatusChip'
@@ -30,6 +31,8 @@ import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
 import { compressImageForUpload } from '../utils/compressImage'
 
 export function DocumentsPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.rola === 'admin'
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -95,6 +98,14 @@ export function DocumentsPage() {
     refetchInterval: 5000,
   })
 
+  const { data: claudeUsage } = useQuery({
+    queryKey: ['claude-usage'],
+    queryFn: getClaudeUsage,
+    enabled: isAdmin,
+    refetchInterval: 15000,
+    retry: false,
+  })
+
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (files.length === 0) throw new Error('Wybierz plik')
@@ -148,6 +159,37 @@ export function DocumentsPage() {
         {compressionWarning && (
           <Alert severity="warning" sx={{ mb: 2 }}>
             {compressionWarning}
+          </Alert>
+        )}
+        {isAdmin && claudeUsage && (
+          <Alert severity={
+            !claudeUsage.daemon_online ? 'error'
+              : claudeUsage.last_status !== 'done' && claudeUsage.last_error_kind === 'limit' ? 'warning'
+                : 'info'
+          } sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" fontWeight={700}>
+              Claude Pro + JEV — {claudeUsage.daemon_online ? 'usługa działa na VPS' : 'usługa niedostępna'}
+            </Typography>
+            <Typography variant="body2">
+              Wydawki przetworzone: <strong>{claudeUsage.documents_done}</strong>
+              {' · '}W toku: <strong>{claudeUsage.documents_waiting}</strong>
+              {' · '}Z błędem: <strong>{claudeUsage.documents_error}</strong>.
+              {' '}Odczyty Claude ostatnie 24 h: <strong>{claudeUsage.jobs_24h}</strong>
+              {' '}({claudeUsage.pages_24h} stron); ostatnie 7 dni: <strong>{claudeUsage.jobs_7d}</strong>
+              {' '}({claudeUsage.pages_7d} stron).
+              {claudeUsage.avg_seconds !== null && (
+                <> Średni czas samego OCR: <strong>{claudeUsage.avg_seconds.toFixed(1)} s</strong>.</>
+              )}
+            </Typography>
+            {claudeUsage.last_status !== 'done' && claudeUsage.last_error_kind === 'limit' && (
+              <Typography variant="body2" color="warning.main">
+                Claude zgłosił wyczerpanie limitu. Nowe testy poczekają na odnowienie limitu.
+              </Typography>
+            )}
+            <Typography variant="caption" display="block">
+              Dokładny pozostały limit pięciogodzinny/tygodniowy: Claude → Settings → Usage.
+              Ten panel mierzy zrealizowane wywołania od uruchomienia monitoringu, nie procent abonamentu.
+            </Typography>
           </Alert>
         )}
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
@@ -205,7 +247,9 @@ export function DocumentsPage() {
               aria-label="Silnik rozpoznawania wydawki"
             >
               <ToggleButton value="standard">Standardowy OCR (Gemini)</ToggleButton>
-              <ToggleButton value="claude_jev_test">Claude + JEV (test)</ToggleButton>
+              {isAdmin && (
+                <ToggleButton value="claude_jev_test">Claude + JEV (Pro · test limitów)</ToggleButton>
+              )}
             </ToggleButtonGroup>
             <FormHelperText>Wybierz silnik do nowo przesłanej wydawki.</FormHelperText>
           </Box>

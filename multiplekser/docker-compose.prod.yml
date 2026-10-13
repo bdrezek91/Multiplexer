@@ -88,6 +88,8 @@ services:
       JEV_MODEL: ${JEV_MODEL:-jev-latest}
     volumes:
       - /var/backups/multiplekser:/var/backups/multiplekser:ro
+      # Only anonymised OCR usage/health metadata; no Claude credentials in Docker.
+      - /var/lib/multiplekser-claude-bridge:/claude-bridge:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,6 +109,53 @@ services:
     # Priorytetowa kolejka - tylko glowne przetwarzanie dokumentu. Jev active dziala wewnatrz
     # tego samego taska, wiec wynik widoczny dla uzytkownika nie rywalizuje z kontrolami w tle.
     command: celery -A app.core.celery_app worker --loglevel=info --queues=ocr --concurrency=4 --prefetch-multiplier=1 --hostname=ocr@%h
+    # Wylacza HEALTHCHECK odziedziczony z obrazu backendu (Dockerfile.prod) - ten HTTP check
+    # (curl na :8000/health) jest dla uvicorn, ktorego worker (proces Celery) w ogole nie
+    # uruchamia, wiec zawsze zglaszalby "unhealthy" mimo poprawnie dzialajacego workera.
+    healthcheck:
+      disable: true
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-multiplekser}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-multiplekser}
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT_URL: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      DOCUMENT_RETENTION_LIMIT: ${DOCUMENT_RETENTION_LIMIT:-20}
+      GEMINI_API_KEY_FREE: ${GEMINI_API_KEY_FREE:-}
+      GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
+      # Opcjonalny - ostatni krok w lancuchu OCR (patrz ocr/chain.py), uzywany WYLACZNIE gdy
+      # wszystkie kroki Gemini zawioda. Brak klucza = ten krok jest po prostu pomijany.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
+      GROQ_SHADOW_ENABLED: ${GROQ_SHADOW_ENABLED:-true}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      CLOUDFLARE_MODEL: ${CLOUDFLARE_MODEL:-@cf/google/gemma-4-26b-a4b-it}
+      CLOUDFLARE_SHADOW_ENABLED: ${CLOUDFLARE_SHADOW_ENABLED:-true}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      JEV_ENABLED: ${JEV_ENABLED:-false}
+      JEV_MODE: ${JEV_MODE:-shadow}
+      JEV_MODEL: ${JEV_MODEL:-jev-latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    mem_limit: 2048m
+    cpus: "3.0"
+    logging: *default-logging
+    restart: unless-stopped
+
+  worker-claude:
+    image: multiplekser-worker:latest
+    # Priorytetowa kolejka - tylko glowne przetwarzanie dokumentu. Jev active dziala wewnatrz
+    # tego samego taska, wiec wynik widoczny dla uzytkownika nie rywalizuje z kontrolami w tle.
+    command: celery -A app.core.celery_app worker --loglevel=info --queues=claude --concurrency=1 --prefetch-multiplier=1 --hostname=claude@%h
     # Wylacza HEALTHCHECK odziedziczony z obrazu backendu (Dockerfile.prod) - ten HTTP check
     # (curl na :8000/health) jest dla uvicorn, ktorego worker (proces Celery) w ogole nie
     # uruchamia, wiec zawsze zglaszalby "unhealthy" mimo poprawnie dzialajacego workera.

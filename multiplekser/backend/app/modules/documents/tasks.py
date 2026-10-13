@@ -183,6 +183,8 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         # wybiera finalny kod tylko dla Elektryki. Twarde special rules maja pierwszenstwo;
         # blad/OTHER zostawia stary matcher. Wszystkie pozycje ida do Jev rownolegle.
         active_jev_rows = []
+        qty_before_jev = [(item.get("ilosc_wydana"), item.get("ilosc_zuzyta"))
+                          for item in items] if claude_test else []
         stage_started = time.perf_counter()
         try:
             from app.modules.decision.active import apply_jev_active
@@ -207,6 +209,34 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         finally:
             timings["timing_jev_active"] = _elapsed_ms(stage_started)
 
+        if claude_test:
+            # Never advertise OCR->JEV as fully confirmed if TypeSafe did not
+            # answer for some rows. Preserve original OCR quantities without
+            # making up a match/code when an external service is unavailable.
+            answered = {r.get("sequence") for r in active_jev_rows}
+            missing = 0
+            for i, item in enumerate(items):
+                before = qty_before_jev[i]
+                if (item.get("ilosc_wydana"), item.get("ilosc_zuzyta")) != before:
+                    item["ilosc_wydana"], item["ilosc_zuzyta"] = before
+                    item["needs_review"] = True
+                    item["form_note"] = (item.get("form_note") or "") + " JEV: ilość przywrócona do odczytu Claude."
+                if i not in answered:
+                    missing += 1
+                    item["needs_review"] = True
+                    item["form_note"] = (item.get("form_note") or "") + " JEV: brak potwierdzenia kodu, sprawdź ręcznie."
+            save_ai_event({
+                "status": "completed" if not missing else "rejected",
+                "stage": "jev_active", "provider": "TypeSafe", "model": None,
+                "label": "JEV — decyzje o kodach",
+                "reason": f"JEV odpowiedział na {len(answered)}/{len(items)} pozycji. "
+                          + (f"{missing} wymaga weryfikacji." if missing else "Wszystkie kody potwierdzone."),
+                "step": None, "total_steps": None,
+                "duration_ms": timings["timing_jev_active"],
+                "attempt": 1, "target": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+
         stage_started = time.perf_counter()
         repository.mark_done(
             session, document,
@@ -219,13 +249,14 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         timings["timing_to_done"] = _elapsed_ms(task_started)
 
         timing_events = [_timing_event(stage, duration) for stage, duration in timings.items()]
-        timing_events.append({
+        if not claude_test:
+            timing_events.append({
             "status": "queued", "stage": "full_document_verification",
             "provider": None, "model": None, "label": None,
             "reason": "Główny wynik jest gotowy. Pełna kontrola dokumentu została zlecona w tle.",
             "step": None, "total_steps": None, "duration_ms": None, "attempt": None,
             "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
-        })
+            })
         repository.append_ai_trace_events(session, document, timing_events)
 
         if active_jev_rows:
@@ -251,7 +282,8 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         # JEV_ENABLED=false (domyslnie, patrz docker-compose.prod.yml).
         try:
             from app.modules.decision.tasks import dispatch_jev_shadow_task
-            dispatch_jev_shadow_task(document_id)
+            if not claude_test:
+                dispatch_jev_shadow_task(document_id)
         except Exception:
             logger.warning("Jev shadow - nie udalo sie zlecic zadania, pomijam", exc_info=True)
     except (OCRUnparsableResponseError, AllProvidersFailedError, OCRProviderError) as exc:
@@ -316,6 +348,11 @@ def dispatch_ocr_task(document_id: str) -> None:
     `process_ocr_document` bezposrednio - cienka warstwa oddzielajaca "co robi zadanie" od
     "jak jest zlecane"."""
     process_ocr_document.delay(document_id)
+
+
+def dispatch_claude_ocr_task(document_id: str) -> None:
+    """Claude Pro has its own serial queue so quota waits cannot block Gemini OCR."""
+    process_ocr_document.apply_async(args=(document_id,), queue="claude")
 
 
 @celery_app.task(name="documents.full_document_verification")

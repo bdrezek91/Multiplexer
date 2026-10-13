@@ -26,6 +26,30 @@ export function getDocumentStats(): Promise<DocumentStats> {
   return apiRequest<DocumentStats>('/documents/stats/summary')
 }
 
+export interface ClaudeUsage {
+  daemon_online: boolean
+  plan: string
+  model: string
+  effort: string
+  documents_done: number
+  documents_error: number
+  documents_waiting: number
+  total_jobs: number
+  jobs_24h: number
+  pages_24h: number
+  jobs_7d: number
+  pages_7d: number
+  avg_seconds: number | null
+  last_status: string | null
+  last_error_kind: string | null
+  last_error_at: string | null
+  subscription_remaining: null
+}
+
+export function getClaudeUsage(): Promise<ClaudeUsage> {
+  return apiRequest<ClaudeUsage>('/documents/claude-usage')
+}
+
 export function getDocument(id: string): Promise<DocumentDetail> {
   return apiRequest<DocumentDetail>(`/documents/${encodeURIComponent(id)}`)
 }

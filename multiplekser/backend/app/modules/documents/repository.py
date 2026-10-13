@@ -286,7 +286,7 @@ def get_document(session: Session, document_id) -> Optional[DocumentModel]:
 
 
 def list_documents(session: Session, *, user_id=None, limit: int = 50, offset: int = 0) -> list[DocumentModel]:
-    query = session.query(DocumentModel).options(selectinload(DocumentModel.items))
+    query = session.query(DocumentModel).options(selectinload(DocumentModel.items), selectinload(DocumentModel.extra_files))
     if user_id is not None:
         query = query.filter(DocumentModel.user_id == user_id)
     return query.order_by(DocumentModel.created_at.desc()).offset(offset).limit(limit).all()

@@ -51,6 +51,7 @@ class DocumentOut(BaseModel):
     dzial: str | None
     dzial_confidence: float | None
     original_filename: str
+    page_count: int = 1
     used_provider: str | None
     rejected_count: int
     error_message: str | None

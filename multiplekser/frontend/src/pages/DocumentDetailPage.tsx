@@ -28,7 +28,6 @@ import AddIcon from '@mui/icons-material/Add'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DownloadIcon from '@mui/icons-material/Download'
-import ImageIcon from '@mui/icons-material/Image'
 import LinkIcon from '@mui/icons-material/Link'
 import LinkOffIcon from '@mui/icons-material/LinkOff'
 import ReportProblemIcon from '@mui/icons-material/ReportProblem'
@@ -43,7 +42,6 @@ import {
   generateDocument,
   getDocument,
   getJevShadow,
-  getDocumentFile,
   revokeOptimaLink,
   updateDocumentItem,
   updateDocumentMagazyn,
@@ -53,6 +51,7 @@ import { listProducts } from '../api/products'
 import { StatusChip } from '../components/StatusChip'
 import { DzialChip } from '../components/DzialChip'
 import { MatchQualityChip } from '../components/MatchQualityChip'
+import { ScanPreviewButton } from '../components/ScanPreviewButton'
 import { ApiError } from '../api/client'
 import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
 import type { AITraceEvent, Dzial, DocumentItem, JevShadowSummary, Product } from '../types'
@@ -621,47 +620,6 @@ function AddItemRow({ documentId, dzial }: { documentId: string; dzial: Dzial })
   )
 }
 
-// Podglad oryginalnego skanu (na zyczenie uzytkownika, 2026-09-08 - "zobaczyc co jest na
-// wydawce" przy zglaszaniu problemu). Endpoint wymaga tokenu (nie da sie zrobic zwyklego
-// <a href>), wiec pobieramy blob i otwieramy w nowej karcie - przegladarka sama pokaze
-// PDF/zdjecie i pozwoli je stamtad pobrac. Nowa karta jest otwierana OD RAZU (synchronicznie
-// z klikniecia), zanim blob jest gotowy - inaczej wiekszosc przegladarek blokuje window.open()
-// wywolane po async fetchu jako "nie-user-initiated" popup.
-function ViewScanButton({ documentId }: { documentId: string }) {
-  const [error, setError] = useState<string | null>(null)
-
-  const handleClick = () => {
-    setError(null)
-    const win = window.open('', '_blank')
-    getDocumentFile(documentId)
-      .then(({ blob }) => {
-        const url = URL.createObjectURL(blob)
-        if (win) {
-          win.location.href = url
-        } else {
-          window.open(url, '_blank')
-        }
-      })
-      .catch((err) => {
-        win?.close()
-        setError(err instanceof ApiError ? err.detail : 'Nie udało się pobrać skanu')
-      })
-  }
-
-  return (
-    <>
-      <Button variant="outlined" startIcon={<ImageIcon />} onClick={handleClick}>
-        Zobacz skan
-      </Button>
-      {error && (
-        <Typography variant="caption" color="error" sx={{ ml: 1 }}>
-          {error}
-        </Typography>
-      )}
-    </>
-  )
-}
-
 // "Zglos problem" (2026-09-08, na zyczenie uzytkownika) - dowolny opis, link do dokumentu jest
 // automatyczny (endpoint POST /documents/{id}/reports). Zgloszenie NIE kopiuje tresci
 // dokumentu - odnosi sie do stanu dokumentu takim, jaki jest w tym momencie (zaraz po odczycie
@@ -1044,7 +1002,7 @@ export function DocumentDetailPage() {
               <Stack direction="row" spacing={1} alignItems="center">
                 <DzialChip dzial={document.dzial} confidence={document.dzial_confidence} />
                 <StatusChip status={document.status} />
-                <ViewScanButton documentId={documentId} />
+                <ScanPreviewButton documentId={documentId} pageCount={document.page_count ?? 1} />
                 <ReportProblemDialog documentId={documentId} />
               </Stack>
             </Stack>

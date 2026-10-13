@@ -122,6 +122,7 @@ def _to_schema(document: DocumentModel) -> DocumentOut:
         dzial=document.dzial,
         dzial_confidence=document.dzial_confidence,
         original_filename=document.original_filename,
+        page_count=1 + len(document.extra_files),
         used_provider=document.used_provider,
         rejected_count=document.rejected_count,
         error_message=document.error_message,

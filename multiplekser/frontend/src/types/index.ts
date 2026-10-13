@@ -222,6 +222,7 @@ export interface DocumentDetail {
   dzial: Dzial | null
   dzial_confidence: number | null
   original_filename: string
+  page_count?: number
   used_provider: string | null
   rejected_count: number
   error_message: string | null

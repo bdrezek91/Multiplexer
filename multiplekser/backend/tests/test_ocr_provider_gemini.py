@@ -70,6 +70,10 @@ async def test_wiele_plikow_buduje_wiele_czesci_inline_data():
             model="m", api_key="k", prompt="p",
         )
 
+    # Gemini credentials must never appear in a logged URL/query string.
+    assert mock_post.call_args.kwargs["headers"]["x-goog-api-key"] == "k"
+    assert "params" not in mock_post.call_args.kwargs
+    assert "key=" not in mock_post.call_args.args[0]
     sent_body = mock_post.call_args.kwargs["json"]
     parts = sent_body["contents"][0]["parts"]
     inline_parts = [p for p in parts if "inline_data" in p]

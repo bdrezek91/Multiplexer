@@ -30,16 +30,24 @@ LIMIT_COOLDOWN_SECONDS=600
 logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
 log=logging.getLogger("multiplekser-claude-bridge")
 
-HEADER_PROMPT=(
-    " Oprócz pozycji tabeli odczytaj wartości trzech osobnych pól NAGŁÓWKA wydawki, "
-    "wyłącznie jeśli wyraźnie widoczne na obrazie: "
-    "Numer Projektu, Pracownik (osoba wykonująca wydawkę), Nr Plomby-rozdzielnia. "
-    "Dopisz do JSON pole \"h\":{\"numer_projektu\":\"35/06/26\","
-    "\"pracownik\":\"Jan Kowalski\",\"numer_plomby\":null}. "
-    "Nie interpretuj materiałów jako nagłówka. Nie odgaduj wartości. "
-    "Nie przepisuj samych drukowanych etykiet ani danych z innych wierszy. "
-    "Jeśli pole jest puste, niewidoczne albo nieczytelne, wpisz null. "
-    "Dla pól nagłówka przepisz tekst dosłownie, bez zmiany daty/formatu projektu. "
+HEADER_PROMPT_COMMON=(
+    " Oprócz pozycji tabeli odczytaj z nagłówka tylko dwa pola: "
+    "Numer Projektu i Pracownik (osoba robiąca wydawkę). "
+    'Dodaj do JSON obiekt "h":{"numer_projektu":"35/06/26","pracownik":"Jan Kowalski"}. '
+    "Jeśli wartości są puste albo nieczytelne, wpisz null. "
+    "Nie zgaduj, nie przepisuj etykiet pól jako danych, nie wymyślaj roku projektu. "
+)
+HEADER_PROMPT_ELECTRIC=(
+    ' Na wydawce ELEKTRYCZNEJ dodatkowo odczytaj "Nr Plomby-rozdzielnia" '
+    'i dodaj "numer_plomby" do obiektu "h". Jeśli brak czytelnego numeru, ustaw null. '
+)
+HEADER_PROMPT_AUTO=(
+    " Rozpoznaj dział z nagłówka: ELEKTRYKA lub HYDRAULIKA. "
+    'Jeśli jest to ELEKTRYKA, dodatkowo odczytaj "Nr Plomby-rozdzielnia" '
+    'i dodaj "numer_plomby" do obiektu "h". '
+    "Jeśli jest to HYDRAULIKA, NIE analizuj numeru plomby, "
+    'nie dodawaj pola "numer_plomby" i nie zgłaszaj jego braku. '
+    "Jeśli dział nie jest pewny, nie zgaduj numeru plomby. "
 )
 
 BASE_PROMPT=(
@@ -71,7 +79,12 @@ def read_page(job:Path,page:int,dzial:str, *, verify_names: list[str] | None = N
     # Multiple photos/PDF pages may start mid-document. Preserve Gemini's
     # document-wide header OCR, including project/worker on subsequent pages.
     if verify_names is None:
-        prompt += HEADER_PROMPT
+        prompt += HEADER_PROMPT_COMMON
+        if dzial=="elektryka":
+            prompt += HEADER_PROMPT_ELECTRIC
+        elif dzial=="auto":
+            prompt += HEADER_PROMPT_AUTO
+        # Hydraulika: never ask Claude about electrical meter/seal fields.
     if dzial=="auto":
         prompt += (
             ' Odczytaj także drukowany dział z nagłówka: Elektryka/Hydraulika. '
@@ -152,7 +165,11 @@ def read_page(job:Path,page:int,dzial:str, *, verify_names: list[str] | None = N
     raw_header=data.get("h")
     header={}
     if verify_names is None and isinstance(raw_header,dict):
-        for key in ("numer_projektu","pracownik","numer_plomby"):
+        requested_fields=(
+            ("numer_projektu","pracownik") if dzial=="hydraulika"
+            else ("numer_projektu","pracownik","numer_plomby")
+        )
+        for key in requested_fields:
             value=raw_header.get(key)
             if isinstance(value,str):
                 value=value.strip()

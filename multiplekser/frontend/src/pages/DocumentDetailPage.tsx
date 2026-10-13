@@ -185,8 +185,12 @@ const AI_STATUS: Record<string, {
   failed: { label: 'Niepowodzenie', color: 'error' },
 }
 
-function AITracePanel({ events }: { events: AITraceEvent[] }) {
-  const visibleEvents = events.filter((event) => !event.stage?.startsWith('timing_'))
+function AITracePanel({ events, dzial }: { events: AITraceEvent[]; dzial?: string | null }) {
+  const visibleEvents = events.filter((event) =>
+    !event.stage?.startsWith('timing_') &&
+    !(dzial === 'hydraulika' && event.stage === 'header_ocr'
+      && /^Nieodczytane pola: numer plomby\./.test(event.reason ?? ''))
+  )
   if (visibleEvents.length === 0) return null
 
   return (
@@ -959,13 +963,15 @@ export function DocumentDetailPage() {
                       value={document.pracownik}
                       label="Pracownik"
                     />
-                    <MetadaneField
-                      key={`numer_plomby-${document.numer_plomby}`}
-                      documentId={documentId}
-                      field="numer_plomby"
-                      value={document.numer_plomby}
-                      label="Nr plomby-rozdzielnia"
-                    />
+                    {document.dzial !== 'hydraulika' && (
+                      <MetadaneField
+                        key={`numer_plomby-${document.numer_plomby}`}
+                        documentId={documentId}
+                        field="numer_plomby"
+                        value={document.numer_plomby}
+                        label="Nr plomby-rozdzielnia"
+                      />
+                    )}
                   </Stack>
                 )}
                 {document.status === 'done' && (
@@ -1026,8 +1032,16 @@ export function DocumentDetailPage() {
                 </Alert>
               )}
 
+            {document.dzial && document.source_type === 'auto_v3' &&
+              document.ai_trace.some((event) => event.stage === 'auto_gemini_compare' && event.status === 'rejected') && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  Claude i Gemini nie zgadzają się co do części pozycji, ilości lub kompletności wydawki.
+                  Sprawdź szczegóły w sekcji Przebieg AI i zweryfikuj oryginalny skan przed pobraniem TXT.
+                </Alert>
+              )}
+
             <PerformancePanel events={document.ai_trace} />
-            <AITracePanel events={document.ai_trace} />
+            <AITracePanel events={document.ai_trace} dzial={document.dzial} />
             <JevShadowPanel summary={jevShadow} />
 
             {document.status === 'processing' || document.status === 'queued' ? (

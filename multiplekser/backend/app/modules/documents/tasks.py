@@ -114,12 +114,23 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         if claude_ocr:
             # Claude only reads images. Business logic + all catalog decisions
             # continue through the existing matcher and JEV ACTIVE below.
-            from .claude_bridge import run_claude_host_bridge
+            from .claude_bridge import missing_header_fields, run_claude_host_bridge
             from app.modules.ocr.pipeline_elektryka import _build_item
             from app.modules.ocr.pipeline_hydraulika import _build_item_hydraulika
             from app.modules.matcher.core_hydraulika import DEFAULT_SPECIAL_RULES_HYDRAULIKA
 
             dzial = "auto" if auto_mode else document.source_type.removeprefix("claude_jev_test_")
+            # Independent free Gemini reads the same images IN PARALLEL with
+            # Claude. No DB session or catalog is shared with the background
+            # thread; only immutable JPEG bytes. All decisions remain in JEV.
+            gemini_audit = None
+            gemini_future = None
+            gemini_pool = None
+            if auto_mode and settings.gemini_api_key_free:
+                from concurrent.futures import ThreadPoolExecutor
+                from .auto_gemini_audit import read_free_gemini_audit
+                gemini_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gemini_free_audit")
+                gemini_future = gemini_pool.submit(read_free_gemini_audit, files)
             try:
                 raw_rows, ocr_seconds, header = run_claude_host_bridge(
                     document_id, files, dzial, include_header=True,
@@ -146,6 +157,24 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                     "attempt": 1, "target": None,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 })
+            finally:
+                if gemini_future is not None:
+                    try:
+                        gemini_audit = gemini_future.result(timeout=18)
+                    except Exception as gemini_error:
+                        logger.info("AUTO: darmowa kontrola Gemini niedostępna: %s",
+                                    type(gemini_error).__name__)
+                        save_ai_event({
+                            "status": "skipped", "stage": "auto_gemini_audit",
+                            "provider": "Gemini", "model": "darmowy",
+                            "label": "AUTO: druga niezależna kontrola",
+                            "reason": "Darmowy Gemini nie odpowiedział; pozostaje Claude + JEV.",
+                            "step": None, "total_steps": None, "duration_ms": None,
+                            "attempt": 1, "target": None,
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                        })
+                    finally:
+                        gemini_pool.shutdown(wait=False, cancel_futures=True)
             if not auto_used_gemini and auto_mode:
                 from .auto_v3 import classify_auto_dzial
                 dzial, confidence, classification_method = classify_auto_dzial(raw_rows)
@@ -169,9 +198,54 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                     positions = [_build_item(row, catalog, special_rules, document.magazyn)
                                  for row in raw_rows]
 
-                # Selective verification: only at most three suspicious rows
-                # across at most two pages. Re-read with Opus High. Different
-                # answers are NOT silently substituted: review is mandatory.
+                if auto_mode and gemini_audit is not None:
+                    from .auto_gemini_audit import (
+                        compare_gemini_to_claude, header_gemini_disagreements,
+                    )
+                    comparison = compare_gemini_to_claude(raw_rows, positions, gemini_audit)
+                    header_disagreements = header_gemini_disagreements(header, gemini_audit)
+                    department_conflict = (
+                        gemini_audit.department is not None
+                        and gemini_audit.department != dzial
+                    )
+                    if department_conflict:
+                        for position in positions:
+                            position.needs_review = True
+                            position.form_note = (
+                                (position.form_note or "")
+                                + " AUTO: Claude/Gemini różnią się w rozpoznaniu działu!"
+                            )
+                    notes = (
+                        f"Zgodne ilości: {comparison['agreed']}; "
+                        f"konflikty: {comparison['conflicts']}; "
+                        f"tylko Claude: {comparison['claude_only']}; "
+                        f"tylko Gemini: {comparison['gemini_only']}."
+                    )
+                    if comparison['gemini_only_examples']:
+                        notes += (
+                            " Gemini dodatkowo widzi: "
+                            + ", ".join(comparison["gemini_only_examples"]) + "."
+                        )
+                    if department_conflict:
+                        notes += f" Sprzeczny dział Gemini: {gemini_audit.department}!"
+                    if header_disagreements:
+                        notes += " Różnice nagłówka: " + "; ".join(header_disagreements) + "."
+                    save_ai_event({
+                        "status": "rejected" if department_conflict or header_disagreements or
+                                  comparison['conflicts'] or comparison['gemini_only'] or
+                                  comparison['claude_only'] else "completed",
+                        "stage": "auto_gemini_compare",
+                        "provider": "Gemini + Claude", "model": gemini_audit.model,
+                        "label": "AUTO: porównanie dwóch niezależnych odczytów",
+                        "reason": notes,
+                        "step": None, "total_steps": None,
+                        "duration_ms": round(gemini_audit.seconds * 1000),
+                        "attempt": 1, "target": None,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    })
+
+                # Selective verification: Claude Opus only for contradictions
+                # and visibly ambiguous rows. Never silently change quantities.
                 risky=[]
                 for row, position in zip(raw_rows,positions):
                     uncertain = (row.get("_uncertain") or
@@ -221,21 +295,21 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                 result = SimpleNamespace(
                     numer_projektu=header["numer_projektu"],
                     pracownik=header["pracownik"],
-                    numer_plomby=header["numer_plomby"],
+                    numer_plomby=None if dzial == "hydraulika" else header["numer_plomby"],
                     used_provider="Multiplekser AUTO (Claude Sonnet → JEV)" if auto_mode else "Claude Sonnet + JEV (test)",
                     rejected_count=0, pozycje=positions,
                 )
-                absent=[label for key,label in (
-                    ("numer_projektu","numer projektu"),
-                    ("pracownik","pracownik"),
-                    ("numer_plomby","numer plomby"),
-                ) if result.__dict__[key] is None]
+                absent=missing_header_fields(dzial,header)
                 save_ai_event({
                     "status": "rejected" if absent else "completed",
                     "stage": "header_ocr", "provider": "Claude", "model": "sonnet",
                     "label": "Nagłówek wydawki",
                     "reason": ("Nieodczytane pola: "+", ".join(absent)+". Sprawdź skan i uzupełnij ręcznie.")
-                              if absent else "Numer projektu, pracownik i numer plomby odczytane.",
+                              if absent else (
+                                  "Numer projektu i pracownik odczytane."
+                                  if dzial == "hydraulika" else
+                                  "Numer projektu, pracownik i numer plomby odczytane."
+                              ),
                     "step": None, "total_steps": None,
                     "duration_ms": 0, "attempt": 1, "target": None,
                     "created_at": datetime.now(timezone.utc).isoformat(),
@@ -352,7 +426,8 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
             numer_projektu=result.numer_projektu, used_provider=result.used_provider,
             rejected_count=result.rejected_count, items=items,
             dzial=dzial, dzial_confidence=classify_result.confidence,
-            pracownik=result.pracownik, numer_plomby=result.numer_plomby,
+            pracownik=result.pracownik,
+            numer_plomby=None if dzial == "hydraulika" else result.numer_plomby,
         )
         timings["timing_finalize_db"] = _elapsed_ms(stage_started)
         timings["timing_to_done"] = _elapsed_ms(task_started)

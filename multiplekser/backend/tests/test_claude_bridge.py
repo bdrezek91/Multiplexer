@@ -189,3 +189,16 @@ def test_equivalent_year_formats_are_not_a_conflict():
         {"index":2,"header":{"numer_projektu":"625/05/2026"}},
     ]}
     assert bridge.extract_document_header(source)["numer_projektu"]=="625/05/2026"
+
+
+def test_hydraulika_does_not_require_seal():
+    from app.modules.documents.claude_bridge import missing_header_fields
+    header={"numer_projektu":"126/07","pracownik":"Dawid","numer_plomby":None}
+    assert missing_header_fields("hydraulika",header)==[]
+    assert missing_header_fields("elektryka",header)==["numer plomby"]
+
+
+def test_hydraulika_never_reports_missing_seal_if_project_or_worker_is_missing():
+    from app.modules.documents.claude_bridge import missing_header_fields
+    header={"numer_projektu":"126/07","pracownik":None,"numer_plomby":None}
+    assert missing_header_fields("hydraulika",header)==["pracownik"]

@@ -62,7 +62,11 @@ class GeminiProvider(OCRProvider):
         }
         try:
             async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
-                resp = await client.post(url, params={"key": api_key}, json=body)
+                # Do not embed the API key in the URL: httpx access logs may
+                # otherwise expose credentials. Gemini supports x-goog-api-key.
+                resp = await client.post(
+                    url, headers={"x-goog-api-key": api_key}, json=body
+                )
         except httpx.TimeoutException as exc:
             raise OCRProviderError(f"Timeout po {settings.ocr_timeout_seconds} s bez odpowiedzi") from exc
         except httpx.HTTPError as exc:

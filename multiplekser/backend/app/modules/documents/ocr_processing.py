@@ -8,7 +8,10 @@ import asyncio
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Mapping, Optional
+
+import cv2
 
 from sqlalchemy.orm import Session
 
@@ -495,7 +498,27 @@ def _download_and_prepare(get_storage, file_key: str, mime: str) -> list[tuple[b
         # "widmowe" przebicie druku z drugiej strony kartki na cienkim papierze. Nigdy nie
         # filtruje WSZYSTKICH stron na raz (bezpieczny fallback do niefiltrowanej listy), zeby
         # bledna/zbyt agresywna detekcja nigdy nie zostawila dokumentu bez zadnego obrazu.
-        non_blank_pages = [page for page in pages if not is_blank_page(page)]
-        pages = non_blank_pages or pages
-        return [(downscale_image(page), "image/jpeg") for page in pages]
+        if len(pages) < 2:
+            non_blank_pages = [page for page in pages if not is_blank_page(page)]
+            pages = non_blank_pages or pages
+            return [(downscale_image(page), "image/jpeg") for page in pages]
+
+        # AUTO FAST: dla skanow wielostronicowych wykonaj te SAME operacje
+        # na kilku stronach rownolegle. OpenCV samo tworzy watki, dlatego
+        # ograniczamy jego wewnetrzny pool, zeby nie przegrzewac 4 CPU VPS.
+        # ThreadPoolExecutor.map zachowuje kolejnosc stron, a dane wynikowe
+        # sa bajt w bajt identyczne z przetwarzaniem sekwencyjnym.
+        previous_threads = cv2.getNumThreads()
+        try:
+            cv2.setNumThreads(1)
+            with ThreadPoolExecutor(max_workers=min(3, len(pages))) as pool:
+                non_blank_pages = [
+                    page for page, blank in zip(pages, pool.map(is_blank_page, pages))
+                    if not blank
+                ]
+                pages = non_blank_pages or pages
+                result_pages = list(pool.map(downscale_image, pages))
+        finally:
+            cv2.setNumThreads(previous_threads)
+        return [(page, "image/jpeg") for page in result_pages]
     return [(downscale_image(raw), "image/jpeg")]

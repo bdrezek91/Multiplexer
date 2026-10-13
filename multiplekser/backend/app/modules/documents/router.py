@@ -141,6 +141,8 @@ def _check_owner_or_admin(document: DocumentModel, user: UserModel) -> None:
 async def create_document(
     plik: list[UploadFile] = File(...),
     magazyn: str | None = Form(default=None),
+    ocr_engine: str = Form(default="standard"),
+    claude_dzial: str | None = Form(default=None),
     session: Session = Depends(get_db),
     user: UserModel = Depends(get_current_user),
 ):
@@ -150,6 +152,15 @@ async def create_document(
     kolejne strony JEDNEGO dokumentu (patrz tasks.py/ocr/providers.py), nie jako osobne
     dokumenty."""
     check_magazyn_access(user, magazyn)
+
+    if ocr_engine not in {"standard", "claude_jev_test"}:
+        raise HTTPException(status_code=422, detail="Nieznany silnik OCR")
+    if ocr_engine == "claude_jev_test":
+        if user.rola != "admin":
+            raise HTTPException(status_code=403, detail="Tryb Claude + JEV jest na razie dostępny tylko administratorowi")
+        if claude_dzial not in {"elektryka", "hydraulika"}:
+            raise HTTPException(status_code=422, detail="Wybierz dział Elektryka lub Hydraulika")
+    source_type = f"claude_jev_test_{claude_dzial}" if ocr_engine == "claude_jev_test" else "ai_scan"
 
     if not plik:
         raise HTTPException(status_code=400, detail="Brak pliku")
@@ -180,7 +191,7 @@ async def create_document(
         first_key, _first_raw, first_mime, first_name = prepared[0]
         document = repository.create_document(
             session, document_id=document_id, user_id=user.id, file_key=first_key, mime=first_mime,
-            original_filename=first_name, magazyn=magazyn,
+            original_filename=first_name, magazyn=magazyn, source_type=source_type,
             extra_files=[
                 (file_key, mime)
                 for file_key, _raw, mime, _original_filename in prepared[1:]

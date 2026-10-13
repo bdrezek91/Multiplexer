@@ -1049,6 +1049,14 @@ export function DocumentDetailPage() {
               </Stack>
             </Stack>
 
+            {document.source_type.startsWith('claude_jev_test_') && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                <strong>Claude + JEV — dokument testowy.</strong> Claude odczytał nazwy i ilości,
+                a matcher/JEV dobrał kody. Zweryfikuj każdą ilość i kod na oryginalnym
+                skanie przed pobraniem TXT lub importem do Optimy.
+              </Alert>
+            )}
+
             <PerformancePanel events={document.ai_trace} />
             <AITracePanel events={document.ai_trace} />
             <JevShadowPanel summary={jevShadow} />

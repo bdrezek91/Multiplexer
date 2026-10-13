@@ -63,6 +63,20 @@ describe('DocumentsPage - robienie kilku zdjec aparatem przed zatwierdzeniem', (
     expect(sentFiles.map((f) => f.name)).toEqual(['strona1.jpg', 'strona2.jpg', 'strona3.jpg'])
   })
 
+  it('pozwala wybrac Claude + JEV z dzialem hydraulicznym przy uploadzie', async () => {
+    const user = userEvent.setup()
+    vi.mocked(documentsApi.uploadDocument).mockResolvedValue({ id: 'doc3', status: 'queued' })
+    renderPage()
+    const [cameraInput] = document.querySelectorAll('input[type="file"]')
+    await user.upload(cameraInput as HTMLInputElement, fakeFile('hydraulika.jpg'))
+    await user.click(screen.getByRole('button', { name: /claude \+ jev \(test\)/i }))
+    await user.click(screen.getByRole('button', { name: 'Hydraulika' }))
+    await user.click(screen.getByRole('button', { name: /zatwierdź i wyślij/i }))
+    await waitFor(() => expect(documentsApi.uploadDocument).toHaveBeenCalledTimes(1))
+    expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][2]).toBe('claude_jev_test')
+    expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][3]).toBe('hydraulika')
+  })
+
   it('pozwala usunac pojedyncze zdjecie z listy przed zatwierdzeniem', async () => {
     const user = userEvent.setup()
     vi.mocked(documentsApi.uploadDocument).mockResolvedValue({ id: 'doc1', status: 'queued' })

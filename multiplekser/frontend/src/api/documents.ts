@@ -37,10 +37,12 @@ export function getJevShadow(id: string): Promise<JevShadowSummary> {
   return apiRequest<JevShadowSummary>('/documents/' + encodeURIComponent(id) + '/jev-shadow')
 }
 
-export function uploadDocument(files: File[], magazyn?: string): Promise<DocumentCreated> {
+export function uploadDocument(files: File[], magazyn?: string, ocrEngine: 'standard' | 'claude_jev_test' = 'standard', claudeDzial?: 'elektryka' | 'hydraulika'): Promise<DocumentCreated> {
   const formData = new FormData()
   files.forEach((file) => formData.append('plik', file))
   if (magazyn) formData.append('magazyn', magazyn)
+  formData.append('ocr_engine', ocrEngine)
+  if (ocrEngine === 'claude_jev_test' && claudeDzial) formData.append('claude_dzial', claudeDzial)
   return apiRequest<DocumentCreated>('/documents', { method: 'POST', formData })
 }
 

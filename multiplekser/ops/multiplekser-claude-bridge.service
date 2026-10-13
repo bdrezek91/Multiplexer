@@ -1,0 +1,26 @@
+[Unit]
+Description=Multiplekser Claude Pro opt-in OCR test bridge (host CLI)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/Multiplexer/multiplekser
+Environment=HOME=/root
+Environment=PATH=/root/.nvm/versions/node/v22.23.2/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NODE_OPTIONS=--max-old-space-size=512
+ExecStart=/usr/bin/python3 -u /root/Multiplexer/multiplekser/ops/claude_bridge_host.py
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=true
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ReadWritePaths=/var/lib/multiplekser-claude-bridge /root/.claude
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

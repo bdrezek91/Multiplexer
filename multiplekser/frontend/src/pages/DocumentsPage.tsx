@@ -45,6 +45,8 @@ export function DocumentsPage() {
   // dopiero po recznym kliknieciu "Wyslij i rozpoznaj", nigdy automatycznie po zdjeciu.
   const [files, setFiles] = useState<File[]>([])
   const [magazyn, setMagazyn] = useState('')
+  const [ocrEngine, setOcrEngine] = useState<'standard' | 'claude_jev_test'>('standard')
+  const [claudeDzial, setClaudeDzial] = useState<'elektryka' | 'hydraulika'>('elektryka')
   const [error, setError] = useState<string | null>(null)
   const [compressionWarning, setCompressionWarning] = useState<string | null>(null)
   const [preparingBatches, setPreparingBatches] = useState(0)
@@ -96,7 +98,7 @@ export function DocumentsPage() {
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (files.length === 0) throw new Error('Wybierz plik')
-      return uploadDocument(files, magazyn || undefined)
+      return uploadDocument(files, magazyn || undefined, ocrEngine, ocrEngine === 'claude_jev_test' ? claudeDzial : undefined)
     },
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ['documents'] })
@@ -192,6 +194,38 @@ export function DocumentsPage() {
             </ToggleButtonGroup>
             <FormHelperText>Magazyn (opcjonalnie) - kliknij ponownie, żeby odznaczyć</FormHelperText>
           </Box>
+          <Box>
+            <ToggleButtonGroup
+              exclusive
+              value={ocrEngine}
+              onChange={(_, next: 'standard' | 'claude_jev_test' | null) => {
+                if (next) setOcrEngine(next)
+              }}
+              size="small"
+              aria-label="Silnik rozpoznawania wydawki"
+            >
+              <ToggleButton value="standard">Standardowy OCR (Gemini)</ToggleButton>
+              <ToggleButton value="claude_jev_test">Claude + JEV (test)</ToggleButton>
+            </ToggleButtonGroup>
+            <FormHelperText>Wybierz silnik do nowo przesłanej wydawki.</FormHelperText>
+          </Box>
+          {ocrEngine === 'claude_jev_test' && (
+            <Box>
+              <ToggleButtonGroup
+                exclusive
+                value={claudeDzial}
+                onChange={(_, next: 'elektryka' | 'hydraulika' | null) => {
+                  if (next) setClaudeDzial(next)
+                }}
+                size="small"
+                aria-label="Dział wydawki dla Claude"
+              >
+                <ToggleButton value="elektryka">Elektryka</ToggleButton>
+                <ToggleButton value="hydraulika">Hydraulika</ToggleButton>
+              </ToggleButtonGroup>
+              <FormHelperText>Claude odczytuje obraz; matcher i JEV wybierają kody Optimy.</FormHelperText>
+            </Box>
+          )}
           <Button
             variant="contained"
             onClick={handleUpload}
@@ -205,6 +239,12 @@ export function DocumentsPage() {
           </Button>
         </Stack>
 
+        {ocrEngine === 'claude_jev_test' && (
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Tryb testowy: Claude Pro odczytuje tekst i ilości, JEV dobiera materiały.
+            Weryfikuj ilości na skanie przed pobraniem TXT. Czas może zależeć od limitu Claude.
+          </Alert>
+        )}
         {files.length > 0 && (
           <Box sx={{ mt: 2 }}>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -251,7 +291,12 @@ export function DocumentsPage() {
             )}
             {(documents ?? []).map((doc) => (
               <TableRow key={doc.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/documents/${doc.id}`)}>
-                <TableCell>{doc.original_filename}</TableCell>
+                <TableCell>
+                  {doc.original_filename}
+                  {doc.source_type.startsWith('claude_jev_test_') && (
+                    <Chip size="small" label="Claude + JEV · test" color="info" sx={{ ml: 1 }} />
+                  )}
+                </TableCell>
                 <TableCell>{doc.numer_projektu ?? '-'}</TableCell>
                 <TableCell>{doc.magazyn ? magazynLabel(doc.magazyn) : '-'}</TableCell>
                 <TableCell>

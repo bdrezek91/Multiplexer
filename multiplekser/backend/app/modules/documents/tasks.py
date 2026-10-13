@@ -10,6 +10,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from sqlalchemy.orm import Session
 
@@ -104,10 +105,53 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         # Krok Hydraulika-3: klasyfikacja dzialu PRZED pelnym odczytem (tani, pierwszy przebieg
         # Gemini - patrz ocr/classify.py) - dopiero po niej wiadomo, ktory katalog/prompt/matcher
         # uzyc. Brak recznego przelacznika w UI: uzytkownik chce w pelni automatycznego wykrywania.
-        classify_result, dzial, result, core_timings = _classify_and_recognize(
-            files, session, document, save_ai_event, cooldown_store,
-        )
-        timings.update(core_timings)
+        claude_test = document.source_type in {
+            "claude_jev_test_elektryka", "claude_jev_test_hydraulika"
+        }
+        if claude_test:
+            # Claude only reads images. Business logic + all catalog decisions
+            # continue through the existing matcher and JEV ACTIVE below.
+            from .claude_bridge import run_claude_host_bridge
+            from app.modules.ocr.pipeline_elektryka import _build_item
+            from app.modules.ocr.pipeline_hydraulika import _build_item_hydraulika
+            from app.modules.matcher.core_hydraulika import DEFAULT_SPECIAL_RULES_HYDRAULIKA
+
+            dzial = document.source_type.removeprefix("claude_jev_test_")
+            raw_rows, ocr_seconds = run_claude_host_bridge(
+                document_id, files, dzial,
+            )
+            catalog = Catalog.from_db(session, dzial=dzial)
+            if dzial == "hydraulika":
+                positions = [_build_item_hydraulika(row, catalog, document.magazyn)
+                             for row in raw_rows]
+            else:
+                special_rules = rules_from_db(session)
+                positions = [_build_item(row, catalog, special_rules, document.magazyn)
+                             for row in raw_rows]
+            for position in positions:
+                if position.ilosc_wydana is None and position.ilosc_zuzyta is None:
+                    position.needs_review = True
+                    position.form_note = (position.form_note or "") + " Claude: nie udało się odczytać obu ilości."
+            result = SimpleNamespace(
+                numer_projektu=None, pracownik=None, numer_plomby=None,
+                used_provider="Claude Sonnet + JEV (test)",
+                rejected_count=0, pozycje=positions,
+            )
+            classify_result = SimpleNamespace(confidence=1.0)
+            timings["timing_claude_ocr"] = int(ocr_seconds * 1000)
+            save_ai_event({
+                "status": "completed", "stage": "claude_test_ocr",
+                "provider": "Claude", "model": "sonnet",
+                "label": "Claude + JEV (test)", "reason": f"Odczytano {len(positions)} pozycji na {len(files)} stronach.",
+                "step": None, "total_steps": None, "duration_ms": int(ocr_seconds * 1000),
+                "attempt": 1, "target": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        else:
+            classify_result, dzial, result, core_timings = _classify_and_recognize(
+                files, session, document, save_ai_event, cooldown_store,
+            )
+            timings.update(core_timings)
 
         stage_started = time.perf_counter()
         items = [
@@ -119,9 +163,11 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         timings["timing_item_materialization"] = _elapsed_ms(stage_started)
 
         stage_started = time.perf_counter()
-        asyncio.run(_verify_ambiguous_items(
-            files, items, document_id, save_ai_event, cooldown_store, dzial,
-        ))
+        if not claude_test:
+            asyncio.run(_verify_ambiguous_items(
+                files, items, document_id, save_ai_event, cooldown_store, dzial,
+            ))
+        # Claude test never calls Gemini's ambiguous-quantity checker.
         timings["timing_ambiguous_verification"] = _elapsed_ms(stage_started)
 
         # Najpierw zachowujemy wszystkie istniejace reguly biznesowe matchera. Auto-zasilacz
@@ -233,7 +279,8 @@ def process_ocr_document(document_id: str) -> None:
         if not processed:
             return
         completed = repository.get_document(session, document_id)
-        if completed is not None and completed.status == "done":
+        if (completed is not None and completed.status == "done"
+                and not completed.source_type.startswith("claude_jev_test_")):
             try:
                 dispatch_full_document_verification_task(document_id)
             except Exception:

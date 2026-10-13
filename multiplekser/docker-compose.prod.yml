@@ -137,6 +137,9 @@ services:
       JEV_ENABLED: ${JEV_ENABLED:-false}
       JEV_MODE: ${JEV_MODE:-shadow}
       JEV_MODEL: ${JEV_MODEL:-jev-latest}
+      CLAUDE_TEST_BRIDGE_DIR: /claude-bridge
+    volumes:
+      - /var/lib/multiplekser-claude-bridge:/claude-bridge
     depends_on:
       postgres:
         condition: service_healthy

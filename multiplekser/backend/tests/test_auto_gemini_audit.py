@@ -120,3 +120,17 @@ def test_header_model_disagreement_does_not_change_source():
     same=GeminiAudit(rows=[],department="hydraulika",project="126/07",
                      employee="Dawid",seconds=1.0,model=FREE_MODEL)
     assert header_gemini_disagreements(primary,same)==[]
+
+
+def test_form_alias_matching_never_conflates_different_plumbing_angles():
+    from app.modules.documents.auto_gemini_audit import _canonical_for_compare
+    left=_canonical_for_compare("Trójnik kanalizacyjny fi 40 45 st", "hydraulika")
+    right=_canonical_for_compare("Trójnik kanalizacyjny fi 40 90 st", "hydraulika")
+    assert left!=right
+
+
+def test_form_alias_matching_keeps_plumbing_size_differences():
+    from app.modules.documents.auto_gemini_audit import _canonical_for_compare
+    left=_canonical_for_compare("Rura fi 40 30 cm", "hydraulika")
+    right=_canonical_for_compare("Rura fi 40 50 cm", "hydraulika")
+    assert left!=right

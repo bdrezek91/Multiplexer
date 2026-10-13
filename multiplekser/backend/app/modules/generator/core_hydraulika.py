@@ -33,6 +33,8 @@ generateOutput() w monolicie, zweryfikowany bezposrednio, nie zgadywany):
 """
 from __future__ import annotations
 
+from .safety_hydraulika import is_ignored_zas127, screw_code_safe
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -110,6 +112,10 @@ def generate_output_hydraulika(
         seq.append({"type": "kod", "kod": kod, "qty": qty, "jm": jm})
 
     for it in items:
+        # Absolute non-billable exception for both legacy and new documents.
+        # Do not even emit a comment/TXT entry for this material.
+        if is_ignored_zas127(it.name):
+            continue
         # Reczna korekta (PATCH .../items/{item_id}) albo juz-dobre dopasowanie z pierwszego OCR
         # ma pierwszenstwo przed ponownym dopasowywaniem od zera - inaczej generator ignorowal
         # poprawki uzytkownika i eksportowal "BRAK DOPASOWANIA" mimo poprawionego kodu w UI.
@@ -122,6 +128,13 @@ def generate_output_hydraulika(
         else:
             match = match_against_catalog_hydraulika(it.name, catalog, magazyn=magazyn)
         jm = match.jm_override or "SZT"
+        if not screw_code_safe(it.name, match.kod, match.nazwa):
+            seq.append({
+                "type": "unmatched",
+                "text0": f"### BRAK DOPASOWANIA (wkręty: sprawdź rozmiar i RAL): {it.name}",
+                "qty": it.qty, "jm": jm,
+            })
+            continue
 
         if match.quality == QUALITY_OK and match.kod:
             add_kod(match.kod, it.qty, jm)

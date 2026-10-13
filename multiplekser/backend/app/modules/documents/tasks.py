@@ -202,7 +202,7 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                     from .auto_gemini_audit import (
                         compare_gemini_to_claude, header_gemini_disagreements,
                     )
-                    comparison = compare_gemini_to_claude(raw_rows, positions, gemini_audit)
+                    comparison = compare_gemini_to_claude(raw_rows, positions, gemini_audit, dzial=dzial)
                     header_disagreements = header_gemini_disagreements(header, gemini_audit)
                     department_conflict = (
                         gemini_audit.department is not None
@@ -255,13 +255,8 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                         position.form_note = (position.form_note or "") + " AUTO: niepewny odczyt — wymaga kontroli."
                         risky.append((row,position))
                 if auto_mode and risky:
-                    verify={}
-                    for row, position in risky:
-                        page=int(row.get("page_number") or 1)
-                        if page not in verify and len(verify)>=2:
-                            continue
-                        if len(verify.setdefault(page, []))<3 and sum(map(len,verify.values()))<3:
-                            verify[page].append(str(row["nazwa"]))
+                    from .auto_v3 import select_verify_targets
+                    verify = select_verify_targets(risky, len(files))
                     if verify:
                         started_verify=time.perf_counter()
                         try:
@@ -392,6 +387,32 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         finally:
             timings["timing_jev_active"] = _elapsed_ms(stage_started)
 
+        if dzial == "hydraulika":
+            from app.modules.generator.safety_hydraulika import (
+                is_ignored_zas127, screw_code_safe,
+            )
+            for item in items:
+                name = item.get("rozpoznana_nazwa")
+                if is_ignored_zas127(name):
+                    item["match_kod"] = None
+                    item["match_nazwa"] = None
+                    item["matched_product_id"] = None
+                    item["match_quality"] = "excluded"
+                    item["needs_review"] = False
+                    item["form_note"] = (item.get("form_note") or "") + " ZAS 127: celowo pominięte w TXT."
+                elif not screw_code_safe(
+                    name, item.get("match_kod"), item.get("match_nazwa")
+                ):
+                    item["match_kod"] = None
+                    item["match_nazwa"] = None
+                    item["matched_product_id"] = None
+                    item["match_quality"] = "bad"
+                    item["needs_review"] = True
+                    item["form_note"] = (item.get("form_note") or "") + (
+                        " Wkręty: zablokowano niezgodny kod (rozmiar lub RAL)."
+                    )
+
+
         if claude_ocr:
             # Never advertise OCR->JEV as fully confirmed if TypeSafe did not
             # answer for some rows. Preserve original OCR quantities without
@@ -408,12 +429,19 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                     missing += 1
                     item["needs_review"] = True
                     item["form_note"] = (item.get("form_note") or "") + " JEV: brak potwierdzenia kodu, sprawdź ręcznie."
+            confirmed = sum(
+                bool(item.get("match_kod")) and item.get("match_quality") == "ok"
+                for item in items
+            )
+            needs_check = len(items) - confirmed
             save_ai_event({
-                "status": "completed" if not missing else "rejected",
+                "status": "completed" if not missing and needs_check == 0 else "rejected",
                 "stage": "jev_active", "provider": "TypeSafe", "model": None,
                 "label": "JEV — decyzje o kodach",
-                "reason": f"JEV odpowiedział na {len(answered)}/{len(items)} pozycji. "
-                          + (f"{missing} wymaga weryfikacji." if missing else "Wszystkie kody potwierdzone."),
+                "reason": f"JEV odpowiedział na {len(answered)}/{len(items)} pozycji; "
+                          f"kody OK: {confirmed}/{len(items)}; "
+                          f"do sprawdzenia/brak kodu: {needs_check}. "
+                          + (f"{missing} bez odpowiedzi JEV." if missing else ""),
                 "step": None, "total_steps": None,
                 "duration_ms": timings["timing_jev_active"],
                 "attempt": 1, "target": None,

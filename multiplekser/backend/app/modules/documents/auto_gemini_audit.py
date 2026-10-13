@@ -92,6 +92,11 @@ def read_free_gemini_audit(files: list[tuple[bytes,str]]) -> GeminiAudit:
         name=entry.get("nazwa")
         if not isinstance(name,str) or not 2<=len(name.strip())<=250:
             continue
+        if _normalise_match(name) in {"inne","dopiski","pozostale"} and (
+            _quantity(entry.get("ilosc_wydana")) is None and
+            _quantity(entry.get("ilosc_zuzyta")) is None
+        ):
+            continue
         try:
             page=int(entry.get("strona") or 1)
         except (ValueError, TypeError):
@@ -119,8 +124,23 @@ def read_free_gemini_audit(files: list[tuple[bytes,str]]) -> GeminiAudit:
     )
 
 
+def _canonical_for_compare(name: str, dzial: str | None) -> str:
+    """Use verified known-form names; never merge different dimensions or angles."""
+    raw=_normalise_match(name)
+    if dzial == "hydraulika":
+        from app.modules.ocr.form_rows_hydraulika import snap_to_known_item_hydraulika
+        snap=snap_to_known_item_hydraulika(name)
+        source_numbers=re.findall(r"[0-9]+(?:[.,][0-9]+)?",raw)
+        target=_normalise_match(snap.name)
+        target_numbers=re.findall(r"[0-9]+(?:[.,][0-9]+)?",target)
+        if snap.status in {"exact","fixed","additional"} and snap.ratio>=0.97 and source_numbers==target_numbers:
+            return target
+    return raw
+
+
 def compare_gemini_to_claude(
     claude_rows: list[dict], positions: list[Any], gemini: GeminiAudit,
+    dzial: str | None = None,
 ) -> dict:
     """Conservative exact normalized-name + page matching.
 
@@ -129,14 +149,14 @@ def compare_gemini_to_claude(
     """
     index=defaultdict(list)
     for row in gemini.rows:
-        index[(_normalise_match(row["nazwa"]),row["page_number"])].append(row)
+        index[(_canonical_for_compare(row["nazwa"],dzial),row["page_number"])].append(row)
     used=set()
     matched=0
     agreed=0
     disagree=0
     claude_only=0
     for row,position in zip(claude_rows,positions):
-        key=(_normalise_match(row["nazwa"]),int(row.get("page_number") or 1))
+        key=(_canonical_for_compare(row["nazwa"],dzial),int(row.get("page_number") or 1))
         peers=index.get(key,[])
         # Prevent reusing one second-read row twice on duplicate names.
         if len(peers)!=1 or key in used:

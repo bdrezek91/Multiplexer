@@ -157,3 +157,35 @@ def recognize_with_free_gemini(files, session, magazyn):
             files,cat,rules_from_db(session),magazyn=magazyn,chain=steps))
     result.used_provider="Multiplekser AUTO (darmowy Gemini, limit Claude)"
     return classify,dzial,result
+
+
+def select_verify_targets(
+    risky: list[tuple[dict, object]],
+    page_count: int,
+    *,
+    max_rows: int = 3,
+    max_pages: int = 2,
+) -> dict[int, list[str]]:
+    """Build a valid bounded Opus request without creating empty page buckets.
+
+    Earlier setdefault(page, []) created a third empty bucket even after
+    max_rows was reached, causing bridge validation to reject the entire job.
+    """
+    chosen: dict[int, list[str]] = {}
+    for raw, _position in risky:
+        try:
+            page = int(raw.get("page_number") or 1)
+        except (TypeError, ValueError):
+            continue
+        name = str(raw.get("nazwa") or "").strip()
+        if not 1 <= page <= page_count or not name:
+            continue
+        if sum(map(len, chosen.values())) >= max_rows:
+            break
+        if page not in chosen:
+            if len(chosen) >= max_pages:
+                continue
+            chosen[page] = []
+        if len(chosen[page]) < max_rows and name not in chosen[page]:
+            chosen[page].append(name)
+    return {page: names for page, names in chosen.items() if names}

@@ -1015,9 +1015,9 @@ export function DocumentDetailPage() {
 
             {(document.source_type.startsWith('claude_jev_test_') || document.source_type === 'auto_v3') && (
               <Alert severity="warning" sx={{ mt: 2 }}>
-                <strong>Multiplekser AUTO / Claude + JEV — dokument do kontroli.</strong> Claude odczytał nazwy i ilości,
-                a matcher/JEV dobrał kody. Zweryfikuj każdą ilość i kod na oryginalnym
-                skanie przed pobraniem TXT lub importem do Optimy.
+                <strong>Dokument OCR do kontroli.</strong> Odczyt wykonano silnikiem
+                wskazanym w polu „Rozpoznane przez”; matcher/JEV dobrał kody.
+                Sprawdź ilości i kody na oryginalnym skanie przed importem do Optimy.
               </Alert>
             )}
 

@@ -109,9 +109,50 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         claude_test = document.source_type in {
             "claude_jev_test_elektryka", "claude_jev_test_hydraulika"
         }
+        # AUTO now runs the established FREE Gemini form OCR first.
+        # Only if Gemini is down / times out / yields unusable OCR do we
+        # execute the existing Claude + matcher + JEV branch below.
         claude_ocr = auto_mode or claude_test
-        auto_used_gemini = False
-        if claude_ocr:
+        gemini_primary_ok = False
+        if auto_mode:
+            from .auto_v3 import recognize_gemini_primary
+            started_gemini = time.perf_counter()
+            try:
+                classify_result, dzial, result, gemini_timings = recognize_gemini_primary(
+                    files, session, document.magazyn
+                )
+                timings.update(gemini_timings)
+                gemini_primary_ok = True
+                save_ai_event({
+                    "status":"completed", "stage":"auto_gemini_primary",
+                    "provider":"Gemini", "model":"gemini-3.5-flash-lite",
+                    "label":"AUTO: główny OCR Gemini",
+                    "reason":f"Gemini odczytał {len(result.pozycje)} pozycji ({dzial}). Claude nie został użyty.",
+                    "step":None, "total_steps":None,
+                    "duration_ms":_elapsed_ms(started_gemini),
+                    "attempt":1, "target":None,
+                    "created_at":datetime.now(timezone.utc).isoformat(),
+                })
+            except (
+                AllProvidersFailedError, OCRProviderError, OCRUnparsableResponseError,
+                RuntimeError, TimeoutError, ValueError,
+            ) as gemini_error:
+                # Do not silently switch to a paid API, or run Opus on every doc.
+                # One Claude Sonnet read is the fallback for unavailable or
+                # unusable Gemini OCR. Error content is not logged to users.
+                logger.warning("AUTO: Gemini unavailable; selecting Claude fallback: %s",
+                               type(gemini_error).__name__)
+                save_ai_event({
+                    "status":"skipped", "stage":"auto_gemini_primary",
+                    "provider":"Gemini", "model":"gemini-3.5-flash-lite",
+                    "label":"AUTO: Gemini niedostępny — Claude zapasowy",
+                    "reason":"Darmowy Gemini nie oddał użytecznego wyniku. Uruchomiono Claude Sonnet.",
+                    "step":None, "total_steps":None,
+                    "duration_ms":_elapsed_ms(started_gemini),
+                    "attempt":1, "target":None,
+                    "created_at":datetime.now(timezone.utc).isoformat(),
+                })
+        if claude_ocr and not gemini_primary_ok:
             # Claude only reads images. Business logic + all catalog decisions
             # continue through the existing matcher and JEV ACTIVE below.
             from .claude_bridge import missing_header_fields, run_claude_host_bridge
@@ -120,62 +161,23 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
             from app.modules.matcher.core_hydraulika import DEFAULT_SPECIAL_RULES_HYDRAULIKA
 
             dzial = "auto" if auto_mode else document.source_type.removeprefix("claude_jev_test_")
-            # Independent free Gemini reads the same images IN PARALLEL with
-            # Claude. No DB session or catalog is shared with the background
-            # thread; only immutable JPEG bytes. All decisions remain in JEV.
-            gemini_audit = None
-            gemini_future = None
-            gemini_pool = None
-            if auto_mode and settings.gemini_api_key_free:
-                from concurrent.futures import ThreadPoolExecutor
-                from .auto_gemini_audit import read_free_gemini_audit
-                gemini_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gemini_free_audit")
-                gemini_future = gemini_pool.submit(read_free_gemini_audit, files)
-            try:
-                raw_rows, ocr_seconds, header = run_claude_host_bridge(
-                    document_id, files, dzial, include_header=True,
-                )
-            except Exception as claude_error:
-                # AUTO can use free Gemini only when Claude Pro reports exhausted
-                # quota. The legacy Gemini chain may reach paid OpenAI/Gemini,
-                # so NEVER use that chain here.
-                if not auto_mode or "limit" not in str(claude_error).casefold():
-                    raise
-                if not settings.gemini_api_key_free:
-                    raise
-                from .auto_v3 import recognize_with_free_gemini
-                classify_result, dzial, result = recognize_with_free_gemini(
-                    files, session, document.magazyn
-                )
-                auto_used_gemini = True
+            # Claude Sonnet is now a true fallback: do not call Gemini again,
+            # and do not start any independent model audit in parallel.
+            raw_rows, ocr_seconds, header = run_claude_host_bridge(
+                document_id, files, dzial, include_header=True,
+            )
+            if auto_mode:
                 save_ai_event({
-                    "status": "completed", "stage": "auto_fallback",
-                    "provider": "Gemini", "model": "darmowy",
-                    "label": "AUTO: limit Claude, darmowy Gemini",
-                    "reason": "Wykorzystano tylko darmową ścieżkę Gemini; wynik wymaga weryfikacji.",
-                    "step": None, "total_steps": None, "duration_ms": None,
-                    "attempt": 1, "target": None,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "status":"completed", "stage":"auto_claude_fallback",
+                    "provider":"Claude", "model":"sonnet",
+                    "label":"AUTO: zapasowy OCR Claude",
+                    "reason":f"Claude przejął OCR po niedostępnym Gemini: {len(raw_rows)} pozycji.",
+                    "step":None, "total_steps":None,
+                    "duration_ms":int(ocr_seconds*1000),
+                    "attempt":1, "target":None,
+                    "created_at":datetime.now(timezone.utc).isoformat(),
                 })
-            finally:
-                if gemini_future is not None:
-                    try:
-                        gemini_audit = gemini_future.result(timeout=18)
-                    except Exception as gemini_error:
-                        logger.info("AUTO: darmowa kontrola Gemini niedostępna: %s",
-                                    type(gemini_error).__name__)
-                        save_ai_event({
-                            "status": "skipped", "stage": "auto_gemini_audit",
-                            "provider": "Gemini", "model": "darmowy",
-                            "label": "AUTO: druga niezależna kontrola",
-                            "reason": "Darmowy Gemini nie odpowiedział; pozostaje Claude + JEV.",
-                            "step": None, "total_steps": None, "duration_ms": None,
-                            "attempt": 1, "target": None,
-                            "created_at": datetime.now(timezone.utc).isoformat(),
-                        })
-                    finally:
-                        gemini_pool.shutdown(wait=False, cancel_futures=True)
-            if not auto_used_gemini and auto_mode:
+            if auto_mode:
                 from .auto_v3 import classify_auto_dzial
                 dzial, confidence, classification_method = classify_auto_dzial(raw_rows)
                 classify_result = SimpleNamespace(confidence=confidence)
@@ -188,140 +190,60 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                     "attempt": 1, "target": None,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 })
-            if not auto_used_gemini:
-                catalog = Catalog.from_db(session, dzial=dzial)
-                if dzial == "hydraulika":
-                    positions = [_build_item_hydraulika(row, catalog, document.magazyn)
-                                 for row in raw_rows]
-                else:
-                    special_rules = rules_from_db(session)
-                    positions = [_build_item(row, catalog, special_rules, document.magazyn)
-                                 for row in raw_rows]
+            catalog = Catalog.from_db(session, dzial=dzial)
+            if dzial == "hydraulika":
+                positions = [_build_item_hydraulika(row, catalog, document.magazyn)
+                             for row in raw_rows]
+            else:
+                special_rules = rules_from_db(session)
+                positions = [_build_item(row, catalog, special_rules, document.magazyn)
+                             for row in raw_rows]
 
-                if auto_mode and gemini_audit is not None:
-                    from .auto_gemini_audit import (
-                        compare_gemini_to_claude, header_gemini_disagreements,
+            # Fallback is one Claude Sonnet OCR only. Flag uncertain rows
+            # for human review; automatic Opus would defeat fast failover.
+            for row, position in zip(raw_rows, positions):
+                if (row.get("_uncertain") or
+                    (position.ilosc_wydana is None and position.ilosc_zuzyta is None)
+                    or position.match.quality == "bad"):
+                    position.needs_review = True
+                    position.form_note = (position.form_note or "") + (
+                        " AUTO: niepewny odczyt Claude — sprawdź skan."
                     )
-                    comparison = compare_gemini_to_claude(raw_rows, positions, gemini_audit, dzial=dzial)
-                    header_disagreements = header_gemini_disagreements(header, gemini_audit)
-                    department_conflict = (
-                        gemini_audit.department is not None
-                        and gemini_audit.department != dzial
-                    )
-                    if department_conflict:
-                        for position in positions:
-                            position.needs_review = True
-                            position.form_note = (
-                                (position.form_note or "")
-                                + " AUTO: Claude/Gemini różnią się w rozpoznaniu działu!"
-                            )
-                    notes = (
-                        f"Zgodne ilości: {comparison['agreed']}; "
-                        f"konflikty: {comparison['conflicts']}; "
-                        f"tylko Claude: {comparison['claude_only']}; "
-                        f"tylko Gemini: {comparison['gemini_only']}."
-                    )
-                    if comparison['gemini_only_examples']:
-                        notes += (
-                            " Gemini dodatkowo widzi: "
-                            + ", ".join(comparison["gemini_only_examples"]) + "."
-                        )
-                    if department_conflict:
-                        notes += f" Sprzeczny dział Gemini: {gemini_audit.department}!"
-                    if header_disagreements:
-                        notes += " Różnice nagłówka: " + "; ".join(header_disagreements) + "."
-                    save_ai_event({
-                        "status": "rejected" if department_conflict or header_disagreements or
-                                  comparison['conflicts'] or comparison['gemini_only'] or
-                                  comparison['claude_only'] else "completed",
-                        "stage": "auto_gemini_compare",
-                        "provider": "Gemini + Claude", "model": gemini_audit.model,
-                        "label": "AUTO: porównanie dwóch niezależnych odczytów",
-                        "reason": notes,
-                        "step": None, "total_steps": None,
-                        "duration_ms": round(gemini_audit.seconds * 1000),
-                        "attempt": 1, "target": None,
-                        "created_at": datetime.now(timezone.utc).isoformat(),
-                    })
-
-                # Selective verification: Claude Opus only for contradictions
-                # and visibly ambiguous rows. Never silently change quantities.
-                risky=[]
-                for row, position in zip(raw_rows,positions):
-                    uncertain = (row.get("_uncertain") or
-                                 (position.ilosc_wydana is None and position.ilosc_zuzyta is None))
-                    if uncertain or (auto_mode and position.match.quality == "bad"):
-                        position.needs_review = True
-                        position.form_note = (position.form_note or "") + " AUTO: niepewny odczyt — wymaga kontroli."
-                        risky.append((row,position))
-                if auto_mode and risky:
-                    from .auto_v3 import select_verify_targets
-                    verify = select_verify_targets(risky, len(files))
-                    if verify:
-                        started_verify=time.perf_counter()
-                        try:
-                            checked, _ = run_claude_host_bridge(
-                                document_id, files, dzial, timeout_seconds=145,
-                                verify_names=verify,
-                            )
-                            from .auto_v3 import reconcile_verify_rows
-                            confirmed, conflicts = reconcile_verify_rows(risky, checked)
-                            save_ai_event({
-                                "status": "completed", "stage": "auto_verify_opus",
-                                "provider": "Claude", "model": "opus-high",
-                                "label": "AUTO: druga kontrola trudnych pozycji",
-                                "reason": f"Zgodnych odczytów: {confirmed}; różnic: {conflicts}. "
-                                          "Niezgodności pozostają do ręcznej weryfikacji.",
-                                "step": None, "total_steps": None,
-                                "duration_ms": _elapsed_ms(started_verify), "attempt": 1,
-                                "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
-                            })
-                        except Exception:
-                            logger.warning("AUTO: kontrola Opus niedostępna, zostawiam ręczną weryfikację", exc_info=True)
-                            save_ai_event({
-                                "status": "rejected", "stage": "auto_verify_opus",
-                                "provider": "Claude", "model": "opus-high",
-                                "label": "AUTO: druga kontrola niedostępna",
-                                "reason": "Pozycje nadal wymagają ręcznej kontroli.",
-                                "step": None, "total_steps": None,
-                                "duration_ms": _elapsed_ms(started_verify), "attempt": 1,
-                                "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
-                            })
-                result = SimpleNamespace(
-                    numer_projektu=header["numer_projektu"],
-                    pracownik=header["pracownik"],
-                    numer_plomby=None if dzial == "hydraulika" else header["numer_plomby"],
-                    used_provider="Multiplekser AUTO (Claude Sonnet → JEV)" if auto_mode else "Claude Sonnet + JEV (test)",
-                    rejected_count=0, pozycje=positions,
-                )
-                absent=missing_header_fields(dzial,header)
-                save_ai_event({
-                    "status": "rejected" if absent else "completed",
-                    "stage": "header_ocr", "provider": "Claude", "model": "sonnet",
-                    "label": "Nagłówek wydawki",
-                    "reason": ("Nieodczytane pola: "+", ".join(absent)+". Sprawdź skan i uzupełnij ręcznie.")
-                              if absent else (
-                                  "Numer projektu i pracownik odczytane."
-                                  if dzial == "hydraulika" else
-                                  "Numer projektu, pracownik i numer plomby odczytane."
-                              ),
-                    "step": None, "total_steps": None,
-                    "duration_ms": 0, "attempt": 1, "target": None,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                })
-                if not auto_mode:
-                    classify_result = SimpleNamespace(confidence=1.0)
-                timings["timing_claude_ocr"] = int(ocr_seconds * 1000)
-                save_ai_event({
-                    "status": "completed", "stage": "auto_ocr" if auto_mode else "claude_test_ocr",
-                    "provider": "Claude", "model": "sonnet",
-                    "label": "Multiplekser AUTO" if auto_mode else "Claude + JEV (test)",
-                    "reason": f"Odczytano {len(positions)} pozycji na {len(files)} stronach.",
-                    "step": None, "total_steps": None, "duration_ms": int(ocr_seconds * 1000),
-                    "attempt": 1, "target": None,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                })
-        else:
+            result = SimpleNamespace(
+                numer_projektu=header["numer_projektu"],
+                pracownik=header["pracownik"],
+                numer_plomby=None if dzial == "hydraulika" else header["numer_plomby"],
+                used_provider="Multiplekser AUTO (Gemini niedostępny → Claude Sonnet + JEV)" if auto_mode else "Claude Sonnet + JEV (test)",
+                rejected_count=0, pozycje=positions,
+            )
+            absent=missing_header_fields(dzial,header)
+            save_ai_event({
+                "status": "rejected" if absent else "completed",
+                "stage": "header_ocr", "provider": "Claude", "model": "sonnet",
+                "label": "Nagłówek wydawki",
+                "reason": ("Nieodczytane pola: "+", ".join(absent)+". Sprawdź skan i uzupełnij ręcznie.")
+                          if absent else (
+                              "Numer projektu i pracownik odczytane."
+                              if dzial == "hydraulika" else
+                              "Numer projektu, pracownik i numer plomby odczytane."
+                          ),
+                "step": None, "total_steps": None,
+                "duration_ms": 0, "attempt": 1, "target": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            if not auto_mode:
+                classify_result = SimpleNamespace(confidence=1.0)
+            timings["timing_claude_ocr"] = int(ocr_seconds * 1000)
+            save_ai_event({
+                "status": "completed", "stage": "auto_ocr" if auto_mode else "claude_test_ocr",
+                "provider": "Claude", "model": "sonnet",
+                "label": "Multiplekser AUTO" if auto_mode else "Claude + JEV (test)",
+                "reason": f"Odczytano {len(positions)} pozycji na {len(files)} stronach.",
+                "step": None, "total_steps": None, "duration_ms": int(ocr_seconds * 1000),
+                "attempt": 1, "target": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+        elif not claude_ocr:
             classify_result, dzial, result, core_timings = _classify_and_recognize(
                 files, session, document, save_ai_event, cooldown_store,
             )
@@ -334,10 +256,6 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
             )
             for it in result.pozycje
         ]
-        if auto_used_gemini:
-            for item in items:
-                item["needs_review"]=True
-                item["form_note"]=(item.get("form_note") or "") + " AUTO: awaryjny darmowy Gemini — sprawdź przed eksportem."
         timings["timing_item_materialization"] = _elapsed_ms(stage_started)
 
         stage_started = time.perf_counter()

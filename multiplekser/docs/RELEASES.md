@@ -37,3 +37,16 @@ Publiczne `/api/version` zwraca bieżącą wersję z nagłówkiem `Cache-Control
 Frontend pobiera ją i aktualizuje pasek, ekran logowania oraz tytuł strony.
 Dokument HTML w nginx ma ustawiony zakaz cache, aby przeglądarka nie utrzymywała
 poprzedniej wersji panelu po deployu. Testy chronią tę funkcję przed regresją.
+
+## v1.0.45 — Gemini-first, Claude awaryjny (2026-10-13)
+
+- Domyślny tryb AUTO: najpierw **Gemini 3.5 Flash Lite z kluczem darmowym**, klasyfikacja działu (do 5 s) i pełny OCR (do 18 s). Wykorzystywany jest dotychczasowy prompt, parser, matcher i pola numeru projektu, pracownika i numeru plomby dla elektryki.
+- Jeśli Gemini jest niedostępny, przekroczy timeout albo zwróci bezużyteczny OCR, wtedy **Claude Sonnet jako zapasowe oczy**. Po nim nadal matcher i aktywny JEV. Jeśli oba nie działają — jawny błąd zamiast zgadywania.
+- Brak równoległego pełnego odczytu drugiego modelu i brak automatycznej kontroli Opus dla AUTO. Zachowano manualny tryb diagnostyczny Gemini/Claude.
+- Nie ma automatycznego przełączenia na klucz płatnego Gemini ani OpenAI. Claude Pro ma własne limity; w ustawieniach Anthropic należy kontrolować dodatkowe płatne kredyty.
+- Reguły bezpieczeństwa dotyczące hydrauliki pozostają aktywne: brak plomby, ZAS 127 wyłączone z TXT, wkręty muszą mieć zgodny rozmiar i RAL.
+- Klasyfikacja, nagłówek i OCR są mierzone w ai_trace / panelu; przy awarii Gemini wyraźnie widać, że uruchomiono Claude.
+- **Istotne ograniczenie jakości:** na jednym archiwalnym skanie 3 stron Gemini Flash Lite odczytał 45–46 pozycji, podczas gdy wynik Claude zawierał 50; część różnic to wykluczenia, ale były też pominięcia rzeczywistych materiałów. Dlatego wyniki nowej ścieżki wymagają kontroli skanu przed importem do Optimy. Nie wolno utożsamiać krótszego OCR z wyższą trafnością.
+- Gemini 3.5 Flash (bez Lite) w teście trzech stron nie zmieścił się w 18 s i zwrócił odrzuconą strukturę, więc nie został ustawiony jako główny model.
+
+Ponieważ nazwa silnika AUTO nie jest numerem wydania aplikacji, V3 AUTO zachowuje nazwę, a numer aplikacji rośnie do 1.0.45.

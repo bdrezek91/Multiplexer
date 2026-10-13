@@ -76,6 +76,7 @@ const documentDetail: DocumentDetail = {
 
 describe('DocumentDetailPage - przebieg AI', () => {
   beforeEach(() => {
+    vi.mocked(productsApi.listProducts).mockResolvedValue([])
     vi.mocked(documentsApi.getDocument).mockReset()
     vi.mocked(documentsApi.getDocument).mockResolvedValue({
       ...documentDetail,
@@ -134,6 +135,7 @@ describe('DocumentDetailPage - MatchKodCell', () => {
     vi.mocked(documentsApi.updateDocumentItem).mockReset()
     vi.mocked(documentsApi.addDocumentItem).mockReset()
     vi.mocked(productsApi.listProducts).mockReset()
+    vi.mocked(productsApi.listProducts).mockResolvedValue([])
     vi.mocked(documentsApi.getDocument).mockResolvedValue(documentDetail)
   })
 
@@ -176,6 +178,7 @@ describe('DocumentDetailPage - AddItemRow', () => {
     vi.mocked(documentsApi.getDocument).mockReset()
     vi.mocked(documentsApi.addDocumentItem).mockReset()
     vi.mocked(productsApi.listProducts).mockReset()
+    vi.mocked(productsApi.listProducts).mockResolvedValue([])
     vi.mocked(documentsApi.getDocument).mockResolvedValue(documentDetail)
   })
 

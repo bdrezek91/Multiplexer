@@ -244,7 +244,7 @@ export function DocumentsPage() {
             </Typography>
             <FormHelperText>
               {ocrEngine === 'auto_v3'
-                ? 'Claude czyta skan, JEV wybiera materiały, a trudne pozycje są kontrolowane automatycznie.'
+                ? 'Gemini czyta wydawkę jako pierwszy, a jeśli jest niedostępny — Claude przejmuje OCR. JEV dobiera kody Optimy.'
                 : 'Ręcznie wybrany silnik diagnostyczny.'}
             </FormHelperText>
             {isAdmin && (
@@ -300,7 +300,7 @@ export function DocumentsPage() {
 
         <Alert severity="info" sx={{ mt: 2 }}>
           {ocrEngine === 'auto_v3'
-            ? 'AUTO: nieczytelne ilości i konflikty modeli będą oznaczone do sprawdzenia. Zweryfikuj wydawkę przed importem do Optimy.'
+            ? 'AUTO: Gemini → zapasowy Claude → JEV. Nieczytelne pozycje sprawdź na skanie przed importem do Optimy.'
             : 'Tryb diagnostyczny: sprawdź ilości oraz kody z oryginalnym skanem przed importem do Optimy.'}
         </Alert>
         {files.length > 0 && (

@@ -189,3 +189,63 @@ def select_verify_targets(
         if len(chosen[page]) < max_rows and name not in chosen[page]:
             chosen[page].append(name)
     return {page: names for page, names in chosen.items() if names}
+
+
+def recognize_gemini_primary(files, session, magazyn, *, model="gemini-3.5-flash-lite"):
+    """Primary OCR for AUTO: Gemini free, using the proven full form pipelines.
+
+    Unlike the legacy model chain there are no paid Gemini/OpenAI steps,
+    retries, secondary full-document OCR or per-row consensus loops.
+    Returns compatible (classification, dzial, result, durations).
+    Any unavailable/invalid output is handled by Claude fallback in tasks.py.
+    """
+    import asyncio
+    import time
+
+    from app.core.config import settings
+    from app.modules.ocr.classify import classify_document
+    from app.modules.ocr.chain import OCRChainStep
+    from app.modules.ocr.image import classification_header_preview
+    from app.modules.ocr.pipeline_elektryka import recognize_document
+    from app.modules.ocr.pipeline_hydraulika import recognize_document_hydraulika
+    from app.modules.ocr.providers import GeminiProvider
+    from app.modules.matcher import rules_from_db
+    from app.modules.products import Catalog
+
+    key = settings.gemini_api_key_free
+    if not key:
+        raise RuntimeError("Gemini: darmowy klucz nie jest skonfigurowany")
+    if model not in {"gemini-3.5-flash-lite","gemini-3.5-flash"}:
+        raise ValueError("Niedozwolony model Gemini AUTO")
+    provider = GeminiProvider()
+    # Exactly ONE attempt per stage. When API is down, fail over promptly.
+    classify_chain = [OCRChainStep("Gemini AUTO (darmowy)", provider, model, key, 5)]
+    full_chain = [OCRChainStep("Gemini AUTO (darmowy)", provider, model, key, 18)]
+    start=time.perf_counter()
+    classification=asyncio.run(classify_document(
+        [(classification_header_preview(files[0][0]), "image/jpeg")],
+        chain=classify_chain,
+    ))
+    classify_seconds=round(time.perf_counter()-start,3)
+    if classification.fallback or classification.confidence<65:
+        raise AmbiguousDepartment(
+            "Gemini nie rozpoznał jednoznacznie działu — przełączam na Claude"
+        )
+    dzial=classification.dzial
+    start=time.perf_counter()
+    catalog=Catalog.from_db(session,dzial=dzial)
+    if dzial=="hydraulika":
+        result=asyncio.run(recognize_document_hydraulika(
+            files,catalog,magazyn=magazyn,chain=full_chain,
+        ))
+    else:
+        result=asyncio.run(recognize_document(
+            files,catalog,rules_from_db(session),magazyn=magazyn,chain=full_chain,
+        ))
+    ocr_seconds=round(time.perf_counter()-start,3)
+    if not result.pozycje:
+        raise ValueError("Gemini nie rozpoznał żadnej pozycji — przełączam na Claude")
+    return classification,dzial,result,{
+        "timing_classification":int(classify_seconds*1000),
+        "timing_ocr_matcher":int(ocr_seconds*1000),
+    }

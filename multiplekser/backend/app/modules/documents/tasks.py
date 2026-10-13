@@ -37,6 +37,7 @@ from .ocr_processing import (
     _verify_ambiguous_items as _verify_ambiguous_items_impl,
 )
 from .retention import prune_documents
+from .groq_shadow import run_groq_shadow_task
 from .task_telemetry import (
     _background_queue_wait_ms,
     _elapsed_ms,
@@ -244,6 +245,14 @@ def process_ocr_document(document_id: str) -> None:
                     })
                 except Exception:
                     session.rollback()
+            try:
+                dispatch_groq_shadow_task(document_id)
+            except Exception:
+                logger.warning(
+                    "Groq shadow - nie udalo sie zlecic zadania w tle",
+                    exc_info=True,
+                    extra={"document_id": document_id},
+                )
     finally:
         session.close()
 
@@ -266,3 +275,16 @@ def process_full_document_verification(document_id: str) -> None:
 
 def dispatch_full_document_verification_task(document_id: str) -> None:
     process_full_document_verification.delay(document_id)
+
+
+@celery_app.task(name="documents.groq_shadow")
+def process_groq_shadow(document_id: str) -> None:
+    session = SessionLocal()
+    try:
+        run_groq_shadow_task(document_id, session)
+    finally:
+        session.close()
+
+
+def dispatch_groq_shadow_task(document_id: str) -> None:
+    process_groq_shadow.delay(document_id)

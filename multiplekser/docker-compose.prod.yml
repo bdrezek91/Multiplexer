@@ -126,6 +126,9 @@ services:
       # wszystkie kroki Gemini zawioda. Brak klucza = ten krok jest po prostu pomijany.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
+      GROQ_SHADOW_ENABLED: ${GROQ_SHADOW_ENABLED:-true}
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       JEV_ENABLED: ${JEV_ENABLED:-false}
       JEV_MODE: ${JEV_MODE:-shadow}
@@ -163,6 +166,9 @@ services:
       GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
+      GROQ_SHADOW_ENABLED: ${GROQ_SHADOW_ENABLED:-true}
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       JEV_ENABLED: ${JEV_ENABLED:-false}
       JEV_MODE: ${JEV_MODE:-shadow}

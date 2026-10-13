@@ -39,6 +39,7 @@ celery_app.conf.update(
     task_routes={
         "documents.process_ocr": {"queue": "ocr"},
         "documents.full_document_verification": {"queue": "background"},
+        "documents.groq_shadow": {"queue": "background"},
         "decision.jev_shadow": {"queue": "background"},
     },
 

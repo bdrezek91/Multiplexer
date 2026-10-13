@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o"
 
+    # Groq/Qwen vision - niezalezny od Google shadow OCR. Brak klucza = caly shadow jest
+    # bezpiecznie pomijany. Shadow nigdy nie zmienia produkcyjnego wyniku dokumentu.
+    groq_api_key: str | None = None
+    groq_model: str = "qwen/qwen3.8-27b"
+    groq_shadow_enabled: bool = True
+
     # Skalowanie zdjec (nie-PDF) przed wyslaniem do AI - mniejszy upload = szybsza odpowiedz.
     # Podniesione z 1800/85 (port 1:1 z monolitu) - realny przypadek z produkcji (patrz
     # docs/RAPORT_OCR_NIEZAWODNOSC_1.md): drobne odreczne znaki (np. cyfra "1" tuz obok ptaszka

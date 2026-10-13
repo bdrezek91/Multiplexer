@@ -80,6 +80,73 @@ class GeminiProvider(OCRProvider):
         return "\n".join(p.get("text") or "" for p in parts)
 
 
+class GroqProvider(OCRProvider):
+    """Vision OCR przez Groq Chat Completions.
+
+    Qwen 3.8 27B przyjmuje maksymalnie 3 obrazy w jednym zapytaniu. Multiplekser przekazuje tu
+    obrazy juz przygotowane przez warstwe OCR, wiec provider nie wykonuje rasteryzacji.
+    JSON mode jest wlaczony, bo oba pipeline'y OCR oczekuja obiektu JSON.
+    """
+
+    async def recognize(
+        self, *, files: list[tuple[bytes, str]], model: str, api_key: str, prompt: str,
+        thinking_level: str = "low",
+    ) -> str:
+        if not files:
+            raise OCRProviderError("Brak obrazow do analizy Groq")
+        if len(files) > 3:
+            raise OCRProviderError(
+                f"Groq {model} obsluguje maksymalnie 3 obrazy na request (otrzymano {len(files)})"
+            )
+
+        content = [{"type": "text", "text": prompt}]
+        for file_bytes, mime in files:
+            if not str(mime).startswith("image/"):
+                raise OCRProviderError(f"Groq shadow oczekuje obrazu, otrzymano MIME {mime!r}")
+            b64 = base64.b64encode(file_bytes).decode("ascii")
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:{mime};base64,{b64}"},
+            })
+
+        body = {
+            "model": model,
+            "messages": [{"role": "user", "content": content}],
+            "temperature": 0,
+            "max_completion_tokens": 8192,
+            "response_format": {"type": "json_object"},
+            "stream": False,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
+                resp = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers=headers,
+                    json=body,
+                )
+        except httpx.TimeoutException as exc:
+            raise OCRProviderError(
+                f"Timeout po {settings.ocr_timeout_seconds} s bez odpowiedzi Groq"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise OCRProviderError(f"Blad polaczenia Groq: {exc}") from exc
+
+        if resp.status_code >= 400:
+            raise OCRProviderError(
+                f"Groq API {resp.status_code}: {resp.text[:300]}",
+                status_code=resp.status_code,
+            )
+
+        data = resp.json()
+        choices = data.get("choices") or []
+        message = (choices[0].get("message") or {}) if choices else {}
+        return str(message.get("content") or "")
+
+
 class OpenAIProvider(OCRProvider):
     """Ostatni krok w default_ocr_chain() (patrz chain.py) - uzywany WYLACZNIE gdy wszystkie
     kroki Gemini zawioda. Responses API (nie starsze Chat Completions) - obsluguje natywnie

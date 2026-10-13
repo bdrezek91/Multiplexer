@@ -23,7 +23,7 @@ class FakeClient:
 def sample_rows(dzial="hydraulika"):
     words = ("Kolanko fi 20", "Rura 20", "Syfon") if dzial == "hydraulika" else ("Przewód", "Gniazdo", "Rozdzielnia")
     return {"dzial": dzial, "numer_projektu":"7/10/26", "pracownik":"Test",
-            "pozycje":[{"nazwa": name,"ilosc_wydana":1,"ilosc_zuzyta":1,
+            "pozycje":[{"nazwa": name,"jm":"szt","ilosc_wydana":1,"ilosc_zuzyta":1,
                         "ilosc_wydana_raw":"1","ilosc_zuzyta_raw":"1",
                         "ma_oznaczenie":True,"strona":1} for name in words]}
 
@@ -79,6 +79,22 @@ def test_v4_flash38_never_requests_unsupported_minimal():
     with pytest.raises(ValueError):
         asyncio.run(auto_v4.shadow_one_pass([(b"image","image/jpeg")],model="gemini-3.8-flash",
                                                   thinking="minimal", api_key="UNIT-TEST"))
+
+
+def test_v4_25_lite_disables_thinking_with_budget_zero(monkeypatch):
+    import json
+    result, captured = run(
+        {"candidates":[{"content":{"parts":[{"text":json.dumps(sample_rows())}]}}]},
+        monkeypatch, model="gemini-2.5-flash-lite", thinking="off")
+    assert len(result.rows)==3
+    assert captured[0][1]["generationConfig"]["thinkingConfig"] == {"thinkingBudget":0}
+
+
+def test_v4_25_lite_rejects_3x_thinking_levels():
+    import pytest
+    with pytest.raises(ValueError):
+        asyncio.run(auto_v4.shadow_one_pass([(b"image","image/jpeg")],
+            model="gemini-2.5-flash-lite", thinking="minimal", api_key="UNIT-TEST"))
 
 
 def test_v4_never_allows_unknown_models():

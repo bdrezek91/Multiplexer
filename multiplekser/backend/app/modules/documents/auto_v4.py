@@ -15,6 +15,7 @@ import httpx
 from app.core.config import settings
 from app.modules.ocr.parsing import extract_json, validate_item, is_actionable_item
 from .auto_v3 import classify_auto_dzial, AmbiguousDepartment
+from .auto_v4_quality import evaluate_rows
 
 # Deliberately preserve the hard-earned production OCR safety rules.
 V4_PROMPT = """Jesteś wyłącznie przemysłowym OCR wydawki magazynowej Elektryka/Hydraulika.
@@ -32,7 +33,12 @@ Nie myl 1 z 4 lub 7, 7 z poprzeczką z 2, 9 z 7.
 Skreślona wartość nie obowiązuje: wybierz tylko ręcznie poprawioną obok.
 Jeśli kolumna jest nieczytelna, oddaj null, nie zgaduj wartości.
 Zachowaj nazwy dosłownie, nie rozwijaj nieczytelnych skrótów i nie mieszaj podobnych
-wierszy, wymiarów ani kolorów. Nie dodawaj pozycji na podstawie samej etykiety INNE,
+wierszy, wymiarów ani kolorów. W grupach sąsiednich nazw różniących się tylko
+liczbą, przekrojem lub kolorem sprawdź fizyczne linie tabeli, nie przesuwaj ilości.
+Odczytaj dosłownie jednostkę miary (jm) z TEGO SAMEGO wiersza, jeśli jest widoczna.
+W polach *_raw oddaj literalny odręczny zapis osobno dla każdej kolumny;
+nie dostosowuj zapisu surowego do odgadniętej wartości liczbowej.
+Nie dodawaj pozycji na podstawie samej etykiety INNE,
 nawet gdy blisko niej jest liczba. W niepewnych wierszach ustaw ma_oznaczenie=true,
 ale nie wymyślaj ilości. Numer strony zachowaj do wykrywania pominięć.
 W szczególności w Hydraulice nie uznawaj śruby 8 mm i zaślepki 127 za automatyczne
@@ -49,13 +55,14 @@ V4_SCHEMA: dict[str, Any] = {
         "pracownik": _NULL_STRING,
         "pozycje": {"type": "array", "items": {"type": "object", "properties": {
             "nazwa": {"type": "string"},
+            "jm": _NULL_STRING,
             "ilosc_wydana": _NULL_NUMBER,
             "ilosc_zuzyta": _NULL_NUMBER,
             "ilosc_wydana_raw": _NULL_STRING,
             "ilosc_zuzyta_raw": _NULL_STRING,
             "ma_oznaczenie": {"type": "boolean"},
             "strona": {"type": "integer"},
-        }, "required": ["nazwa", "ilosc_wydana", "ilosc_zuzyta", "ilosc_wydana_raw", "ilosc_zuzyta_raw", "ma_oznaczenie", "strona"]}},
+        }, "required": ["nazwa", "jm", "ilosc_wydana", "ilosc_zuzyta", "ilosc_wydana_raw", "ilosc_zuzyta_raw", "ma_oznaczenie", "strona"]}},
     }, "required": ["dzial", "numer_projektu", "pracownik", "pozycje"],
 }
 
@@ -69,6 +76,7 @@ class V4ShadowResult:
     source_count: int
     invalid_count: int
     usage: dict[str, Any]
+    review_flags: list[str]
 
 
 async def shadow_one_pass(
@@ -79,9 +87,11 @@ async def shadow_one_pass(
     """Call Google once; NEVER write the results to production documents."""
     if not files or len(files) > 8:
         raise ValueError("V4 only supports 1-8 pages")
-    if model not in {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash"}:
+    if model not in {"gemini-2.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash", "gemini-3.8-flash"}:
         raise ValueError("V4 model not allowlisted")
-    if thinking not in ({"minimal", "low"} if model != "gemini-3.8-flash" else {"low"}):
+    valid_thinking = ({"off"} if model == "gemini-2.5-flash-lite" else
+                      {"low"} if model == "gemini-3.8-flash" else {"minimal", "low"})
+    if thinking not in valid_thinking:
         raise ValueError("Invalid thinking level")
     key = api_key or settings.gemini_api_key_free
     if not key:
@@ -92,7 +102,8 @@ async def shadow_one_pass(
     body = {
         "contents": [{"parts": parts}],
         "generationConfig": {
-            "thinkingConfig": {"thinkingLevel": thinking},
+            "thinkingConfig": ({"thinkingBudget": 0} if model == "gemini-2.5-flash-lite"
+                               else {"thinkingLevel": thinking}),
             "responseMimeType": "application/json",
             "responseJsonSchema": V4_SCHEMA,
             "temperature": 1,
@@ -119,8 +130,16 @@ async def shadow_one_pass(
     if not isinstance(parsed, dict) or not isinstance(parsed.get("pozycje"), list):
         raise ValueError("Gemini V4 returned invalid JSON data")
     raw_rows = parsed["pozycje"]
-    valid_rows = [r for r in raw_rows if validate_item(r) and is_actionable_item(r)]
+    dzial_hint = parsed.get("dzial")
+    if dzial_hint not in {"elektryka", "hydraulika"}:
+        raise AmbiguousDepartment("V4 department is missing")
+    checked_rows, review_flags = evaluate_rows(raw_rows, dzial_hint, len(files))
+    valid_rows = [r for r in checked_rows if validate_item(r) and (
+        is_actionable_item(r) or bool(r.get("_v4_review_flags"))
+    )]
     invalid = len(raw_rows) - len(valid_rows)
+    if invalid:
+        review_flags.append(f"incomplete_or_inactive_rows:{invalid}")
     # IMPORTANT: the model's own category is NOT independent evidence.
     # Derive department purely from recognized material names, and stop if unknown.
     local_evidence = [{"nazwa": r["nazwa"]} for r in valid_rows]
@@ -131,4 +150,5 @@ async def shadow_one_pass(
                           seconds=round(time.perf_counter()-start, 3),
                           dzial=dzial, rows=valid_rows,
                           source_count=len(raw_rows), invalid_count=invalid,
-                          usage=payload.get("usageMetadata") or {})
+                          usage=payload.get("usageMetadata") or {},
+                          review_flags=review_flags)

@@ -59,11 +59,22 @@ def main():
     started=time.perf_counter()
     try:
         result=asyncio.run(shadow_one_pass(files,model=args.model,thinking=args.thinking,timeout_seconds=args.timeout))
-        evaluation=compare(refs,result.rows)
+        # The DB does not record source page per OCR item. A one-page read
+        # cannot be compared against ALL rows of the three-page document.
+        if args.page:
+            evaluation={"comparison_scope":"single_page_unscored",
+                        "reason":"Reference items have no verified source-page mapping",
+                        "reference_total_all_pages":len(refs),
+                        "v4_page_rows":len(result.rows)}
+        else:
+            evaluation=compare(refs,result.rows)
+            evaluation["comparison_scope"]="full_document_vs_unverified_production"
         evaluation.update({'model':args.model,'thinking':args.thinking,'document':args.document,
                            'expected_dzial':doc['dzial'],'classified_dzial':result.dzial,
                            'ocr_sec':result.seconds,'prep_sec':round(prep_secs,3),
                            'invalid_items':result.invalid_count,
+                           'review_flag_count':len(result.review_flags),
+                           'review_flags':result.review_flags[:25],
                            'input_tokens':result.usage.get('promptTokenCount'),
                            'output_tokens':result.usage.get('candidatesTokenCount'),
                            'thinking_tokens':result.usage.get('thoughtsTokenCount')})

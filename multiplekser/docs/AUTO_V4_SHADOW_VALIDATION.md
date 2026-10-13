@@ -50,3 +50,13 @@ docker compose -f docker-compose.prod.yml run --rm --no-deps \
 ```
 
 Only the authorized VPS owner can inspect the saved raw OCR results (`0600`); test jobs must not alter existing documents or statuses.
+
+## Follow-up V4.1 — strict handwritten amount controls (13.10.2026)
+
+- New `auto_v4_quality.py` reuses production hydraulics `_decode_literal_qty` to inspect the **literal** issue/consumption marks independently of numeric fields. A conflict (`V` vs predicted `1`, dash vs `1`, `1` vs `4`) is NOT silently corrected: set the candidate quantity to `null`, add a row-level review flag. Retain uncertain rows for review.
+- Reject invalid source-page numbers; detect malformed row output and preserve diagnostic counts. OCR remains experimental; no V4 item can replace existing item records automatically.
+- Unit-of-measure (`jm`) is now a separate schema field, never inferred from the other columns.
+- `benchmark_auto_v4.py --page N` now reports `single_page_unscored`, because production rows have no verified source-page mapping. Previous page-vs-whole-document mismatch counts were NOT valid page recall statistics. Parallel benchmarks with failed pages likewise report `incomplete_unscored` rather than misleading 49-row missing counts.
+- `gemini-2.5-flash-lite` with `thinkingBudget=0` was checked as an alternative; its API returned **HTTP 404 NOT_FOUND**, explicitly stating it is unavailable to new users. The model is NOT a candidate for the production provider chain on this project's key.
+- Isolated tests run with `--noconftest`, `--network none`: **22 passed** after these updates, with no production database or Redis dependency. An earlier no-network run without `--noconftest` failed because the existing repository's autouse fixtures contact Redis at localhost; those errors were environmental, not OCR regressions.
+- Release gate unchanged: full-document independently human-verified GOLD, exact names + both quantities + units, correct matcher codes and JEV, with measured end-to-end latency distribution. Experimental code and production AUTO V3 remain isolated.

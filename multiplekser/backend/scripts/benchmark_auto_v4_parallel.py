@@ -44,9 +44,16 @@ async def main():
         for row in result.rows:
             row['strona']=i+1
             combined.append(row)
-    metrics=compare(ref,combined)
+    complete=len(combined)>0 and all('error' not in v for v in page_info)
+    # Never score a PARTIAL OCR against a FULL reference as if it were a miss.
+    metrics=compare(ref,combined) if complete else {
+        'comparison_scope':'incomplete_unscored',
+        'reason':'At least one page did not return a usable OCR result',
+        'reference_total_all_pages':len(ref),
+        'returned_partial_rows':len(combined)}
     metrics.update({'ocr_wall_sec':round(ocr,3),'prep_sec':round(prep,3),
-                    'total_without_jev':round(ocr+prep,3),'all_pages_ok':len(combined)>0 and all('error' not in v for v in page_info),
+                    'total_without_jev':round(ocr+prep,3),'all_pages_ok':complete,
+                    'review_flags':sum(len(p.review_flags) for p in outcomes if not isinstance(p,Exception)),
                     'pages':page_info})
     print('V4_PARALLEL_RESULT',json.dumps(metrics,ensure_ascii=False),flush=True)
 

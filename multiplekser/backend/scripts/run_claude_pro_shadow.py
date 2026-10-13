@@ -4,6 +4,7 @@
 Uses the UNMODIFIED official Claude Code CLI authenticated by the owner.
 No Anthropic API key, no production document mutation, no daemon/automatic dispatch.
 """
+import argparse
 import json
 import os
 from pathlib import Path
@@ -18,8 +19,13 @@ RESULT = ROOT / "result.json"
 REPORT = ROOT / "report.json"
 
 
-def main() -> int:
-    if not IMAGE.is_file() or not PROMPT.is_file():
+def main(page: int = 1) -> int:
+    if page not in (1, 2, 3):
+        print("Dopuszczalne tylko trzy przygotowane strony: 1, 2, 3.")
+        return 2
+    image = ROOT / f"page{page}.jpg" if page != 1 else IMAGE
+    report_file = ROOT / f"report_page{page}.json" if page != 1 else REPORT
+    if not image.is_file() or not PROMPT.is_file():
         print("Brak testowej strony JPG lub promptu w prywatnym katalogu.")
         return 2
     os.umask(0o077)
@@ -31,7 +37,7 @@ def main() -> int:
         "--disable-slash-commands", "--tools", "Read",
         "--allowedTools", "Read", "--model", "sonnet", "--effort", "low",
         "--max-turns", "3", "--no-session-persistence",
-        "--output-format", "json", PROMPT.read_text(encoding="utf-8"),
+        "--output-format", "json", PROMPT.read_text(encoding="utf-8").replace(str(IMAGE), str(image)),
     ]
     try:
         run = subprocess.run(
@@ -79,19 +85,23 @@ def main() -> int:
         "status": "shadow_only",
         "model": "claude-sonnet",
         "pages": 1,
+        "page_index": page,
         "positions": len(rows),
         "ocr": parsed,
         "num_turns": envelope.get("num_turns"),
         "usage": envelope.get("usage"),
     }
-    REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    REPORT.chmod(0o600)
-    print("CLAUDE_SHADOW_SUCCESS pages=1 positions=", len(rows))
+    report_file.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    report_file.chmod(0o600)
+    print("CLAUDE_SHADOW_SUCCESS page=", page, "positions=", len(rows))
     for item in rows[:12]:
         print("ROW", str(item.get("nazwa", ""))[:55], item.get("ilosc_wydana"), item.get("ilosc_zuzyta"))
-    print("Report saved in", REPORT, "(permissions 600)")
+    print("Report saved in", report_file, "(permissions 600)")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    parser = argparse.ArgumentParser(description="Claude Pro: reczny benchmark strony 1-3")
+    parser.add_argument("--page", type=int, default=1, choices=(1, 2, 3))
+    args = parser.parse_args()
+    sys.exit(main(args.page))

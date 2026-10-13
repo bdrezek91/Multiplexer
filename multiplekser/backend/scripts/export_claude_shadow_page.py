@@ -15,10 +15,10 @@ try:
     if not doc:
         raise SystemExit("NO_DOCUMENT")
     pages = _download_and_prepare(get_storage, doc.file_key, doc.mime)
-    image, mime = pages[0]
-    path = Path("/tmp/claude_ocr_shadow_page1.jpg")
-    path.write_bytes(image)
-    path.chmod(0o600)
-    print("EXPORTED", len(image), mime, "PAGES", len(pages), "REF_ITEMS", len(doc.items))
+    for index, (image, mime) in enumerate(pages, start=1):
+        path = Path(f"/tmp/claude_ocr_shadow_page{index}.jpg")
+        path.write_bytes(image)
+        path.chmod(0o600)
+        print("EXPORTED_PAGE", index, len(image), mime, "PAGES", len(pages), "REF_ITEMS", len(doc.items))
 finally:
     db.close()

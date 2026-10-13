@@ -7,6 +7,8 @@ udokumentowana w app/modules/users/deps.py:check_magazyn_access. CRUD /products 
 app/modules/products/router.py (odczyt kazdy zalogowany, zapis tylko admin).
 """
 import logging
+import os
+from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Request
@@ -33,7 +35,24 @@ from app.modules.users.router import users_router
 configure_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Multiplekser v1.0.43 API", version="1.0.43")
+
+def read_app_version() -> str:
+    """Single source of truth: root VERSION, mounted readonly into production API."""
+    source = Path(os.environ.get(
+        "MULTIPLEKSER_VERSION_FILE",
+        str(Path(__file__).resolve().parents[2] / "VERSION"),
+    ))
+    try:
+        value = source.read_text(encoding="utf-8").strip()
+    except OSError:
+        logger.warning("App VERSION file unavailable at %s", source)
+        return "unknown"
+    if not value or len(value) > 32:
+        return "unknown"
+    return value
+
+
+app = FastAPI(title="Multiplekser API", version=read_app_version())
 app.state.limiter = limiter
 app.include_router(auth_router)
 app.include_router(users_router)
@@ -94,6 +113,15 @@ class MatchResponse(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok", "stage": 7}
+
+
+@app.get("/version")
+def get_version():
+    """Public, cache-free endpoint used by both navbar and login page."""
+    return JSONResponse(
+        {"version": read_app_version()},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/match", response_model=MatchResponse)

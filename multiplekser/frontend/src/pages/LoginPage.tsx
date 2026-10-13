@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { ApiError } from '../api/client'
 import { DampolLogo } from '../components/DampolLogo'
+import { AppVersion } from '../components/AppVersion'
 import loginBg from '../assets/login-bg.jpeg'
 
 export function LoginPage() {
@@ -50,7 +51,7 @@ export function LoginPage() {
         <Box display="flex" flexDirection="column" alignItems="center" mb={2} textAlign="center">
           <DampolLogo height={48} />
           <Typography variant="h5" sx={{ mt: 2 }}>
-            Multiplekser v1.0.43
+            <AppVersion />
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             Zaloguj się, aby kontynuować

@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { DampolLogo } from './DampolLogo'
+import { AppVersion } from './AppVersion'
 
 const navButtonSx = {
   color: 'grey.100',
@@ -28,7 +29,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <DampolLogo />
           </Box>
           <Typography variant="body2" component="div" sx={{ color: 'grey.500', flexGrow: 0, mr: 2 }}>
-            Multiplekser v1.0.43
+            <AppVersion />
           </Typography>
           <Button sx={navButtonSx} component={RouterLink} to="/documents">
             Dokumenty

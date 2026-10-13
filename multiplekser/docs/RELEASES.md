@@ -27,3 +27,13 @@ V4 Shadow (tylko testy, nie zapisuje dokumentów, nie wpływa na TXT):
 - nie przypisuje jeszcze nazw produktów, ponieważ istnieją różne odmiany drukowanego formularza.
 
 Regresje: testy selekcji Opus, zasad generatora, OCR i JEV. Wersja V4 zostanie produkcyjna dopiero po zestawieniu z co najmniej 50 wydawkami GOLD i sprawdzeniu, że żadne dane z Gemini nie zginęły.
+
+### Poprawka wyświetlania wersji po v1.0.44
+
+Panel, ekran logowania oraz API nie mogą mieć wpisanej na sztywno poprzedniej wersji.
+Główny plik `VERSION` jest montowany w produkcyjnym backendzie pod `/app/VERSION`
+(plik musi być czytelny dla użytkownika `app`, zalecany tryb `0644`).
+Publiczne `/api/version` zwraca bieżącą wersję z nagłówkiem `Cache-Control: no-store`.
+Frontend pobiera ją i aktualizuje pasek, ekran logowania oraz tytuł strony.
+Dokument HTML w nginx ma ustawiony zakaz cache, aby przeglądarka nie utrzymywała
+poprzedniej wersji panelu po deployu. Testy chronią tę funkcję przed regresją.

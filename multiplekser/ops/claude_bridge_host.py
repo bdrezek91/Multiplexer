@@ -30,6 +30,18 @@ LIMIT_COOLDOWN_SECONDS=600
 logging.basicConfig(level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
 log=logging.getLogger("multiplekser-claude-bridge")
 
+HEADER_PROMPT=(
+    " Oprócz pozycji tabeli odczytaj wartości trzech osobnych pól NAGŁÓWKA wydawki, "
+    "wyłącznie jeśli wyraźnie widoczne na obrazie: "
+    "Numer Projektu, Pracownik (osoba wykonująca wydawkę), Nr Plomby-rozdzielnia. "
+    "Dopisz do JSON pole \"h\":{\"numer_projektu\":\"35/06/26\","
+    "\"pracownik\":\"Jan Kowalski\",\"numer_plomby\":null}. "
+    "Nie interpretuj materiałów jako nagłówka. Nie odgaduj wartości. "
+    "Nie przepisuj samych drukowanych etykiet ani danych z innych wierszy. "
+    "Jeśli pole jest puste, niewidoczne albo nieczytelne, wpisz null. "
+    "Dla pól nagłówka przepisz tekst dosłownie, bez zmiany daty/formatu projektu. "
+)
+
 BASE_PROMPT=(
     "OCR tabeli z wydawki. Tylko wiersze z wpisem ręcznym w kolumnie wydana lub zużyta. "
     "Dwie kolumny niezależne, nie zgaduj, ptaszek nie jest cyfrą. "
@@ -54,6 +66,12 @@ def read_page(job:Path,page:int,dzial:str, *, verify_names: list[str] | None = N
     if raw[:2] != bytes((255, 216)) or len(raw)>8_000_000:
         raise ValueError(f"Strona {page} nie jest prawidłowym JPG")
     prompt=BASE_PROMPT
+    # Header fields were supported in Gemini. Always retain those existing
+    # capabilities for both Claude AUTO and manually selected Claude.
+    # Multiple photos/PDF pages may start mid-document. Preserve Gemini's
+    # document-wide header OCR, including project/worker on subsequent pages.
+    if verify_names is None:
+        prompt += HEADER_PROMPT
     if dzial=="auto":
         prompt += (
             ' Odczytaj także drukowany dział z nagłówka: Elektryka/Hydraulika. '
@@ -131,7 +149,17 @@ def read_page(job:Path,page:int,dzial:str, *, verify_names: list[str] | None = N
     hint=data.get("d")
     if hint not in {"elektryka","hydraulika"}:
         hint=None
-    return {"index":page,"rows":rows,"dzial_hint":hint,
+    raw_header=data.get("h")
+    header={}
+    if verify_names is None and isinstance(raw_header,dict):
+        for key in ("numer_projektu","pracownik","numer_plomby"):
+            value=raw_header.get(key)
+            if isinstance(value,str):
+                value=value.strip()
+                header[key]=value[:180] if value else None
+            else:
+                header[key]=None
+    return {"index":page,"rows":rows,"dzial_hint":hint,"header":header,
             "seconds":round(time.monotonic()-started,2),
             "tokens":usage_from_event(final_event or {})}
 

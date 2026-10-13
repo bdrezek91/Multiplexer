@@ -1015,6 +1015,17 @@ export function DocumentDetailPage() {
               </Alert>
             )}
 
+            {(document.source_type === 'auto_v3' || document.source_type.startsWith('claude_jev_test_')) &&
+              document.status === 'done' && (!document.numer_projektu || !document.pracownik) && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  Nie udało się jednoznacznie odczytać z nagłówka:
+                  {!document.numer_projektu ? ' numeru projektu' : ''}
+                  {!document.numer_projektu && !document.pracownik ? ' i' : ''}
+                  {!document.pracownik ? ' pracownika wykonującego wydawkę' : ''}.
+                  Sprawdź skan i uzupełnij informacje w karcie dokumentu.
+                </Alert>
+              )}
+
             <PerformancePanel events={document.ai_trace} />
             <AITracePanel events={document.ai_trace} />
             <JevShadowPanel summary={jevShadow} />

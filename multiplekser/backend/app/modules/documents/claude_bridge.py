@@ -73,9 +73,57 @@ def validate_ocr(result: dict, page_count: int) -> list[dict]:
     return all_rows
 
 
+def extract_document_header(result: dict) -> dict[str,str | None]:
+    """Preserve Gemini's metadata contract across all PDF/photo pages.
+
+    Returns only clearly OCR-read values; conflicting page reads become None.
+    127/07 is a legitimate literal project reference: don't fabricate a year.
+    """
+    from app.modules.ocr.pipeline_elektryka import normalize_project_number, _clean_header_text
+
+    pages=result.get("pages",[])
+    headers=[page["header"] for page in pages if isinstance(page,dict)
+             and isinstance(page.get("header"),dict)]
+    blank={"null","none","brak","n/a","nieczytelne","nie dotyczy","-", "?"}
+
+    def clean_field(field: str, limit: int=120) -> str | None:
+        values=[]
+        for header in headers:
+            raw=header.get(field)
+            if not isinstance(raw,str):
+                continue
+            value=_clean_header_text(raw)
+            if not value or len(value)>limit or value.casefold() in blank:
+                continue
+            if field=="numer_projektu":
+                compact=value.replace(" ","")
+                # Real sheets can have abbreviated project references such
+                # as 127/07, or normal 625/05/26 and 625/05/2026.
+                if not re.fullmatch(r"[0-9]{1,6}(?:[/_.-][0-9]{1,4}){0,2}",compact):
+                    continue
+                try:
+                    value=normalize_project_number(compact)
+                except (ValueError,TypeError):
+                    continue
+            if value not in values:
+                values.append(value)
+        # Do not guess on different headers/contradictory project numbers.
+        if len(values)==1:
+            return values[0]
+        return None
+
+    return {
+        "numer_projektu":clean_field("numer_projektu"),
+        "pracownik":clean_field("pracownik"),
+        "numer_plomby":clean_field("numer_plomby"),
+    }
+
+
 def run_claude_host_bridge(document_id: str, files: list[tuple[bytes,str]], dzial: str,
                            *, timeout_seconds: float=TIMEOUT_SECONDS,
-                           verify_names: dict[int,list[str]] | None=None) -> tuple[list[dict],float]:
+                           verify_names: dict[int,list[str]] | None=None,
+                           include_header: bool=False):
+
     """Wait for the owner-authenticated host daemon; no Gemini fallback in test mode."""
     if dzial not in {"auto","hydraulika","elektryka"}:
         raise ClaudeBridgeError("Nieznany dział Claude")
@@ -113,7 +161,11 @@ def run_claude_host_bridge(document_id: str, files: list[tuple[bytes,str]], dzia
                     raise ClaudeBridgeError("Niepoprawna odpowiedź mostu Claude") from exc
                 if result.get("error"):
                     raise ClaudeBridgeError("Claude: "+str(result["error"])[:240])
-                return validate_ocr(result,len(files)),round(time.monotonic()-start,2)
+                rows=validate_ocr(result,len(files))
+                elapsed=round(time.monotonic()-start,2)
+                if include_header:
+                    return rows,elapsed,extract_document_header(result)
+                return rows,elapsed
             time.sleep(0.2)
         raise ClaudeBridgeError("Claude nie odpowiedział w limicie czasu (175 s). Sprawdź sesję Pro/limity.")
     finally:

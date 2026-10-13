@@ -121,8 +121,8 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
 
             dzial = "auto" if auto_mode else document.source_type.removeprefix("claude_jev_test_")
             try:
-                raw_rows, ocr_seconds = run_claude_host_bridge(
-                    document_id, files, dzial,
+                raw_rows, ocr_seconds, header = run_claude_host_bridge(
+                    document_id, files, dzial, include_header=True,
                 )
             except Exception as claude_error:
                 # AUTO can use free Gemini only when Claude Pro reports exhausted
@@ -219,10 +219,27 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                                 "target": None, "created_at": datetime.now(timezone.utc).isoformat(),
                             })
                 result = SimpleNamespace(
-                    numer_projektu=None, pracownik=None, numer_plomby=None,
+                    numer_projektu=header["numer_projektu"],
+                    pracownik=header["pracownik"],
+                    numer_plomby=header["numer_plomby"],
                     used_provider="Multiplekser AUTO (Claude Sonnet → JEV)" if auto_mode else "Claude Sonnet + JEV (test)",
                     rejected_count=0, pozycje=positions,
                 )
+                absent=[label for key,label in (
+                    ("numer_projektu","numer projektu"),
+                    ("pracownik","pracownik"),
+                    ("numer_plomby","numer plomby"),
+                ) if result.__dict__[key] is None]
+                save_ai_event({
+                    "status": "rejected" if absent else "completed",
+                    "stage": "header_ocr", "provider": "Claude", "model": "sonnet",
+                    "label": "Nagłówek wydawki",
+                    "reason": ("Nieodczytane pola: "+", ".join(absent)+". Sprawdź skan i uzupełnij ręcznie.")
+                              if absent else "Numer projektu, pracownik i numer plomby odczytane.",
+                    "step": None, "total_steps": None,
+                    "duration_ms": 0, "attempt": 1, "target": None,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
                 if not auto_mode:
                     classify_result = SimpleNamespace(confidence=1.0)
                 timings["timing_claude_ocr"] = int(ocr_seconds * 1000)

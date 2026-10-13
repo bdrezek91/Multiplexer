@@ -141,7 +141,13 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         try:
             from app.modules.decision.active import apply_jev_active
             catalog_for_jev = Catalog.from_db(session, dzial=dzial)
-            rules_for_jev = [] if dzial == "hydraulika" else rules_from_db(session)
+            # Hydraulika ma swoje stale twarde reguly (zaslepki M10, wykluczenie czerwonej).
+            # Nie wysylamy elektrycznych special rules do hydrauliki.
+            if dzial == "hydraulika":
+                from app.modules.matcher.core_hydraulika import DEFAULT_SPECIAL_RULES_HYDRAULIKA
+                rules_for_jev = DEFAULT_SPECIAL_RULES_HYDRAULIKA
+            else:
+                rules_for_jev = rules_from_db(session)
             active_jev_rows = asyncio.run(apply_jev_active(
                 items=items,
                 catalog=catalog_for_jev,

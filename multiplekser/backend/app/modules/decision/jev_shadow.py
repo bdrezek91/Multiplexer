@@ -93,7 +93,19 @@ def _query_features(query_name: str, dzial: str) -> dict:
     Tylko Elektryka ma dzis pelny zestaw pol (phase/amp/dim/...) - Hydraulika dostaje core."""
     if dzial == "hydraulika":
         parsed = core_and_attrs_hydraulika(query_name)
-        return {"raw": query_name, "core": parsed.core}
+        return {
+            "raw": query_name,
+            "core": parsed.core,
+            "kolor": parsed.kolor,
+            "material": parsed.material,
+            "zlacze": parsed.zlacze,
+            "srednica_mm": parsed.srednica_mm,
+            "kat_st": parsed.kat_st,
+            "gwint_cal": parsed.gwint_cal,
+            "dlugosc_cm": parsed.dlugosc_cm,
+            "pojemnosc_l": parsed.pojemnosc_l,
+            "wymiar_mm": parsed.wymiar_mm,
+        }
 
     parsed = core_and_attrs(query_name)
     return {
@@ -426,7 +438,11 @@ async def evaluate_shadow(
             return None
 
         query_features = _query_features(query_name, dzial)
-        soft_rules = _soft_matcher_rules(query_features) if dzial != "hydraulika" else []
+        soft_rules = _soft_matcher_rules(query_features) if dzial != "hydraulika" else [
+            "Hydraulika: jawna srednica, kat 45/90, gwint, dlugosc i wymiar musza byc zgodne z produktem.",
+            "Nie zamieniaj trójnika 45 st na 90 st ani fi 40 na fi 50 dla podobnej nazwy.",
+            "Zweryfikowany alias i wariant magazynowy maja pierwszenstwo przed podobienstwem tekstowym.",
+        ]
 
         key_to_code = {
             candidate.key: candidate.kod

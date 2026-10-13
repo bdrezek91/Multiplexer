@@ -1,6 +1,6 @@
-"""Aktywny tryb Jev dla Elektryki.
+"""Aktywny tryb Jev dla Elektryki i Hydrauliki.
 
-Gemini wykonuje OCR, obecny matcher buduje bazowe dopasowanie, a Jev moze wybrac finalny kod.
+Glowny OCR wykonuje odczyt, obecny matcher buduje bazowe dopasowanie, a Jev moze wybrac finalny kod.
 Reguly specjalne maja zawsze pierwszenstwo. Blad TypeSafe zostawia stary matcher. OTHER zostawia dobry/warn matcher, ale usuwa slabe dopasowanie i wymusza reczna weryfikacje.
 """
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Callable, Optional
 from app.modules.matcher.result import MatchResult, QUALITY_BAD, QUALITY_OK
 from app.modules.matcher.shared import apply_warehouse_variant, magazyn_key, resolve_by_kod
 from app.modules.matcher.special_rules import SpecialRule, evaluate_special_rules, find_matching_special_rule
-from app.modules.parser import core_and_attrs
+from app.modules.parser import core_and_attrs, core_and_attrs_hydraulika
 from app.modules.products import Catalog
 
 from .jev_client import jev_enabled, jev_mode
@@ -49,6 +49,43 @@ def _candidate_respects_poles(query_name: str, candidate) -> bool:
     return cand_poles == _effective_poles_from_query(query_name)
 
 
+def _candidate_respects_hydraulika_features(query_name: str, candidate) -> bool:
+    """Nie dopuszcza zamiany srednicy/gwintu/katow/wymiarow przez Jev.
+
+    Sprawdzamy tylko jawne atrybuty z wydawki i jawne atrybuty produktu.
+    Brak atrybutu w katalogu nie potwierdza zgodnosci, ale nie jest samodzielnym
+    powodem odrzucenia (tak samo jak w matcherze hydrauliki).
+    """
+    query = core_and_attrs_hydraulika(query_name)
+    attrs = candidate.atrybuty or {}
+    for field in (
+        "kolor", "material", "zlacze", "srednica_mm", "kat_st",
+        "gwint_cal", "dlugosc_cm", "pojemnosc_l", "wymiar_mm",
+    ):
+        expected = getattr(query, field)
+        actual = attrs.get(field)
+        if expected is None or actual is None or actual == "":
+            continue
+        try:
+            if field == "wymiar_mm":
+                expected_value = "x".join(sorted(str(expected).lower().split("x")))
+                actual_value = "x".join(sorted(str(actual).lower().split("x")))
+            elif field == "srednica_mm":
+                expected_value = float(expected)
+                actual_value = float(actual)
+            elif field in {"kat_st", "dlugosc_cm", "pojemnosc_l"}:
+                expected_value = int(expected)
+                actual_value = int(actual)
+            else:
+                expected_value = str(expected).strip().casefold()
+                actual_value = str(actual).strip().casefold()
+            if expected_value != actual_value:
+                return False
+        except (ValueError, TypeError):
+            return False
+    return True
+
+
 def _warehouse_variant_source(catalog: Catalog, current_kod: str | None, magazyn: Optional[str]):
     """Zwraca produkt bazowy, jeżeli current_kod jest autorytatywnym wariantem wybranego magazynu."""
     key = magazyn_key(magazyn)
@@ -81,7 +118,7 @@ async def apply_jev_active(
     dzial: str,
     resolve_product_id: Callable[[str], object | None],
 ) -> list[dict]:
-    if not jev_enabled() or jev_mode() != "active" or dzial != "elektryka":
+    if not jev_enabled() or jev_mode() != "active" or dzial not in {"elektryka", "hydraulika"}:
         return []
 
     jobs = []
@@ -166,6 +203,7 @@ async def apply_jev_active(
         applied = False
         cleared_weak_match = False
         rejected_by_poles = False
+        rejected_by_hydraulika_attrs = False
 
         if not locked and result.jev_kod:
             # Matcher jest glowna decyzja biznesowa DAMPOL. Papierowa wydawka moze miec
@@ -182,11 +220,15 @@ async def apply_jev_active(
 
                     # Twarda konwencja DAMPOL: brak xP na wydawce = 1P.
                     # Jev nie moze sam dopowiedziec 3P.
-                    if not _candidate_respects_poles(
-                        str(item.get("rozpoznana_nazwa") or ""),
-                        candidate,
+                    item_name = str(item.get("rozpoznana_nazwa") or "")
+                    if dzial == "elektryka" and not _candidate_respects_poles(
+                        item_name, candidate
                     ):
                         rejected_by_poles = True
+                    elif dzial == "hydraulika" and not _candidate_respects_hydraulika_features(
+                        item_name, candidate
+                    ):
+                        rejected_by_hydraulika_attrs = True
                     else:
                         item["match_kod"] = candidate.kod
                         item["match_nazwa"] = candidate.nazwa
@@ -229,6 +271,7 @@ async def apply_jev_active(
                 "active_locked_by_warehouse_variant": warehouse_locked,
                 "active_cleared_weak_match": cleared_weak_match,
                 "active_rejected_by_poles": rejected_by_poles,
+                "active_rejected_by_hydraulika_attrs": rejected_by_hydraulika_attrs,
             },
             "candidate_codes": [c.kod for c in result.candidates],
             "input_tokens": result.input_tokens,

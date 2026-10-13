@@ -119,6 +119,18 @@ def extract_document_header(result: dict) -> dict[str,str | None]:
     }
 
 
+def missing_header_fields(dzial: str, header: dict[str, str | None]) -> list[str]:
+    """Hydraulic issue sheets do not have electrical seal numbers."""
+    fields = (
+        (("numer_projektu", "numer projektu"), ("pracownik", "pracownik"))
+        if dzial == "hydraulika"
+        else (("numer_projektu", "numer projektu"),
+              ("pracownik", "pracownik"),
+              ("numer_plomby", "numer plomby"))
+    )
+    return [label for key, label in fields if not header.get(key)]
+
+
 def run_claude_host_bridge(document_id: str, files: list[tuple[bytes,str]], dzial: str,
                            *, timeout_seconds: float=TIMEOUT_SECONDS,
                            verify_names: dict[int,list[str]] | None=None,

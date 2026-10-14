@@ -50,7 +50,7 @@ def test_primary_gemini_three_free_models_and_preserves_header(department):
         assert all(step.api_key=="KEY-FREE" for step in chain)
         assert all(step.api_key!="KEY-PAID" for step in chain)
         assert {step.model for step in chain} == {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"}
-    assert ocr_chain[0].model == "gemini-3.6-flash"  # faster measured full-document OCR
+    assert ocr_chain[0].model == "gemini-3.5-flash-lite"  # 12/12 recent successful production electrical OCRs
     if department=="hydraulika":
         elec.assert_not_awaited()
         rules.assert_not_called()
@@ -169,7 +169,7 @@ def test_auto_uses_second_free_pool_without_paid_key(department):
             assert all(x.api_key!='PAID-UNUSED' for x in chain)
             assert len({x.label for x in chain})==6
             assert [x.model for x in chain][-2:] == ['gemini-3.1-flash-lite']*2 if chain is classifier else True
-        assert full[0].label==provider_label
+        assert full[0].model=='gemini-3.5-flash-lite'
         assert full[0].api_key=='FREE-2'
 
 

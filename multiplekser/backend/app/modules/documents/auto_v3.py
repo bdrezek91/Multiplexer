@@ -142,11 +142,12 @@ def recognize_gemini_primary(
             "Gemini FREE: niejednoznaczny dział — wymagana ponowna próba"
         )
     dzial=classification.dzial
-    # A successful short classification is not proof that the same model will
-    # finish a dense handwritten OCR. Real 2-page shadow: Gemini 3.6 FREE2
-    # completed 8/8 names in 4.45s, whereas 3.5 Lite had long full-OCR
-    # timeouts. Prefer 3.6 for the FULL document, first on the pool that
-    # classified successfully, then the other project.
+    # Production evidence (2026-10-14): 12 successful electrical OCRs were
+    # delivered by 3.5 Flash-Lite in 3.93–8.10s. Starting with 3.6 instead
+    # produced a 12.3s 503 followed by a second 3.6 attempt, exhausting the
+    # 26s budget before ever trying the reliably responding 3.5 Lite.
+    # Prefer proven successful 3.5 for FULL OCR, leaving 3.6 and 3.1 as
+    # backups. Prompts, schemas, matcher, quantity checks and JEV are unchanged.
     prefer_free2 = classification.used_provider.endswith('FREE2')
     # Quality-safe adaptation: NEVER reorder model families (3.6, 3.5 Lite,
     # 3.1 Lite). Only choose which FREE project goes first WITHIN each model.
@@ -164,7 +165,7 @@ def recognize_gemini_primary(
                 for name in ("gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite")}
 
     def sort_free_pair(step):
-        model_rank = {"gemini-3.6-flash": 0, "gemini-3.5-flash-lite": 1,
+        model_rank = {"gemini-3.5-flash-lite": 0, "gemini-3.6-flash": 1,
                       "gemini-3.1-flash-lite": 2}[step.model]
         same = by_model[step.model]
         both = len(same) == 2 and all(latency.get(candidate.label) is not None for candidate in same)

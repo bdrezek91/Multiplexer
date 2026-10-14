@@ -81,8 +81,10 @@ def test_adaptive_router_never_reorders_model_families_or_uses_paid():
         _,_,result,_=recognize_gemini_primary([(b'page','image/jpeg')],object(),'Zabrze',
                                               cooldown_store=Metrics())
         steps=hyd.await_args.kwargs['chain']
-        assert [s.model for s in steps[:2]]==['gemini-3.6-flash']*2
-        assert steps[0].api_key=='K2' and steps[1].api_key=='K1'
+        assert [s.model for s in steps[:2]]==['gemini-3.5-flash-lite']*2
+        assert steps[0].api_key=='K1' and steps[1].api_key=='K2'
+        assert [s.model for s in steps[2:4]]==['gemini-3.6-flash']*2
+        assert steps[2].api_key=='K2' and steps[3].api_key=='K1'
         assert all(s.api_key!='PAID' for s in steps)
         assert result._matching_catalog_for_jev is not None
 

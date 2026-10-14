@@ -17,7 +17,7 @@ import * as compression from '../utils/compressImage'
 
 vi.mock('../api/documents', async () => {
   const actual = await vi.importActual<typeof import('../api/documents')>('../api/documents')
-  return { ...actual, listDocuments: vi.fn(), uploadDocument: vi.fn(), getClaudeUsage: vi.fn() }
+  return { ...actual, listDocuments: vi.fn(), uploadDocument: vi.fn() }
 })
 
 vi.mock('../utils/compressImage', () => ({
@@ -42,13 +42,6 @@ function fakeFile(name: string) {
 describe('DocumentsPage - robienie kilku zdjec aparatem przed zatwierdzeniem', () => {
   beforeEach(() => {
     vi.mocked(documentsApi.listDocuments).mockResolvedValue([])
-    vi.mocked(documentsApi.getClaudeUsage).mockResolvedValue({
-      daemon_online: true, plan: 'Claude Pro', model: 'Sonnet', effort: 'Low',
-      documents_done: 3, documents_error: 0, documents_waiting: 0,
-      total_jobs: 0, jobs_24h: 0, pages_24h: 0, jobs_7d: 0, pages_7d: 0,
-      avg_seconds: null, last_status: null, last_error_kind: null,
-      last_error_at: null, subscription_remaining: null,
-    })
     vi.mocked(documentsApi.uploadDocument).mockReset()
     vi.mocked(compression.compressImageForUpload).mockReset()
     vi.mocked(compression.compressImageForUpload).mockImplementation(async (file) => file)
@@ -88,23 +81,14 @@ describe('DocumentsPage - robienie kilku zdjec aparatem przed zatwierdzeniem', (
     expect(screen.queryByRole('button', { name: 'Gemini' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /rozpoznaj wydawkę/i }))
     await waitFor(() => expect(documentsApi.uploadDocument).toHaveBeenCalledTimes(1))
-    expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][2]).toBe('auto_v3')
-    expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][3]).toBeUndefined()
+    expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][2]).toBeUndefined() // API defaults to AUTO Gemini
   })
 
-  it('pozwala wybrac Claude + JEV z dzialem hydraulicznym przy uploadzie', async () => {
-    const user = userEvent.setup()
-    vi.mocked(documentsApi.uploadDocument).mockResolvedValue({ id: 'doc3', status: 'queued' })
+  it('nie pokazuje administratorowi zbędnych przełączników silnika i Claude', () => {
     renderPage()
-    const [cameraInput] = document.querySelectorAll('input[type="file"]')
-    await user.upload(cameraInput as HTMLInputElement, fakeFile('hydraulika.jpg'))
-    await user.click(screen.getByRole('button', { name: 'Diagnostyka modeli' }))
-    await user.click(screen.getByRole('button', { name: /claude \+ jev \(ręcznie\)/i }))
-    await user.click(screen.getByRole('button', { name: 'Hydraulika' }))
-    await user.click(screen.getByRole('button', { name: /rozpoznaj wydawkę/i }))
-    await waitFor(() => expect(documentsApi.uploadDocument).toHaveBeenCalledTimes(1))
-    expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][2]).toBe('claude_jev_test')
-    expect(vi.mocked(documentsApi.uploadDocument).mock.calls[0][3]).toBe('hydraulika')
+    expect(screen.getByText('Multiplekser AUTO')).toBeInTheDocument()
+    expect(screen.queryByText(/Claude Pro|Claude \+ JEV/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Diagnostyka modeli' })).not.toBeInTheDocument()
   })
 
   it('pozwala usunac pojedyncze zdjecie z listy przed zatwierdzeniem', async () => {

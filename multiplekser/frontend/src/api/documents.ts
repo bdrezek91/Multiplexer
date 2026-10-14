@@ -26,30 +26,6 @@ export function getDocumentStats(): Promise<DocumentStats> {
   return apiRequest<DocumentStats>('/documents/stats/summary')
 }
 
-export interface ClaudeUsage {
-  daemon_online: boolean
-  plan: string
-  model: string
-  effort: string
-  documents_done: number
-  documents_error: number
-  documents_waiting: number
-  total_jobs: number
-  jobs_24h: number
-  pages_24h: number
-  jobs_7d: number
-  pages_7d: number
-  avg_seconds: number | null
-  last_status: string | null
-  last_error_kind: string | null
-  last_error_at: string | null
-  subscription_remaining: null
-}
-
-export function getClaudeUsage(): Promise<ClaudeUsage> {
-  return apiRequest<ClaudeUsage>('/documents/claude-usage')
-}
-
 export function getDocument(id: string): Promise<DocumentDetail> {
   return apiRequest<DocumentDetail>(`/documents/${encodeURIComponent(id)}`)
 }
@@ -61,12 +37,11 @@ export function getJevShadow(id: string): Promise<JevShadowSummary> {
   return apiRequest<JevShadowSummary>('/documents/' + encodeURIComponent(id) + '/jev-shadow')
 }
 
-export function uploadDocument(files: File[], magazyn?: string, ocrEngine: 'auto_v3' | 'standard' | 'claude_jev_test' = 'auto_v3', claudeDzial?: 'elektryka' | 'hydraulika'): Promise<DocumentCreated> {
+export function uploadDocument(files: File[], magazyn?: string, ocrEngine: 'auto_v3' = 'auto_v3'): Promise<DocumentCreated> {
   const formData = new FormData()
   files.forEach((file) => formData.append('plik', file))
   if (magazyn) formData.append('magazyn', magazyn)
   formData.append('ocr_engine', ocrEngine)
-  if (ocrEngine === 'claude_jev_test' && claudeDzial) formData.append('claude_dzial', claudeDzial)
   return apiRequest<DocumentCreated>('/documents', { method: 'POST', formData })
 }
 

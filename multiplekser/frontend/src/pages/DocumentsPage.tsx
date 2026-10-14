@@ -22,8 +22,7 @@ import PhotoCameraIcon from '@mui/icons-material/PhotoCamera'
 import CloseIcon from '@mui/icons-material/Close'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { getClaudeUsage, listDocuments, uploadDocument } from '../api/documents'
-import { useAuth } from '../auth/AuthContext'
+import { listDocuments, uploadDocument } from '../api/documents'
 import { ApiError } from '../api/client'
 import { DzialChip } from '../components/DzialChip'
 import { StatusChip } from '../components/StatusChip'
@@ -31,8 +30,6 @@ import { KNOWN_MAGAZYNY, magazynLabel } from '../constants'
 import { compressImageForUpload } from '../utils/compressImage'
 
 export function DocumentsPage() {
-  const { user } = useAuth()
-  const isAdmin = user?.rola === 'admin'
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -48,9 +45,6 @@ export function DocumentsPage() {
   // dopiero po recznym kliknieciu "Wyslij i rozpoznaj", nigdy automatycznie po zdjeciu.
   const [files, setFiles] = useState<File[]>([])
   const [magazyn, setMagazyn] = useState('')
-  const [ocrEngine, setOcrEngine] = useState<'auto_v3' | 'standard' | 'claude_jev_test'>('auto_v3')
-  const [showDiagnostics, setShowDiagnostics] = useState(false)
-  const [claudeDzial, setClaudeDzial] = useState<'elektryka' | 'hydraulika'>('elektryka')
   const [error, setError] = useState<string | null>(null)
   const [compressionWarning, setCompressionWarning] = useState<string | null>(null)
   const [preparingBatches, setPreparingBatches] = useState(0)
@@ -99,18 +93,10 @@ export function DocumentsPage() {
     refetchInterval: 5000,
   })
 
-  const { data: claudeUsage } = useQuery({
-    queryKey: ['claude-usage'],
-    queryFn: getClaudeUsage,
-    enabled: isAdmin,
-    refetchInterval: 15000,
-    retry: false,
-  })
-
   const uploadMutation = useMutation({
     mutationFn: () => {
       if (files.length === 0) throw new Error('Wybierz plik')
-      return uploadDocument(files, magazyn || undefined, ocrEngine, ocrEngine === 'claude_jev_test' ? claudeDzial : undefined)
+      return uploadDocument(files, magazyn || undefined)
     },
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: ['documents'] })
@@ -162,37 +148,6 @@ export function DocumentsPage() {
             {compressionWarning}
           </Alert>
         )}
-        {isAdmin && claudeUsage && (
-          <Alert severity={
-            !claudeUsage.daemon_online ? 'error'
-              : claudeUsage.last_status !== 'done' && claudeUsage.last_error_kind === 'limit' ? 'warning'
-                : 'info'
-          } sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" fontWeight={700}>
-              Claude Pro + JEV — {claudeUsage.daemon_online ? 'usługa działa na VPS' : 'usługa niedostępna'}
-            </Typography>
-            <Typography variant="body2">
-              Wydawki przetworzone: <strong>{claudeUsage.documents_done}</strong>
-              {' · '}W toku: <strong>{claudeUsage.documents_waiting}</strong>
-              {' · '}Z błędem: <strong>{claudeUsage.documents_error}</strong>.
-              {' '}Odczyty Claude ostatnie 24 h: <strong>{claudeUsage.jobs_24h}</strong>
-              {' '}({claudeUsage.pages_24h} stron); ostatnie 7 dni: <strong>{claudeUsage.jobs_7d}</strong>
-              {' '}({claudeUsage.pages_7d} stron).
-              {claudeUsage.avg_seconds !== null && (
-                <> Średni czas samego OCR: <strong>{claudeUsage.avg_seconds.toFixed(1)} s</strong>.</>
-              )}
-            </Typography>
-            {claudeUsage.last_status !== 'done' && claudeUsage.last_error_kind === 'limit' && (
-              <Typography variant="body2" color="warning.main">
-                Claude zgłosił wyczerpanie limitu. Nowe testy poczekają na odnowienie limitu.
-              </Typography>
-            )}
-            <Typography variant="caption" display="block">
-              Dokładny pozostały limit pięciogodzinny/tygodniowy: Claude → Settings → Usage.
-              Ten panel mierzy zrealizowane wywołania od uruchomienia monitoringu, nie procent abonamentu.
-            </Typography>
-          </Alert>
-        )}
         <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
           <Button variant="outlined" component="label" startIcon={<PhotoCameraIcon />}>
             Zrób zdjęcie
@@ -237,54 +192,12 @@ export function DocumentsPage() {
             </ToggleButtonGroup>
             <FormHelperText>Magazyn (opcjonalnie) - kliknij ponownie, żeby odznaczyć</FormHelperText>
           </Box>
-          <Box sx={{ minWidth: 240 }}>
-            <Typography variant="body2" fontWeight={700}>
-              {ocrEngine === 'auto_v3' ? 'Multiplekser AUTO' :
-                ocrEngine === 'standard' ? 'Diagnostyka: Gemini' : 'Diagnostyka: Claude + JEV'}
-            </Typography>
+          <Box sx={{ minWidth: 230 }}>
+            <Typography variant="body2" fontWeight={700}>Multiplekser AUTO</Typography>
             <FormHelperText>
-              {ocrEngine === 'auto_v3'
-                ? 'Gemini czyta wydawkę jako pierwszy, a jeśli jest niedostępny — Claude przejmuje OCR. JEV dobiera kody Optimy.'
-                : 'Ręcznie wybrany silnik diagnostyczny.'}
+              Gemini FREE 1 / FREE 2 → kontrola ilości → JEV.
             </FormHelperText>
-            {isAdmin && (
-              <Button size="small" onClick={() => setShowDiagnostics((prev) => !prev)}>
-                {showDiagnostics ? 'Ukryj diagnostykę modeli' : 'Diagnostyka modeli'}
-              </Button>
-            )}
           </Box>
-          {isAdmin && showDiagnostics && (
-            <Box sx={{ width: '100%' }}>
-              <ToggleButtonGroup
-                exclusive
-                value={ocrEngine}
-                onChange={(_, next: 'auto_v3' | 'standard' | 'claude_jev_test' | null) => {
-                  if (next) setOcrEngine(next)
-                }}
-                size="small"
-                aria-label="Diagnostyczny wybór silnika OCR"
-              >
-                <ToggleButton value="auto_v3">AUTO (zalecane)</ToggleButton>
-                <ToggleButton value="standard">Gemini</ToggleButton>
-                <ToggleButton value="claude_jev_test">Claude + JEV (ręcznie)</ToggleButton>
-              </ToggleButtonGroup>
-              {ocrEngine === 'claude_jev_test' && (
-                <Box sx={{ mt: 1 }}>
-                  <ToggleButtonGroup
-                    exclusive value={claudeDzial}
-                    onChange={(_, next: 'elektryka' | 'hydraulika' | null) => {
-                      if (next) setClaudeDzial(next)
-                    }}
-                    size="small" aria-label="Dział wydawki dla Claude"
-                  >
-                    <ToggleButton value="elektryka">Elektryka</ToggleButton>
-                    <ToggleButton value="hydraulika">Hydraulika</ToggleButton>
-                  </ToggleButtonGroup>
-                </Box>
-              )}
-              <FormHelperText>Diagnostyka administratora: tylko na potrzeby porównań silników.</FormHelperText>
-            </Box>
-          )}
           <Button
             variant="contained"
             onClick={handleUpload}
@@ -299,9 +212,8 @@ export function DocumentsPage() {
         </Stack>
 
         <Alert severity="info" sx={{ mt: 2 }}>
-          {ocrEngine === 'auto_v3'
-            ? 'AUTO: Gemini → zapasowy Claude → JEV. Nieczytelne pozycje sprawdź na skanie przed importem do Optimy.'
-            : 'Tryb diagnostyczny: sprawdź ilości oraz kody z oryginalnym skanem przed importem do Optimy.'}
+          AUTO: dwa darmowe projekty Gemini + JEV. Jeśli Google jest niedostępne, wydawka nie zostanie zatwierdzona.
+          Nieczytelne ilości i kody sprawdź na oryginalnym skanie przed importem do Optimy.
         </Alert>
         {files.length > 0 && (
           <Box sx={{ mt: 2 }}>
@@ -351,8 +263,8 @@ export function DocumentsPage() {
               <TableRow key={doc.id} hover sx={{ cursor: 'pointer' }} onClick={() => navigate(`/documents/${doc.id}`)}>
                 <TableCell>
                   {doc.original_filename}
-                  {(doc.source_type.startsWith('claude_jev_test_') || doc.source_type === 'auto_v3') && (
-                    <Chip size="small" label={doc.source_type === 'auto_v3' ? 'AUTO V3' : 'Claude + JEV · test'} color="info" sx={{ ml: 1 }} />
+                  {doc.source_type === 'auto_v3' && (
+                    <Chip size="small" label="AUTO Gemini" color="info" sx={{ ml: 1 }} />
                   )}
                 </TableCell>
                 <TableCell>{doc.numer_projektu ?? '-'}</TableCell>

@@ -31,14 +31,11 @@ celery_app.conf.update(
     result_serializer="json",
     task_track_started=True,
 
-    # Trzy fizycznie rozdzielone kolejki:
-    # - ocr: Gemini, glowny OCR,
-    # - claude: oddzielna kolejka Claude + JEV (Pro quota nie blokuje Gemini),
-    # - background: kontrole po status=done i diagnostyka shadow.
+    # Dwie kolejki: OCR Gemini + JEV oraz background (shadow / kontrola).
     # Dzięki temu drugi Gemini nigdy nie zajmuje slotu workera obslugujacego nowa wydawke.
     task_default_queue="ocr",
     task_routes={
-        "documents.process_ocr": {"queue": "ocr"},  # override queue=claude for selected jobs
+        "documents.process_ocr": {"queue": "ocr"},
         "documents.full_document_verification": {"queue": "background"},
         "documents.groq_shadow": {"queue": "background"},
         "decision.jev_shadow": {"queue": "background"},

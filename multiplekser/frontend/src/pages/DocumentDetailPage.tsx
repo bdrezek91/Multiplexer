@@ -1013,7 +1013,7 @@ export function DocumentDetailPage() {
               </Stack>
             </Stack>
 
-            {(document.source_type.startsWith('claude_jev_test_') || document.source_type === 'auto_v3') && (
+            {(document.source_type === 'auto_v3') && (
               <Alert severity="warning" sx={{ mt: 2 }}>
                 <strong>Dokument OCR do kontroli.</strong> Odczyt wykonano silnikiem
                 wskazanym w polu „Rozpoznane przez”; matcher/JEV dobrał kody.
@@ -1021,7 +1021,7 @@ export function DocumentDetailPage() {
               </Alert>
             )}
 
-            {(document.source_type === 'auto_v3' || document.source_type.startsWith('claude_jev_test_')) &&
+            {(document.source_type === 'auto_v3') &&
               document.status === 'done' && (!document.numer_projektu || !document.pracownik) && (
                 <Alert severity="warning" sx={{ mt: 2 }}>
                   Nie udało się jednoznacznie odczytać z nagłówka:
@@ -1035,7 +1035,7 @@ export function DocumentDetailPage() {
             {document.dzial && document.source_type === 'auto_v3' &&
               document.ai_trace.some((event) => event.stage === 'auto_gemini_compare' && event.status === 'rejected') && (
                 <Alert severity="warning" sx={{ mt: 2 }}>
-                  Claude i Gemini nie zgadzają się co do części pozycji, ilości lub kompletności wydawki.
+                  W historycznym odczycie wykryto niezgodności pozycji lub ilości podczas porównania modeli.
                   Sprawdź szczegóły w sekcji Przebieg AI i zweryfikuj oryginalny skan przed pobraniem TXT.
                 </Alert>
               )}

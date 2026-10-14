@@ -319,7 +319,14 @@ async def _run_ocr_chain_impl(
                 event_callback,
             )
             continue
-        remaining_seconds = cooldown_store.remaining_seconds(step.label) if cooldown_store else 0
+        stage_name = str((log_context or {}).get("ai_stage") or "")
+        # Only timeout blocks are stage-specific: a 4s header classification
+        # timeout is NOT evidence that 13s full OCR on that model will fail.
+        # Shared 429/503 quota/outage cooldown still applies to both stages.
+        timeout_label = f"{step.label}|timeout|{stage_name}" if stage_name else step.label
+        remaining_seconds = (max(cooldown_store.remaining_seconds(step.label),
+                                 cooldown_store.remaining_seconds(timeout_label))
+                             if cooldown_store else 0)
         if remaining_seconds > 0:
             remaining_minutes = max(1, math.ceil(remaining_seconds / 60))
             reason = f"czasowa blokada modelu po bledzie API, pozostalo ok. {remaining_minutes} min"
@@ -396,7 +403,7 @@ async def _run_ocr_chain_impl(
             )
             reason = str(last_error)
             if cooldown_store:
-                cooldown_minutes = cooldown_store.record_timeout(step.label)
+                cooldown_minutes = cooldown_store.record_timeout(timeout_label)
                 if cooldown_minutes:
                     reason = f"{reason} | blokada modelu na {cooldown_minutes} min"
             logger.warning(

@@ -56,14 +56,16 @@ def test_free_gemini_error_never_invokes_claude_or_saves_items():
          patch.object(tasks.repository,'append_ai_trace_event') as history, \
          patch.object(tasks.repository,'mark_error') as error, \
          patch.object(tasks.repository,'mark_done') as complete, \
+         patch.object(tasks.repository,'mark_retry_queued') as requeue, \
+         patch.object(tasks.process_ocr_document,'apply_async') as broker, \
          patch.object(tasks,'get_ocr_cooldown_store',return_value=None), \
          patch.object(tasks,'_download_and_prepare',return_value=[(b'IMAGE','image/jpeg')]), \
          patch.object(auto_v3,'recognize_gemini_primary',side_effect=OCRProviderError('429',status_code=429)), \
          patch.object(tasks,'prune_documents'):
         assert tasks.run_ocr_task(str(doc.id),Mock()) is True
     complete.assert_not_called()
-    error.assert_called_once()
-    assert 'Gemini FREE 1 i FREE 2' in error.call_args.args[2]
-    assert 'Claude' not in error.call_args.args[2]
+    error.assert_not_called()
+    requeue.assert_called_once()
+    broker.assert_called_once_with(args=[str(doc.id),1],countdown=180,queue='ocr')
     assert any(event.args[2]['stage']=='auto_gemini_primary' and event.args[2]['status']=='failed'
                for event in history.call_args_list)

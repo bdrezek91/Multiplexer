@@ -306,7 +306,7 @@ def claim_document_for_processing(session: Session, document_id) -> Optional[Doc
         session.query(DocumentModel)
         .filter(DocumentModel.id == uid, DocumentModel.status == "queued")
         .update(
-            {DocumentModel.status: "processing", DocumentModel.ai_trace: []},
+            {DocumentModel.status: "processing"},
             synchronize_session=False,
         )
     )
@@ -388,6 +388,25 @@ def mark_done(
         index_elements=[DocumentDailyStatsModel.user_id, DocumentDailyStatsModel.day],
         set_={"documents": DocumentDailyStatsModel.documents + 1},
     ))
+    session.commit()
+
+
+def mark_retry_queued(session: Session, document: DocumentModel, *,
+                      retry_number: int, countdown_seconds: int) -> None:
+    """Keep the same scanned file/doc ID, avoid duplicate accounting on API outages."""
+    from datetime import datetime, timezone
+    trace = list(document.ai_trace or [])
+    trace.append({
+        "status": "queued", "stage": "gemini_retry", "provider": "Gemini",
+        "model": None, "label": "Gemini FREE — ponowna próba",
+        "reason": f"Google chwilowo niedostępne; próba {retry_number + 1} za {countdown_seconds // 60} min.",
+        "step": None, "total_steps": None, "duration_ms": None,
+        "attempt": retry_number + 1, "target": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    document.ai_trace = trace[-200:]
+    document.status = "queued"
+    document.error_message = None
     session.commit()
 
 

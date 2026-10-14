@@ -50,6 +50,14 @@ from .task_telemetry import (
 
 logger = logging.getLogger(__name__)
 
+# At most three total OCR attempts (initial, +3 min, +15 min). No quota
+# hammering and no indefinite stuck queue; fail closed after final failure.
+_GEMINI_RETRY_DELAYS = (180, 900)
+
+
+class GeminiTemporarilyUnavailable(OCRProviderError):
+    """No validated FREE Gemini result during this bounded attempt."""
+
 
 async def _verify_ambiguous_items(*args, **kwargs):
     """Kompatybilny re-export helpera po refaktorze.
@@ -64,7 +72,7 @@ async def _verify_ambiguous_items(*args, **kwargs):
     )
 
 
-def run_ocr_task(document_id: str, session: Session) -> bool:
+def run_ocr_task(document_id: str, session: Session, *, retry_attempt: int = 0) -> bool:
     from .storage import get_storage  # lazy import - unika inicjalizacji klienta S3 przy imporcie modulu
 
     # Atomowy claim chroni przed ponownym dostarczeniem tego samego zadania przez broker,
@@ -130,8 +138,7 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                     files, session, document.magazyn,
                     event_callback=save_ai_event, cooldown_store=cooldown_store,
                 )
-            except (AllProvidersFailedError, OCRProviderError, OCRUnparsableResponseError,
-                    RuntimeError, TimeoutError, ValueError) as exc:
+            except (AllProvidersFailedError, OCRProviderError, TimeoutError) as exc:
                 save_ai_event({
                     "status": "failed", "stage": "auto_gemini_primary",
                     "provider": "Gemini", "model": None,
@@ -142,7 +149,9 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                     "attempt": 1, "target": None,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 })
-                raise OCRProviderError("Gemini FREE 1 i FREE 2: brak poprawnego OCR. Prześlij wydawkę ponownie później.") from exc
+                raise GeminiTemporarilyUnavailable(
+                    "Gemini FREE 1 i FREE 2: brak poprawnego OCR po przejściowym błędzie API."
+                ) from exc
             timings.update(gemini_timings)
             save_ai_event({
                 "status": "completed", "stage": "auto_gemini_primary",
@@ -312,6 +321,35 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
                 dispatch_jev_shadow_task(document_id)
         except Exception:
             logger.warning("Jev shadow - nie udalo sie zlecic zadania, pomijam", exc_info=True)
+    except GeminiTemporarilyUnavailable as exc:
+        if retry_attempt < len(_GEMINI_RETRY_DELAYS):
+            countdown = _GEMINI_RETRY_DELAYS[retry_attempt]
+            try:
+                # Requeue the exact same document; never create another item,
+                # account usage, or upload. If publishing fails, mark an error
+                # rather than leave an orphaned queued document.
+                repository.mark_retry_queued(
+                    session, document, retry_number=retry_attempt + 1,
+                    countdown_seconds=countdown,
+                )
+                process_ocr_document.apply_async(
+                    args=[document_id, retry_attempt + 1],
+                    countdown=countdown, queue="ocr",
+                )
+                logger.warning("Gemini AUTO delayed retry scheduled",
+                               extra={"document_id": document_id, "attempt": retry_attempt + 1,
+                                      "countdown_seconds": countdown})
+            except Exception:
+                session.rollback()
+                repository.mark_error(session, document,
+                    "Gemini jest niedostępny; nie udało się zaplanować ponownej próby.")
+                logger.exception("Gemini AUTO retry scheduling failed")
+        else:
+            repository.mark_error(session, document,
+                "Gemini FREE 1 i FREE 2 pozostają niedostępne po 3 próbach. "
+                "Spróbuj ponownie później lub sprawdź limity Google.")
+            logger.error("Gemini AUTO failed after bounded retries",
+                         extra={"document_id": document_id})
     except (OCRUnparsableResponseError, AllProvidersFailedError, OCRProviderError) as exc:
         repository.mark_error(session, document, str(exc))
         logger.error("OCR - zakonczone bledem", extra={"document_id": document_id, "error": str(exc)})
@@ -330,10 +368,10 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
 
 
 @celery_app.task(name="documents.process_ocr")
-def process_ocr_document(document_id: str) -> None:
+def process_ocr_document(document_id: str, retry_attempt: int = 0) -> None:
     session = SessionLocal()
     try:
-        processed = run_ocr_task(document_id, session)
+        processed = run_ocr_task(document_id, session, retry_attempt=retry_attempt)
         if not processed:
             return
         completed = repository.get_document(session, document_id)

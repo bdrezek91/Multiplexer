@@ -95,6 +95,37 @@ class RedisOCRCooldownStore:
             logger.warning("OCR AI - nie udalo sie ustawic cooldownu po timeout w Redis", exc_info=True)
             return 0
 
+    def validated_latency_ms(self, step_label: str, stage: str) -> float | None:
+        """Latency EWMA only after >=3 validated calls; never score a probe or bad JSON."""
+        token = self._token(f"{stage}|{step_label}")
+        key = f"{_KEY_PREFIX}:latency:{token}"
+        try:
+            fields = self.client.hmget(key, "samples", "ewma_ms")
+            if not fields[0] or int(fields[0]) < 3 or not fields[1]:
+                return None
+            return float(fields[1])
+        except (RedisError, OSError, ValueError, TypeError):
+            logger.warning("OCR latency metrics unavailable", exc_info=True)
+            return None
+
+    def record_validated_latency(self, step_label: str, stage: str, elapsed_ms: int) -> None:
+        """Successful schema-validated requests; Redis only, no prompt/text/secrets."""
+        if not stage or elapsed_ms < 1:
+            return
+        token = self._token(f"{stage}|{step_label}")
+        key = f"{_KEY_PREFIX}:latency:{token}"
+        try:
+            sample, old = self.client.hmget(key, "samples", "ewma_ms")
+            count = int(sample or 0)
+            previous = float(old) if old else float(elapsed_ms)
+            ewma = round(0.7 * previous + 0.3 * elapsed_ms, 1) if count else float(elapsed_ms)
+            with self.client.pipeline(transaction=True) as p:
+                p.hset(key, mapping={"samples": min(count + 1, 100), "ewma_ms": ewma})
+                p.expire(key, 24 * 3600)
+                p.execute()
+        except (RedisError, OSError, ValueError, TypeError):
+            logger.warning("OCR latency metric write failed", exc_info=True)
+
     def reset(self, step_label: str) -> None:
         blocked_key, strikes_key = self._keys(step_label)
         try:

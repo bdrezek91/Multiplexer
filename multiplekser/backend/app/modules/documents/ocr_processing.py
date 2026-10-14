@@ -166,6 +166,24 @@ def _row_dict_from_ocritem(
 
 
 
+def flag_unverified_quantities(items: list[dict], dzial: str) -> int:
+    """Escalate unconfirmed quantities; never infer values or alter codes."""
+    note = "Limit czasu dodatkowej kontroli AI; sprawdź ilość na skanie."
+    flagged = 0
+    for item in items:
+        eligible = ((dzial == "hydraulika" and
+                     (item["ilosc_wydana"] is None or item["ilosc_zuzyta"] is None)) or
+                    (dzial != "hydraulika" and
+                     item["ilosc_wydana"] is None and item["ilosc_zuzyta"] is None))
+        if eligible:
+            item["needs_review"] = True
+            existing = str(item.get("form_note") or "")
+            if note not in existing:
+                item["form_note"] = (existing + " | " + note).strip(" |")
+            flagged += 1
+    return flagged
+
+
 async def _verify_ambiguous_items(
     files: list[tuple[bytes, str]], items: list[dict], document_id: str,
     event_callback: OCRChainEventCallback,

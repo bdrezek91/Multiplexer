@@ -36,6 +36,7 @@ from .ocr_processing import (
     _resolve_product_id,
     _row_dict_from_ocritem,
     _verify_ambiguous_items as _verify_ambiguous_items_impl,
+    flag_unverified_quantities,
 )
 from .retention import prune_documents
 from .groq_shadow import run_groq_shadow_task
@@ -170,9 +171,16 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         timings["timing_item_materialization"] = _elapsed_ms(stage_started)
 
         stage_started = time.perf_counter()
-        asyncio.run(_verify_ambiguous_items(
-            files, items, document_id, save_ai_event, cooldown_store, dzial,
-        ))
+        try:
+            asyncio.run(asyncio.wait_for(_verify_ambiguous_items(
+                files, items, document_id, save_ai_event, cooldown_store, dzial,
+            ), timeout=15.0))
+        except TimeoutError:
+            # Consensus applies values only after completion. Never guess when
+            # the verification budget expires; require manual review instead.
+            flag_unverified_quantities(items, dzial)
+            logger.warning("Quantity verification exceeded 15s, preserving OCR values",
+                           extra={"document_id": document_id})
         timings["timing_ambiguous_verification"] = _elapsed_ms(stage_started)
 
         # Najpierw zachowujemy wszystkie istniejace reguly biznesowe matchera. Auto-zasilacz
@@ -194,7 +202,9 @@ def run_ocr_task(document_id: str, session: Session) -> bool:
         stage_started = time.perf_counter()
         try:
             from app.modules.decision.active import apply_jev_active
-            catalog_for_jev = Catalog.from_db(session, dzial=dzial)
+            catalog_for_jev = getattr(result, "_matching_catalog_for_jev", None)
+            if catalog_for_jev is None:
+                catalog_for_jev = Catalog.from_db(session, dzial=dzial)
             # Hydraulika ma swoje stale twarde reguly (zaslepki M10, wykluczenie czerwonej).
             # Nie wysylamy elektrycznych special rules do hydrauliki.
             if dzial == "hydraulika":

@@ -40,7 +40,7 @@ from typing import Callable, Mapping, Optional
 from app.core.config import settings
 
 from .cooldown import OCRCooldownStore
-from .providers import GeminiProvider, OCRProvider, OCRProviderError, OpenAIProvider
+from .providers import GeminiProvider, OCRProvider, OCRProviderError, OpenAIProvider, gemini_connection_pool
 
 logger = logging.getLogger(__name__)
 
@@ -140,20 +140,31 @@ def quantity_verification_chain(dzial: str = "elektryka") -> list[OCRChainStep]:
     gemini = GeminiProvider()
     free_key = settings.gemini_api_key_free
     if dzial == "hydraulika":
-        return [
+        base = [
             OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 16),
             OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 12),
             OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 14),
             OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 16),
             OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 16),
         ]
-    return [
+    else:
+        base = [
         OCRChainStep("Gemini 3 Flash Preview (klucz darmowy)", gemini, "gemini-3-flash-preview", free_key, 12),
         OCRChainStep("Gemini 3.1 Flash Lite (klucz darmowy)", gemini, "gemini-3.1-flash-lite", free_key, 14),
         OCRChainStep("Gemini 3.5 Flash (klucz darmowy)", gemini, "gemini-3.5-flash", free_key, 16),
         OCRChainStep("Gemini 3.5 Flash Lite (klucz darmowy)", gemini, "gemini-3.5-flash-lite", free_key, 16),
         OCRChainStep("Gemini 3.6 Flash (klucz darmowy)", gemini, "gemini-3.6-flash", free_key, 16),
-    ]
+        ]
+    # Alternate project immediately after the same model, not only after
+    # all other models. FREE1 names stay identical for historical cooldowns.
+    if not settings.gemini_api_key_free_2:
+        return base
+    enriched: list[OCRChainStep] = []
+    for step in base:
+        enriched.append(step)
+        enriched.append(OCRChainStep(step.label + " FREE2", gemini, step.model,
+                                     settings.gemini_api_key_free_2, step.timeout_seconds))
+    return enriched
 
 
 def background_verification_chain() -> list[OCRChainStep]:
@@ -255,7 +266,7 @@ def _publish_event(
         )
 
 
-async def run_ocr_chain(
+async def _run_ocr_chain_impl(
     files: list[tuple[bytes, str]], prompt: str, chain: Optional[list[OCRChainStep]] = None,
     thinking_level: str = "low", response_validator: Optional[Callable[[str], bool]] = None,
     log_context: Optional[Mapping[str, object]] = None,
@@ -365,6 +376,11 @@ async def run_ocr_chain(
             )
             if cooldown_store:
                 cooldown_store.reset(step.label)
+                # Optional metrics: older/mock cooldown stores remain fully supported.
+                record = getattr(cooldown_store, "record_validated_latency", None)
+                if callable(record):
+                    record(step.label, str((log_context or {}).get("ai_stage") or ""),
+                           round((time.monotonic() - started_at) * 1000))
             _publish_event(
                 "selected",
                 {
@@ -454,3 +470,31 @@ async def run_ocr_chain(
         skipped=skipped, last_error=last_error,
         last_invalid_text=last_invalid_text, last_invalid_label=last_invalid_label,
     )
+
+
+async def run_ocr_chain(
+    files: list[tuple[bytes, str]], prompt: str, chain: Optional[list[OCRChainStep]] = None,
+    thinking_level: str = "low", response_validator: Optional[Callable[[str], bool]] = None,
+    log_context: Optional[Mapping[str, object]] = None,
+    event_callback: Optional[OCRChainEventCallback] = None,
+    cooldown_store: Optional[OCRCooldownStore] = None,
+    invalid_response_reason: str = _INVALID_RESPONSE_REASON,
+    chain_position_offset: int = 0,
+    chain_total_steps: Optional[int] = None,
+    publish_terminal_failure: bool = True,
+) -> OCRChainResult:
+    """Identical OCR chain with one pooled HTTP client for Gemini fallbacks."""
+    steps = chain if chain is not None else default_ocr_chain()
+    kwargs = dict(
+        chain=steps, thinking_level=thinking_level,
+        response_validator=response_validator, log_context=log_context,
+        event_callback=event_callback, cooldown_store=cooldown_store,
+        invalid_response_reason=invalid_response_reason,
+        chain_position_offset=chain_position_offset,
+        chain_total_steps=chain_total_steps,
+        publish_terminal_failure=publish_terminal_failure,
+    )
+    if any(isinstance(step.provider, GeminiProvider) and step.api_key for step in steps):
+        async with gemini_connection_pool():
+            return await _run_ocr_chain_impl(files, prompt, **kwargs)
+    return await _run_ocr_chain_impl(files, prompt, **kwargs)

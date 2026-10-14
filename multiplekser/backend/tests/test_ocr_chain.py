@@ -88,10 +88,12 @@ async def test_hydraulika_chain_nie_uzywa_openai_i_ma_3_6_free():
     assert any(s.model == "gemini-3.6-flash" and "darmowy" in s.label for s in chain)
 
 
-async def test_quantity_verification_chain_ma_tylko_piec_darmowych_modeli_gemini():
-    """Na zyczenie uzytkownika (2026-08-07) dodatkowa kontrola ilosci (verify.py) nie siega po
-    platne modele - to sprawdzenie kilku niejasnych komorek, nie caly dokument, wiec placony
-    fallback nie jest tu proporcjonalny do korzysci."""
+async def test_quantity_verification_chain_ma_tylko_piec_darmowych_modeli_gemini(monkeypatch):
+    """Original FREE1-only model ordering remains valid if FREE2 is unconfigured.
+    The 10-step dual-key path is covered in test_optimizer_safety_1048.py.
+    """
+    from app.core.config import settings
+    monkeypatch.setattr(settings, 'gemini_api_key_free_2', None)
     chain = quantity_verification_chain()
     assert len(chain) == 5
     assert all(isinstance(s.provider, GeminiProvider) for s in chain)

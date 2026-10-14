@@ -148,11 +148,32 @@ def recognize_gemini_primary(
     # timeouts. Prefer 3.6 for the FULL document, first on the pool that
     # classified successfully, then the other project.
     prefer_free2 = classification.used_provider.endswith('FREE2')
-    full_chain.sort(key=lambda step: (
-        step.model != 'gemini-3.6-flash',
-        step.label.endswith('FREE2') != prefer_free2,
-        step.model != 'gemini-3.5-flash-lite',
-    ))
+    # Quality-safe adaptation: NEVER reorder model families (3.6, 3.5 Lite,
+    # 3.1 Lite). Only choose which FREE project goes first WITHIN each model.
+    # Historical priority is preserved unless BOTH projects have >=3 validated
+    # full-OCR timings and one is measurably faster by at least 1 second.
+    lookup = getattr(cooldown_store, "validated_latency_ms", None)
+    latency = {}
+    if callable(lookup):
+        for step in full_chain:
+            latency[step.label] = lookup(step.label, f"full_ocr_{dzial}")
+
+    # Freeze model groups before list.sort: CPython temporarily exposes an
+    # empty list while calculating sort keys.
+    by_model = {name: [candidate for candidate in full_chain if candidate.model == name]
+                for name in ("gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite")}
+
+    def sort_free_pair(step):
+        model_rank = {"gemini-3.6-flash": 0, "gemini-3.5-flash-lite": 1,
+                      "gemini-3.1-flash-lite": 2}[step.model]
+        same = by_model[step.model]
+        both = len(same) == 2 and all(latency.get(candidate.label) is not None for candidate in same)
+        measured = [latency[candidate.label] for candidate in same] if both else []
+        if both and max(measured) - min(measured) >= 1000:
+            return model_rank, latency[step.label]
+        return model_rank, step.label.endswith('FREE2') != prefer_free2
+
+    full_chain.sort(key=sort_free_pair)
     remaining = 26 - (time.perf_counter() - started_total)
     if remaining <= 0:
         raise TimeoutError('Budżet Gemini AUTO wyczerpany')
@@ -171,6 +192,9 @@ def recognize_gemini_primary(
     ocr_seconds=round(time.perf_counter()-start,3)
     if not result.pozycje:
         raise ValueError("Gemini FREE: brak poprawnych pozycji — wymagana ponowna próba")
+    # Stored only on the in-memory result for this task; catalog data and
+    # matching rules remain untouched and are not shared across requests.
+    result._matching_catalog_for_jev = catalog
     return classification,dzial,result,{
         "timing_classification":int(classify_seconds*1000),
         "timing_ocr_matcher":int(ocr_seconds*1000),

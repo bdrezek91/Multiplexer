@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import base64
 from abc import ABC, abstractmethod
+from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from urllib.parse import quote
 
 import httpx
@@ -35,6 +37,21 @@ class OCRProvider(ABC):
         GeminiProvider nizej (ignorowane przez dostawcow bez tej koncepcji, np. OpenAI)."""
 
 
+# Only within one async call chain. The client is ALWAYS closed at the end,
+# and separate Celery document jobs/event loops never share sockets or secrets.
+_GEMINI_POOL: ContextVar[httpx.AsyncClient | None] = ContextVar('gemini_http_pool', default=None)
+
+
+@asynccontextmanager
+async def gemini_connection_pool():
+    async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
+        token = _GEMINI_POOL.set(client)
+        try:
+            yield
+        finally:
+            _GEMINI_POOL.reset(token)
+
+
 class GeminiProvider(OCRProvider):
     """Port geminiRecognize() z monolitu - kazdy plik trafia jako `inline_data`. PDF NIE jest
     wysylany natywnie do tej klasy - jest rozbijany na osobne obrazy per strona ZANIM tu trafi
@@ -61,12 +78,13 @@ class GeminiProvider(OCRProvider):
             "generationConfig": {"temperature": 0, "thinkingConfig": {"thinkingLevel": thinking_level}},
         }
         try:
-            async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
-                # Do not embed the API key in the URL: httpx access logs may
-                # otherwise expose credentials. Gemini supports x-goog-api-key.
-                resp = await client.post(
-                    url, headers={"x-goog-api-key": api_key}, json=body
-                )
+            # Pool from run_ocr_chain if present; keep standalone calls supported.
+            shared = _GEMINI_POOL.get()
+            if shared is None:
+                async with httpx.AsyncClient(timeout=settings.ocr_timeout_seconds) as client:
+                    resp = await client.post(url, headers={"x-goog-api-key": api_key}, json=body)
+            else:
+                resp = await shared.post(url, headers={"x-goog-api-key": api_key}, json=body)
         except httpx.TimeoutException as exc:
             raise OCRProviderError(f"Timeout po {settings.ocr_timeout_seconds} s bez odpowiedzi") from exc
         except httpx.HTTPError as exc:

@@ -150,48 +150,35 @@ async def verify_ambiguous_quantities(
     unresolved = dict(targets)
     found: dict[str, VerifyResult] = {}
     steps = quantity_verification_chain(dzial)
-
-    for step_index, step in enumerate(steps):
-        if not unresolved:
-            break
-        current_targets = list(unresolved.items())
-        expected_ids = set(unresolved)
-        prompt = _build_prompt(current_targets, cropped)
-        target_label = ", ".join(unresolved.values())[:500]
-        try:
-            chain_result = await run_ocr_chain(
-                verification_files,
-                prompt,
-                chain=[step],
-                response_validator=lambda text, ids=expected_ids: bool(
-                    _parse_batch_response(text, ids)
-                ),
-                log_context={
-                    **dict(log_context or {}),
-                    "ai_stage": "quantity_verification",
-                    "ai_target": target_label,
-                },
-                event_callback=event_callback,
-                cooldown_store=cooldown_store,
-                invalid_response_reason=_NO_QUANTITY_REASON,
-                chain_position_offset=step_index,
-                chain_total_steps=len(steps),
-                publish_terminal_failure=False,
-            )
-        except AllProvidersFailedError:
-            continue
-
+    expected_ids = set(unresolved)
+    prompt = _build_prompt(targets, cropped)
+    target_label = ", ".join(unresolved.values())[:500]
+    try:
+        chain_result = await run_ocr_chain(
+            verification_files,
+            prompt,
+            chain=steps,
+            response_validator=lambda text, ids=expected_ids: bool(
+                _parse_batch_response(text, ids)
+            ),
+            log_context={
+                **dict(log_context or {}),
+                "ai_stage": "quantity_verification",
+                "ai_target": target_label,
+            },
+            event_callback=event_callback,
+            cooldown_store=cooldown_store,
+            invalid_response_reason=_NO_QUANTITY_REASON,
+            publish_terminal_failure=False,
+        )
         parsed_results = _parse_batch_response(chain_result.text, expected_ids)
         for item_id, result in parsed_results.items():
             found[item_id] = result
             unresolved.pop(item_id, None)
-
-        # Pierwszy model, ktory zwrocil choc jedna wiarygodna ilosc, konczy dodatkowa
-        # kontrole. Wczesniej po CZESCIOWYM sukcesie odpalalismy kolejne modele dla
-        # pozostalych pozycji, co na realnych wydawkach dokladalo 10-20 s, a w ostatnich
-        # 40 dokumentach ani razu nie przynioslo kolejnego poprawnego wyniku. Fallbacki
-        # nadal dzialaja, gdy model nie zwroci zadnej ilosci albo zawiedzie na API.
-        break
+        # The first model returning at least one quantity still ends the pass.
+        # Missing positions are never filled from guesses or later models.
+    except AllProvidersFailedError:
+        pass
 
     _publish_no_result(list(unresolved.items()), event_callback)
     return [found.get(item_id, VerifyResult(None, None)) for item_id, _ in targets]

@@ -215,35 +215,64 @@ def recognize_gemini_primary(
     from app.modules.products import Catalog
 
     started_total = time.perf_counter()
-    key = settings.gemini_api_key_free
-    if not key:
+    keys = (("FREE1", settings.gemini_api_key_free),
+            ("FREE2", settings.gemini_api_key_free_2))
+    keys = [(pool, value) for pool, value in keys if value]
+    if not keys:
         raise RuntimeError("Gemini: darmowy klucz nie jest skonfigurowany")
     if model is not None and model not in {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"}:
         raise ValueError("Niedozwolony model Gemini AUTO")
     provider = GeminiProvider()
+    # Production probe (14.10.2026): 3.5 Lite & 3.6 responded quickly on
+    # both projects; 3.1 Lite timed out on both even for trivial text.
+    # Preserve 3.1 as LAST fallback, not the second slow attempt.
     candidates = [
-        ('gemini-3.5-flash-lite', 5, 14),
+        ('gemini-3.5-flash-lite', 4, 13),
+        ('gemini-3.6-flash', 5, 12),
         ('gemini-3.1-flash-lite', 4, 9),
-        ('gemini-3.6-flash', 5, 11),
     ]
     if model is not None:
         candidates = [row for row in candidates if row[0] == model]
-    # Use the free model chain and avoid unnecessary duplicate requests.
-    classify_chain = [OCRChainStep(f'AUTO Gemini {name} darmowy', provider, name, key, timeout) for name, timeout, _ in candidates]
-    full_chain = [OCRChainStep(f'AUTO Gemini {name} darmowy', provider, name, key, timeout) for name, _, timeout in candidates]
+    # Different step labels give each Google project independent Redis
+    # cooldown and diagnostics. Keep FREE1 labels for historical cooldowns.
+    def make_steps(use_classification: bool):
+        steps = []
+        for name, classify_timeout, full_timeout in candidates:
+            for pool, api_key in keys:
+                label = (f'AUTO Gemini {name} darmowy' if pool == 'FREE1'
+                         else f'AUTO Gemini {name} darmowy FREE2')
+                steps.append(OCRChainStep(
+                    label, provider, name, api_key,
+                    classify_timeout if use_classification else full_timeout,
+                ))
+        return steps
+
+    classify_chain = make_steps(True)
+    full_chain = make_steps(False)
     start=time.perf_counter()
-    classification=asyncio.run(classify_document(
+    # Hard cap includes serial model retries on both projects.
+    classification=asyncio.run(asyncio.wait_for(classify_document(
         [(classification_header_preview(files[0][0]), "image/jpeg")],
         chain=classify_chain, event_callback=event_callback,
         cooldown_store=cooldown_store, min_confidence=65,
-    ))
+    ),timeout=15))
     classify_seconds=round(time.perf_counter()-start,3)
     if classification.fallback or classification.confidence<65:
         raise AmbiguousDepartment(
             "Gemini nie rozpoznał jednoznacznie działu — przełączam na Claude"
         )
     dzial=classification.dzial
-    full_chain.sort(key=lambda step: step.label != classification.used_provider)
+    # A successful short classification is not proof that the same model will
+    # finish a dense handwritten OCR. Real 2-page shadow: Gemini 3.6 FREE2
+    # completed 8/8 names in 4.45s, whereas 3.5 Lite had long full-OCR
+    # timeouts. Prefer 3.6 for the FULL document, first on the pool that
+    # classified successfully, then the other project.
+    prefer_free2 = classification.used_provider.endswith('FREE2')
+    full_chain.sort(key=lambda step: (
+        step.model != 'gemini-3.6-flash',
+        step.label.endswith('FREE2') != prefer_free2,
+        step.model != 'gemini-3.5-flash-lite',
+    ))
     remaining = 26 - (time.perf_counter() - started_total)
     if remaining <= 0:
         raise TimeoutError('Budżet Gemini AUTO wyczerpany')

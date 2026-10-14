@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # NIGDY nie wpisywac tu wartosci na sztywno - patrz RAPORT_ETAP_6.md, zastrzezenie
     # bezpieczenstwa: monolit (index.html) mial klucze zaszyte w kodzie, co jest wyciekiem.
     gemini_api_key_free: str | None = None
+    gemini_api_key_free_2: str | None = None  # independent Google project, FREE only
     gemini_api_key_paid: str | None = None
     # Skrocone z 90s (2026-08-04, na zyczenie uzytkownika - przetwarzanie calego dokumentu
     # trwalo 2-3 minuty, za dlugo) - przy opornym/przeciazonym kroku lancucha lepiej szybciej

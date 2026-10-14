@@ -126,6 +126,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       DOCUMENT_RETENTION_LIMIT: ${DOCUMENT_RETENTION_LIMIT:-20}
       GEMINI_API_KEY_FREE: ${GEMINI_API_KEY_FREE:-}
+      GEMINI_API_KEY_FREE_2: ${GEMINI_API_KEY_FREE_2:-}
       GEMINI_API_KEY_PAID: ${GEMINI_API_KEY_PAID:-}
       # Opcjonalny - ostatni krok w lancuchu OCR (patrz ocr/chain.py), uzywany WYLACZNIE gdy
       # wszystkie kroki Gemini zawioda. Brak klucza = ten krok jest po prostu pomijany.

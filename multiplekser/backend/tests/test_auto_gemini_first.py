@@ -22,6 +22,7 @@ def test_primary_gemini_three_free_models_and_preserves_header(department):
         used_provider="Gemini AUTO (darmowy)",rejected_count=0,
     )
     with patch.object(settings,"gemini_api_key_free","KEY-FREE"), \
+         patch.object(settings,"gemini_api_key_free_2",None), \
          patch.object(settings,"gemini_api_key_paid","KEY-PAID"), \
          patch.object(classify,"classify_document",new_callable=AsyncMock) as cls, \
          patch.object(pipeline_hydraulika,"recognize_document_hydraulika",new_callable=AsyncMock) as hyd, \
@@ -49,7 +50,7 @@ def test_primary_gemini_three_free_models_and_preserves_header(department):
         assert all(step.api_key=="KEY-FREE" for step in chain)
         assert all(step.api_key!="KEY-PAID" for step in chain)
         assert {step.model for step in chain} == {"gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"}
-    assert ocr_chain[0].model == "gemini-3.1-flash-lite"
+    assert ocr_chain[0].model == "gemini-3.6-flash"  # faster measured full-document OCR
     if department=="hydraulika":
         elec.assert_not_awaited()
         rules.assert_not_called()
@@ -60,6 +61,7 @@ def test_primary_gemini_three_free_models_and_preserves_header(department):
 
 def test_no_free_key_causes_fallback_without_paid_calls():
     with patch.object(settings,"gemini_api_key_free",None), \
+         patch.object(settings,"gemini_api_key_free_2",None), \
          patch.object(settings,"gemini_api_key_paid","KEY-PAID"), \
          patch.object(classify,"classify_document",new_callable=AsyncMock) as cls:
         with pytest.raises(RuntimeError,match="darmowy klucz"):
@@ -69,6 +71,7 @@ def test_no_free_key_causes_fallback_without_paid_calls():
 
 def test_uncertain_classification_does_not_choose_random_catalog():
     with patch.object(settings,"gemini_api_key_free","KEY-FREE"), \
+         patch.object(settings,"gemini_api_key_free_2",None), \
          patch.object(classify,"classify_document",new_callable=AsyncMock) as cls, \
          patch("app.modules.ocr.image.classification_header_preview",return_value=b"header"), \
          patch.object(Catalog,"from_db") as catalog:
@@ -81,6 +84,7 @@ def test_uncertain_classification_does_not_choose_random_catalog():
 def test_gemini_timeout_is_not_retried_on_paid_key():
     from app.modules.ocr.chain import AllProvidersFailedError
     with patch.object(settings,"gemini_api_key_free","KEY-FREE"), \
+         patch.object(settings,"gemini_api_key_free_2",None), \
          patch.object(settings,"gemini_api_key_paid","KEY-PAID"), \
          patch.object(classify,"classify_document",new_callable=AsyncMock) as cls, \
          patch("app.modules.ocr.image.classification_header_preview",return_value=b"header"):
@@ -131,3 +135,59 @@ def test_gemini_chain_tries_second_free_model_without_using_claude(first_failure
     assert [e["status"] for e in events if e["status"] in {"rejected","selected"}]==[
         "rejected","selected",
     ]
+
+
+@pytest.mark.parametrize('department',['elektryka','hydraulika'])
+def test_auto_uses_second_free_pool_without_paid_key(department):
+    """Both keys independently appear in each Gemini chain, with separate cooldown labels."""
+    provider_label='AUTO Gemini gemini-3.6-flash darmowy FREE2'
+    classified=SimpleNamespace(dzial=department,confidence=96.0,fallback=False,
+                               used_provider=provider_label)
+    expected=SimpleNamespace(pozycje=[object()],numer_projektu='123',pracownik='Test',
+                             used_provider=provider_label)
+    with patch.object(settings,'gemini_api_key_free','FREE-1'), \
+         patch.object(settings,'gemini_api_key_free_2','FREE-2'), \
+         patch.object(settings,'gemini_api_key_paid','PAID-UNUSED'), \
+         patch.object(classify,'classify_document',new_callable=AsyncMock) as cls, \
+         patch.object(pipeline_elektryka,'recognize_document',new_callable=AsyncMock) as elec, \
+         patch.object(pipeline_hydraulika,'recognize_document_hydraulika',new_callable=AsyncMock) as hyd, \
+         patch('app.modules.ocr.image.classification_header_preview',return_value=b'header'), \
+         patch.object(Catalog,'from_db',return_value=object()), \
+         patch('app.modules.matcher.rules_from_db',return_value=[]):
+        cls.return_value=classified
+        elec.return_value=expected
+        hyd.return_value=expected
+        _,got_dzial,got_result,_=recognize_gemini_primary(
+            [(b'PAGE','image/jpeg')],object(),'Zabrze')
+        assert got_dzial==department and got_result is expected
+        classifier=cls.await_args.kwargs['chain']
+        full=(hyd if department=='hydraulika' else elec).await_args.kwargs['chain']
+        for chain in (classifier,full):
+            assert len(chain)==6
+            assert [x.api_key for x in chain].count('FREE-1')==3
+            assert [x.api_key for x in chain].count('FREE-2')==3
+            assert all(x.api_key!='PAID-UNUSED' for x in chain)
+            assert len({x.label for x in chain})==6
+            assert [x.model for x in chain][-2:] == ['gemini-3.1-flash-lite']*2 if chain is classifier else True
+        assert full[0].label==provider_label
+        assert full[0].api_key=='FREE-2'
+
+
+def test_auto_second_free_key_works_when_first_is_missing():
+    classified=SimpleNamespace(dzial='elektryka',confidence=94.0,fallback=False,
+                               used_provider='AUTO Gemini gemini-3.5-flash-lite darmowy FREE2')
+    expected=SimpleNamespace(pozycje=[object()])
+    with patch.object(settings,'gemini_api_key_free',None), \
+         patch.object(settings,'gemini_api_key_free_2','FREE-2'), \
+         patch.object(settings,'gemini_api_key_paid','PAID-UNUSED'), \
+         patch.object(classify,'classify_document',new_callable=AsyncMock) as cls, \
+         patch.object(pipeline_elektryka,'recognize_document',new_callable=AsyncMock) as elec, \
+         patch('app.modules.ocr.image.classification_header_preview',return_value=b'header'), \
+         patch.object(Catalog,'from_db',return_value=object()), \
+         patch('app.modules.matcher.rules_from_db',return_value=[]):
+        cls.return_value=classified
+        elec.return_value=expected
+        recognize_gemini_primary([(b'PAGE','image/jpeg')],object(),'Zabrze')
+        for chain in (cls.await_args.kwargs['chain'],elec.await_args.kwargs['chain']):
+            assert len(chain)==3
+            assert all(x.api_key=='FREE-2' and x.label.endswith('FREE2') for x in chain)
